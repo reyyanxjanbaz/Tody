@@ -15,80 +15,80 @@ import { Easing, WithSpringConfig, WithTimingConfig } from 'react-native-reanima
 
 /** Default iOS-like spring for most UI elements */
 export const SPRING_CONFIG: WithSpringConfig = {
-  damping: 15,
-  stiffness: 150,
-  mass: 1,
-  overshootClamping: false,
+    damping: 15,
+    stiffness: 150,
+    mass: 1,
+    overshootClamping: false,
 };
 
 /** Snappier spring for checkboxes, toggles, quick interactions */
 export const SPRING_SNAPPY: WithSpringConfig = {
-  damping: 20,
-  stiffness: 300,
-  mass: 0.8,
-  overshootClamping: false,
+    damping: 20,
+    stiffness: 300,
+    mass: 0.8,
+    overshootClamping: false,
 };
 
 /** Gentle spring for modals, overlays, page-level movements */
 export const SPRING_GENTLE: WithSpringConfig = {
-  damping: 18,
-  stiffness: 120,
-  mass: 1,
-  overshootClamping: false,
+    damping: 18,
+    stiffness: 120,
+    mass: 1,
+    overshootClamping: false,
 };
 
 /** Bouncy spring for celebrating (confetti, success checkmarks) */
 export const SPRING_BOUNCY: WithSpringConfig = {
-  damping: 8,
-  stiffness: 180,
-  mass: 0.9,
-  overshootClamping: false,
+    damping: 8,
+    stiffness: 180,
+    mass: 0.9,
+    overshootClamping: false,
 };
 
 /** Overdamped spring – no overshoot, for destructive actions */
 export const SPRING_CRITICAL: WithSpringConfig = {
-  damping: 26,
-  stiffness: 170,
-  mass: 1,
-  overshootClamping: true,
+    damping: 26,
+    stiffness: 170,
+    mass: 1,
+    overshootClamping: true,
 };
 
 // ── Timing Presets ──────────────────────────────────────────────────────────
 
 /** Micro-interaction: 200ms easeInOutCubic */
 export const TIMING_MICRO: WithTimingConfig = {
-  duration: 200,
-  easing: Easing.bezier(0.65, 0, 0.35, 1),
+    duration: 200,
+    easing: Easing.bezier(0.65, 0, 0.35, 1),
 };
 
 /** Standard transition: 300ms easeInOutCubic */
 export const TIMING_TRANSITION: WithTimingConfig = {
-  duration: 300,
-  easing: Easing.bezier(0.65, 0, 0.35, 1),
+    duration: 300,
+    easing: Easing.bezier(0.65, 0, 0.35, 1),
 };
 
 /** Page-level transition: 400ms easeInOutCubic */
 export const TIMING_PAGE: WithTimingConfig = {
-  duration: 400,
-  easing: Easing.bezier(0.65, 0, 0.35, 1),
+    duration: 400,
+    easing: Easing.bezier(0.65, 0, 0.35, 1),
 };
 
 /** Exit animation: 250ms easeOutExpo */
 export const TIMING_EXIT: WithTimingConfig = {
-  duration: 250,
-  easing: Easing.bezier(0.16, 1, 0.3, 1),
+    duration: 250,
+    easing: Easing.bezier(0.16, 1, 0.3, 1),
 };
 
 /** Enter animation: 350ms easeOutExpo */
 export const TIMING_ENTER: WithTimingConfig = {
-  duration: 350,
-  easing: Easing.bezier(0.16, 1, 0.3, 1),
+    duration: 350,
+    easing: Easing.bezier(0.16, 1, 0.3, 1),
 };
 
 /** Fade: 150ms linear */
 export const TIMING_FADE: WithTimingConfig = {
-  duration: 150,
-  easing: Easing.linear,
+    duration: 150,
+    easing: Easing.linear,
 };
 
 // ── Gesture Thresholds ──────────────────────────────────────────────────────

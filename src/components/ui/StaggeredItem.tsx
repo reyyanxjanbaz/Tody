@@ -11,27 +11,27 @@
 
 import React from 'react';
 import Animated, {
-  FadeInDown,
-  FadeOutUp,
-  LinearTransition,
+    FadeInDown,
+    FadeOutUp,
+    LinearTransition,
 } from 'react-native-reanimated';
 import { STAGGER_INTERVAL, STAGGER_MAX } from '../../utils/animations';
 
 interface StaggeredItemProps {
-  children: React.ReactNode;
-  index: number;
+    children: React.ReactNode;
+    index: number;
 }
 
 export function StaggeredItem({ children, index }: StaggeredItemProps) {
-  const delay = Math.min(index, STAGGER_MAX) * STAGGER_INTERVAL;
+    const delay = Math.min(index, STAGGER_MAX) * STAGGER_INTERVAL;
 
-  return (
-    <Animated.View
-      entering={FadeInDown.delay(delay).duration(300).springify().damping(18).stiffness(150)}
-      exiting={FadeOutUp.duration(200)}
-      layout={LinearTransition.springify().damping(18).stiffness(150)}
-    >
-      {children}
-    </Animated.View>
-  );
+    return (
+        <Animated.View
+            entering={FadeInDown.delay(delay).duration(300).springify().damping(18).stiffness(150)}
+            exiting={FadeOutUp.duration(200)}
+            layout={LinearTransition.springify().damping(18).stiffness(150)}
+        >
+            {children}
+        </Animated.View>
+    );
 }

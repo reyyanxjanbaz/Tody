@@ -14,31 +14,31 @@
 
 import { Platform } from 'react-native';
 import ReactNativeHapticFeedback, {
-  HapticFeedbackTypes,
+    HapticFeedbackTypes,
 } from 'react-native-haptic-feedback';
 
 const options = {
-  enableVibrateFallback: true,
-  ignoreAndroidSystemSettings: false,
+    enableVibrateFallback: true,
+    ignoreAndroidSystemSettings: false,
 };
 
 type HapticStyle =
-  | 'light'
-  | 'medium'
-  | 'heavy'
-  | 'selection'
-  | 'success'
-  | 'warning'
-  | 'error';
+    | 'light'
+    | 'medium'
+    | 'heavy'
+    | 'selection'
+    | 'success'
+    | 'warning'
+    | 'error';
 
 const MAP: Record<HapticStyle, HapticFeedbackTypes> = {
-  light: HapticFeedbackTypes.impactLight,
-  medium: HapticFeedbackTypes.impactMedium,
-  heavy: HapticFeedbackTypes.impactHeavy,
-  selection: HapticFeedbackTypes.selection,
-  success: HapticFeedbackTypes.notificationSuccess,
-  warning: HapticFeedbackTypes.notificationWarning,
-  error: HapticFeedbackTypes.notificationError,
+    light: HapticFeedbackTypes.impactLight,
+    medium: HapticFeedbackTypes.impactMedium,
+    heavy: HapticFeedbackTypes.impactHeavy,
+    selection: HapticFeedbackTypes.selection,
+    success: HapticFeedbackTypes.notificationSuccess,
+    warning: HapticFeedbackTypes.notificationWarning,
+    error: HapticFeedbackTypes.notificationError,
 };
 
 /**
@@ -46,9 +46,9 @@ const MAP: Record<HapticStyle, HapticFeedbackTypes> = {
  * Safe to call on any platform – no-ops gracefully.
  */
 export function haptic(style: HapticStyle = 'light'): void {
-  try {
-    ReactNativeHapticFeedback.trigger(MAP[style], options);
-  } catch {
-    // Silently ignore on unsupported devices
-  }
+    try {
+        ReactNativeHapticFeedback.trigger(MAP[style], options);
+    } catch {
+        // Silently ignore on unsupported devices
+    }
 }
