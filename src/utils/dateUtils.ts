@@ -58,8 +58,8 @@ export function formatRelativeDate(timestamp: number): string {
   if (days < 0) {
     const absDays = Math.abs(days);
     if (absDays === 1) { return 'Yesterday'; }
-    if (absDays < 7) { return `${absDays}d overdue`; }
-    return `${Math.round(absDays / 7)}w overdue`;
+    if (absDays < 7) { return `${absDays} days ago`; }
+    return `${Math.round(absDays / 7)}w ago`;
   }
 
   if (days === 0) { return 'Today'; }

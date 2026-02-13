@@ -157,6 +157,7 @@ export function ProcessInboxScreen({ navigation }: Props) {
     addTask(trimmedTitle, {
       description,
       priority,
+      energyLevel,
       deadline,
     });
 

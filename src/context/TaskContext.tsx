@@ -8,9 +8,10 @@ import React, {
 } from 'react';
 import { LayoutAnimation, Platform, UIManager } from 'react-native';
 import { Task, Priority } from '../types';
-import { saveTasks, getTasks } from '../utils/storage';
+import { saveTasks, getTasks, saveArchivedTasks, getArchivedTasks } from '../utils/storage';
 import { generateId } from '../utils/id';
 import { parseTaskInput } from '../utils/taskParser';
+import { initializeOverdueDates, isFullyDecayed } from '../utils/decay';
 
 // Enable LayoutAnimation on Android
 if (Platform.OS === 'android') {
@@ -21,6 +22,7 @@ if (Platform.OS === 'android') {
 
 interface TaskContextType {
   tasks: Task[];
+  archivedTasks: Task[];
   isLoading: boolean;
   addTask: (input: string, overrides?: Partial<Task>) => Task;
   updateTask: (id: string, updates: Partial<Task>) => void;
@@ -29,6 +31,9 @@ interface TaskContextType {
   deferTask: (id: string) => void;
   deleteTask: (id: string) => void;
   getTask: (id: string) => Task | undefined;
+  reviveTask: (id: string) => void;
+  archiveOverdueTasks: () => void;
+  getFullyDecayedTasks: () => Task[];
 }
 
 const TaskContext = createContext<TaskContextType | undefined>(undefined);
@@ -37,6 +42,7 @@ const TaskContext = createContext<TaskContextType | undefined>(undefined);
 
 export function TaskProvider({ children }: { children: React.ReactNode }) {
   const [tasks, setTasks] = useState<Task[]>([]);
+  const [archivedTasks, setArchivedTasks] = useState<Task[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const tasksRef = useRef(tasks);
   tasksRef.current = tasks;
@@ -49,7 +55,12 @@ export function TaskProvider({ children }: { children: React.ReactNode }) {
     (async () => {
       try {
         const stored = await getTasks<Task>();
-        setTasks(stored);
+        // Initialize overdueStartDate for tasks that became overdue
+        const initialized = initializeOverdueDates(stored);
+        setTasks(initialized);
+
+        const storedArchived = await getArchivedTasks<Task>();
+        setArchivedTasks(storedArchived);
       } catch {
         // Start fresh if storage is corrupt
       } finally {
@@ -76,6 +87,25 @@ export function TaskProvider({ children }: { children: React.ReactNode }) {
     };
   }, [tasks, isLoading]);
 
+  // Persist archived tasks
+  const archivePersistTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    if (isLoading) { return; }
+
+    if (archivePersistTimeout.current) {
+      clearTimeout(archivePersistTimeout.current);
+    }
+    archivePersistTimeout.current = setTimeout(() => {
+      saveArchivedTasks(archivedTasks);
+    }, 300);
+
+    return () => {
+      if (archivePersistTimeout.current) {
+        clearTimeout(archivePersistTimeout.current);
+      }
+    };
+  }, [archivedTasks, isLoading]);
+
   const addTask = useCallback((input: string, overrides?: Partial<Task>): Task => {
     const parsed = parseTaskInput(input);
     const now = Date.now();
@@ -89,11 +119,16 @@ export function TaskProvider({ children }: { children: React.ReactNode }) {
       deadline: parsed.deadline,
       completedAt: null,
       priority: parsed.priority,
+      energyLevel: 'medium',
       isCompleted: false,
       isRecurring: false,
       recurringFrequency: null,
       deferCount: 0,
       createdHour: new Date().getHours(),
+      overdueStartDate: null,
+      revivedAt: null,
+      archivedAt: null,
+      isArchived: false,
       ...overrides,
     };
 
@@ -104,9 +139,15 @@ export function TaskProvider({ children }: { children: React.ReactNode }) {
 
   const updateTask = useCallback((id: string, updates: Partial<Task>) => {
     setTasks(prev =>
-      prev.map(t =>
-        t.id === id ? { ...t, ...updates, updatedAt: Date.now() } : t,
-      ),
+      prev.map(t => {
+        if (t.id !== id) { return t; }
+        const merged = { ...t, ...updates, updatedAt: Date.now() };
+        // If deadline changed, recalculate overdue tracking
+        if (updates.deadline !== undefined && updates.deadline !== t.deadline) {
+          merged.overdueStartDate = null;
+        }
+        return merged;
+      }),
     );
   }, []);
 
@@ -144,6 +185,7 @@ export function TaskProvider({ children }: { children: React.ReactNode }) {
               ...t,
               deadline: tomorrow.getTime(),
               deferCount: t.deferCount + 1,
+              overdueStartDate: null,
               updatedAt: Date.now(),
             }
           : t,
@@ -156,6 +198,49 @@ export function TaskProvider({ children }: { children: React.ReactNode }) {
     setTasks(prev => prev.filter(t => t.id !== id));
   }, []);
 
+  const reviveTask = useCallback((id: string) => {
+    const now = Date.now();
+    const todayEnd = new Date();
+    todayEnd.setHours(23, 59, 59, 999);
+
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    setTasks(prev =>
+      prev.map(t =>
+        t.id === id
+          ? {
+              ...t,
+              overdueStartDate: null,
+              revivedAt: now,
+              deadline: todayEnd.getTime(),
+              updatedAt: now,
+            }
+          : t,
+      ),
+    );
+  }, []);
+
+  const getFullyDecayedTasks = useCallback((): Task[] => {
+    return tasksRef.current.filter(t => isFullyDecayed(t));
+  }, []);
+
+  const archiveOverdueTasks = useCallback(() => {
+    const now = Date.now();
+    const toArchive = tasksRef.current.filter(t => isFullyDecayed(t));
+
+    if (toArchive.length === 0) { return; }
+
+    const archivedItems = toArchive.map(t => ({
+      ...t,
+      isArchived: true,
+      archivedAt: now,
+      updatedAt: now,
+    }));
+
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    setTasks(prev => prev.filter(t => !isFullyDecayed(t)));
+    setArchivedTasks(prev => [...archivedItems, ...prev]);
+  }, []);
+
   const getTask = useCallback((id: string): Task | undefined => {
     return tasksRef.current.find(t => t.id === id);
   }, []);
@@ -164,6 +249,7 @@ export function TaskProvider({ children }: { children: React.ReactNode }) {
     <TaskContext.Provider
       value={{
         tasks,
+        archivedTasks,
         isLoading,
         addTask,
         updateTask,
@@ -172,6 +258,9 @@ export function TaskProvider({ children }: { children: React.ReactNode }) {
         deferTask,
         deleteTask,
         getTask,
+        reviveTask,
+        archiveOverdueTasks,
+        getFullyDecayedTasks,
       }}>
       {children}
     </TaskContext.Provider>

@@ -8,6 +8,7 @@ import {
   Pressable,
   StyleSheet,
   Keyboard,
+  Modal,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -19,6 +20,7 @@ import { EmptyState } from '../components/EmptyState';
 import { QuickCaptureFAB } from '../components/QuickCaptureFAB';
 import { InboxBadge } from '../components/InboxBadge';
 import { organizeTasks, searchTasks } from '../utils/taskIntelligence';
+import { isFullyDecayed } from '../utils/decay';
 import { Colors, Spacing, Typography } from '../utils/colors';
 import { Task, RootStackParamList } from '../types';
 
@@ -28,9 +30,10 @@ type Props = {
 
 export function HomeScreen({ navigation }: Props) {
   const insets = useSafeAreaInsets();
-  const { tasks, addTask, completeTask, deferTask } = useTasks();
+  const { tasks, addTask, completeTask, deferTask, reviveTask, archiveOverdueTasks } = useTasks();
   const [isSearching, setIsSearching] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [showArchiveModal, setShowArchiveModal] = useState(false);
   const searchInputRef = useRef<TextInput>(null);
 
   // ── Computed data ────────────────────────────────────────────────────────
@@ -41,6 +44,12 @@ export function HomeScreen({ navigation }: Props) {
   );
   const activeCount = useMemo(
     () => tasks.filter(t => !t.isCompleted).length,
+    [tasks],
+  );
+
+  // Count fully decayed tasks for the archive button
+  const fullyDecayedCount = useMemo(
+    () => tasks.filter(t => isFullyDecayed(t)).length,
     [tasks],
   );
 
@@ -78,6 +87,26 @@ export function HomeScreen({ navigation }: Props) {
     navigation.navigate('ProcessInbox');
   }, [navigation]);
 
+  const handleShowArchiveConfirm = useCallback(() => {
+    setShowArchiveModal(true);
+  }, []);
+
+  const handleConfirmArchive = useCallback(() => {
+    archiveOverdueTasks();
+    setShowArchiveModal(false);
+  }, [archiveOverdueTasks]);
+
+  const handleCancelArchive = useCallback(() => {
+    setShowArchiveModal(false);
+  }, []);
+
+  const handleRevive = useCallback(
+    (id: string) => {
+      reviveTask(id);
+    },
+    [reviveTask],
+  );
+
   // ── Render helpers ───────────────────────────────────────────────────────
   const renderTaskItem = useCallback(
     ({ item }: { item: Task }) => (
@@ -86,9 +115,10 @@ export function HomeScreen({ navigation }: Props) {
         onPress={handleTaskPress}
         onComplete={completeTask}
         onDefer={deferTask}
+        onRevive={handleRevive}
       />
     ),
-    [handleTaskPress, completeTask, deferTask],
+    [handleTaskPress, completeTask, deferTask, handleRevive],
   );
 
   const renderSectionHeader = useCallback(
@@ -170,6 +200,17 @@ export function HomeScreen({ navigation }: Props) {
           stickySectionHeadersEnabled={false}
           keyboardShouldPersistTaps="handled"
           contentContainerStyle={styles.listContent}
+          ListFooterComponent={
+            fullyDecayedCount > 0 ? (
+              <Pressable
+                style={styles.archiveButton}
+                onPress={handleShowArchiveConfirm}>
+                <Text style={styles.archiveButtonText}>
+                  Archive {fullyDecayedCount} overdue task{fullyDecayedCount !== 1 ? 's' : ''}
+                </Text>
+              </Pressable>
+            ) : null
+          }
         />
       ) : (
         <EmptyState
@@ -180,6 +221,36 @@ export function HomeScreen({ navigation }: Props) {
 
       {/* Quick Capture FAB */}
       {!isSearching && <QuickCaptureFAB />}
+
+      {/* Archive Confirmation Modal */}
+      <Modal
+        visible={showArchiveModal}
+        transparent
+        animationType="fade"
+        onRequestClose={handleCancelArchive}>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>
+              Move {fullyDecayedCount} task{fullyDecayedCount !== 1 ? 's' : ''} to archive?
+            </Text>
+            <Text style={styles.modalSubtitle}>
+              These tasks have been overdue for 7+ days.
+            </Text>
+            <View style={styles.modalActions}>
+              <Pressable
+                style={styles.modalCancelButton}
+                onPress={handleCancelArchive}>
+                <Text style={styles.modalCancelText}>Cancel</Text>
+              </Pressable>
+              <Pressable
+                style={styles.modalArchiveButton}
+                onPress={handleConfirmArchive}>
+                <Text style={styles.modalArchiveText}>Archive</Text>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -244,5 +315,67 @@ const styles = StyleSheet.create({
   },
   listContent: {
     paddingBottom: 100,
+  },
+  archiveButton: {
+    backgroundColor: Colors.gray50,
+    paddingVertical: Spacing.md,
+    paddingHorizontal: Spacing.lg,
+    marginHorizontal: Spacing.lg,
+    marginTop: Spacing.lg,
+    borderRadius: 4,
+    alignItems: 'center',
+  },
+  archiveButtonText: {
+    fontSize: 12,
+    fontWeight: '400',
+    color: Colors.text,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.4)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalCard: {
+    width: '80%',
+    backgroundColor: Colors.white,
+    borderRadius: 8,
+    paddingVertical: Spacing.xl,
+    paddingHorizontal: Spacing.lg,
+  },
+  modalTitle: {
+    ...Typography.bodyMedium,
+    color: Colors.text,
+    textAlign: 'center',
+  },
+  modalSubtitle: {
+    ...Typography.caption,
+    color: Colors.textTertiary,
+    textAlign: 'center',
+    marginTop: Spacing.sm,
+  },
+  modalActions: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: Spacing.lg,
+    marginTop: Spacing.xl,
+  },
+  modalCancelButton: {
+    paddingVertical: Spacing.sm,
+    paddingHorizontal: Spacing.xl,
+  },
+  modalCancelText: {
+    ...Typography.body,
+    color: Colors.textTertiary,
+  },
+  modalArchiveButton: {
+    paddingVertical: Spacing.sm,
+    paddingHorizontal: Spacing.xl,
+    backgroundColor: Colors.text,
+    borderRadius: 4,
+  },
+  modalArchiveText: {
+    ...Typography.body,
+    color: Colors.white,
   },
 });

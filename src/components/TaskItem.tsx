@@ -1,4 +1,4 @@
-import React, { memo, useCallback, useRef } from 'react';
+import React, { memo, useCallback, useRef, useMemo } from 'react';
 import {
   View,
   Text,
@@ -12,12 +12,14 @@ import Swipeable from 'react-native-gesture-handler/Swipeable';
 import { Task, Priority } from '../types';
 import { Colors, Spacing, Typography } from '../utils/colors';
 import { formatDeadline, formatCompletedDate, daysFromNow } from '../utils/dateUtils';
+import { getTaskOpacity, formatOverdueGently } from '../utils/decay';
 
 interface TaskItemProps {
   task: Task;
   onPress: (task: Task) => void;
   onComplete: (id: string) => void;
   onDefer: (id: string) => void;
+  onRevive?: (id: string) => void;
 }
 
 const PRIORITY_COLORS: Record<Priority, string> = {
@@ -32,8 +34,14 @@ export const TaskItem = memo(function TaskItem({
   onPress,
   onComplete,
   onDefer,
+  onRevive,
 }: TaskItemProps) {
   const swipeableRef = useRef<Swipeable>(null);
+
+  // Compute opacity based on overdue decay
+  const opacity = useMemo(() => getTaskOpacity(task), [task]);
+  const overdueLabel = useMemo(() => formatOverdueGently(task), [task]);
+  const isOverdue = task.deadline ? daysFromNow(task.deadline) < 0 : false;
 
   const handlePress = useCallback(() => {
     onPress(task);
@@ -50,15 +58,19 @@ export const TaskItem = memo(function TaskItem({
         outputRange: [0.5, 1],
         extrapolate: 'clamp',
       });
+
+      // Show REVIVE for overdue tasks, DONE for normal tasks
+      const label = isOverdue && onRevive ? 'REVIVE' : 'DONE';
+
       return (
         <RectButton style={styles.swipeActionLeft} onPress={() => {}}>
           <Animated.Text style={[styles.swipeActionText, { transform: [{ scale }] }]}>
-            DONE
+            {label}
           </Animated.Text>
         </RectButton>
       );
     },
-    [],
+    [isOverdue, onRevive],
   );
 
   const renderRightActions = useCallback(
@@ -82,18 +94,20 @@ export const TaskItem = memo(function TaskItem({
   const handleSwipeOpen = useCallback(
     (direction: 'left' | 'right') => {
       if (direction === 'left') {
-        // Left actions opened = user swiped right = COMPLETE
-        onComplete(task.id);
+        // Left actions opened = user swiped right
+        if (isOverdue && onRevive) {
+          onRevive(task.id);
+        } else {
+          onComplete(task.id);
+        }
       } else {
         // Right actions opened = user swiped left = DEFER
         onDefer(task.id);
       }
       setTimeout(() => swipeableRef.current?.close(), 100);
     },
-    [task.id, onComplete, onDefer],
+    [task.id, onComplete, onDefer, onRevive, isOverdue],
   );
-
-  const isOverdue = task.deadline ? daysFromNow(task.deadline) < 0 : false;
 
   return (
     <Swipeable
@@ -108,7 +122,7 @@ export const TaskItem = memo(function TaskItem({
       overshootRight={false}
       enabled={!task.isCompleted}>
       <Pressable
-        style={styles.container}
+        style={[styles.container, { opacity }]}
         onPress={handlePress}
         android_ripple={{ color: Colors.gray100 }}>
         {/* Priority indicator bar */}
@@ -152,8 +166,12 @@ export const TaskItem = memo(function TaskItem({
           <Text style={styles.completedTag}>
             {formatCompletedDate(task.completedAt)}
           </Text>
+        ) : isOverdue && overdueLabel ? (
+          <Text style={styles.overdueTagGentle}>
+            {overdueLabel}
+          </Text>
         ) : task.deadline ? (
-          <Text style={[styles.deadlineTag, isOverdue && styles.deadlineOverdue]}>
+          <Text style={styles.deadlineTag}>
             {formatDeadline(task.deadline)}
           </Text>
         ) : null}
@@ -226,9 +244,9 @@ const styles = StyleSheet.create({
     ...Typography.small,
     color: Colors.textTertiary,
   },
-  deadlineOverdue: {
-    color: Colors.gray800,
-    fontWeight: '600',
+  overdueTagGentle: {
+    ...Typography.small,
+    color: Colors.gray400,
   },
   completedTag: {
     ...Typography.small,

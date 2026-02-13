@@ -13,11 +13,16 @@ export interface Task {
   deadline: number | null;
   completedAt: number | null;
   priority: Priority;
+  energyLevel?: 'high' | 'medium' | 'low';
   isCompleted: boolean;
   isRecurring: boolean;
   recurringFrequency: RecurringFrequency | null;
   deferCount: number;
   createdHour: number; // 0-23, for time-of-day intelligence
+  overdueStartDate?: number | null; // When task first became overdue (timestamp)
+  revivedAt?: number | null; // When user revived the task (timestamp)
+  archivedAt?: number | null; // When task was archived (timestamp)
+  isArchived?: boolean; // Whether task is in the overdue archive
 }
 
 export interface User {

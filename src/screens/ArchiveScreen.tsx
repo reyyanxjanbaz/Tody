@@ -2,7 +2,7 @@ import React, { useMemo, useState, useCallback } from 'react';
 import {
   View,
   Text,
-  FlatList,
+  SectionList,
   TextInput,
   Pressable,
   StyleSheet,
@@ -13,6 +13,7 @@ import { useTasks } from '../context/TaskContext';
 import { useAuth } from '../context/AuthContext';
 import { TaskItem } from '../components/TaskItem';
 import { EmptyState } from '../components/EmptyState';
+import { SectionHeader } from '../components/SectionHeader';
 import { Colors, Spacing, Typography } from '../utils/colors';
 import { Task, RootStackParamList } from '../types';
 
@@ -22,7 +23,7 @@ type Props = {
 
 export function ArchiveScreen({ navigation }: Props) {
   const insets = useSafeAreaInsets();
-  const { tasks, uncompleteTask } = useTasks();
+  const { tasks, archivedTasks, uncompleteTask } = useTasks();
   const { logout, user } = useAuth();
   const [searchQuery, setSearchQuery] = useState('');
 
@@ -41,10 +42,36 @@ export function ArchiveScreen({ navigation }: Props) {
     );
   }, [tasks, searchQuery]);
 
+  const filteredArchivedTasks = useMemo(() => {
+    const sorted = [...archivedTasks].sort(
+      (a, b) => (b.archivedAt ?? 0) - (a.archivedAt ?? 0),
+    );
+
+    if (!searchQuery.trim()) { return sorted; }
+
+    const q = searchQuery.toLowerCase();
+    return sorted.filter(
+      t =>
+        t.title.toLowerCase().includes(q) ||
+        t.description.toLowerCase().includes(q),
+    );
+  }, [archivedTasks, searchQuery]);
+
   const totalCompleted = useMemo(
     () => tasks.filter(t => t.isCompleted).length,
     [tasks],
   );
+
+  const sections = useMemo(() => {
+    const result: { title: string; data: Task[] }[] = [];
+    if (filteredArchivedTasks.length > 0) {
+      result.push({ title: 'OVERDUE ARCHIVED', data: filteredArchivedTasks });
+    }
+    if (completedTasks.length > 0) {
+      result.push({ title: 'COMPLETED', data: completedTasks });
+    }
+    return result;
+  }, [filteredArchivedTasks, completedTasks]);
 
   const handleTaskPress = useCallback(
     (task: Task) => {
@@ -80,6 +107,13 @@ export function ArchiveScreen({ navigation }: Props) {
     [handleTaskPress, handleRestore],
   );
 
+  const renderSectionHeader = useCallback(
+    ({ section }: { section: { title: string; data: Task[] } }) => (
+      <SectionHeader title={section.title} count={section.data.length} />
+    ),
+    [],
+  );
+
   const keyExtractor = useCallback((item: Task) => item.id, []);
 
   return (
@@ -91,8 +125,10 @@ export function ArchiveScreen({ navigation }: Props) {
         </Pressable>
         <View style={styles.headerRight}>
           <Text style={styles.headerTitle}>Archive</Text>
-          {totalCompleted > 0 && (
-            <Text style={styles.headerCount}>{totalCompleted} done</Text>
+          {(totalCompleted > 0 || archivedTasks.length > 0) && (
+            <Text style={styles.headerCount}>
+              {totalCompleted + archivedTasks.length} items
+            </Text>
           )}
         </View>
       </View>
@@ -101,7 +137,7 @@ export function ArchiveScreen({ navigation }: Props) {
       <View style={styles.searchContainer}>
         <TextInput
           style={styles.searchInput}
-          placeholder="Search completed tasks..."
+          placeholder="Search archived tasks..."
           placeholderTextColor={Colors.gray400}
           value={searchQuery}
           onChangeText={setSearchQuery}
@@ -111,19 +147,28 @@ export function ArchiveScreen({ navigation }: Props) {
       </View>
 
       {/* List */}
-      <FlatList
-        data={completedTasks}
-        renderItem={renderItem}
-        keyExtractor={keyExtractor}
-        keyboardShouldPersistTaps="handled"
-        ListEmptyComponent={
-          <EmptyState
-            title={searchQuery ? 'No results' : 'No completed tasks'}
-            subtitle={searchQuery ? undefined : 'Completed tasks appear here'}
-          />
-        }
-        contentContainerStyle={styles.listContent}
-      />
+      {sections.length > 0 ? (
+        <SectionList
+          sections={sections}
+          renderItem={renderItem}
+          renderSectionHeader={renderSectionHeader}
+          keyExtractor={keyExtractor}
+          stickySectionHeadersEnabled={false}
+          keyboardShouldPersistTaps="handled"
+          ListEmptyComponent={
+            <EmptyState
+              title={searchQuery ? 'No results' : 'No archived tasks'}
+              subtitle={searchQuery ? undefined : 'Archived tasks appear here'}
+            />
+          }
+          contentContainerStyle={styles.listContent}
+        />
+      ) : (
+        <EmptyState
+          title={searchQuery ? 'No results' : 'No archived tasks'}
+          subtitle={searchQuery ? undefined : 'Completed and overdue-archived tasks appear here'}
+        />
+      )}
 
       {/* Footer: account info + sign out */}
       <View style={[styles.footer, { paddingBottom: insets.bottom + Spacing.md }]}>
