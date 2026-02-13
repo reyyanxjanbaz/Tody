@@ -27,7 +27,7 @@ export const TaskInput = memo(function TaskInput({ onSubmit, placeholder, autoFo
   const [energyLevel, setEnergyLevel] = useState<EnergyLevel>('medium');
   const [hasManuallySetEnergy, setHasManuallySetEnergy] = useState(false);
   const [activeField, setActiveField] = useState<'title' | 'estimate' | null>(null);
-  
+
   const inputRef = useRef<TextInput>(null);
   const estimateInputRef = useRef<TextInput>(null);
 
@@ -147,7 +147,7 @@ export const TaskInput = memo(function TaskInput({ onSubmit, placeholder, autoFo
       <SmartKeyboardToolbar
         mode={activeField === 'estimate' ? 'estimate' : 'title'}
         visible={!!activeField && value.trim().length > 0}
-        onInsertPriority={() => {}}
+        onInsertPriority={() => { }}
         onInsertEnergy={(energy) => {
           setEnergyLevel(energy);
           setHasManuallySetEnergy(true);

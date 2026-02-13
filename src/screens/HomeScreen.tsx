@@ -91,7 +91,7 @@ export function HomeScreen({ navigation }: Props) {
     tasks
       .filter(t => t.energyLevel === activeEnergyFilter)
       .forEach(addWithAncestors);
-    
+
     return ids;
   }, [tasks, activeEnergyFilter]);
 
@@ -121,7 +121,7 @@ export function HomeScreen({ navigation }: Props) {
     () => (searchQuery.trim() ? searchTasks(tasks, searchQuery) : []),
     [tasks, searchQuery],
   );
-  
+
   const activeCount = useMemo(
     () => tasks.filter(t => !t.isCompleted).length,
     [tasks],
@@ -158,7 +158,7 @@ export function HomeScreen({ navigation }: Props) {
   // ── Handlers ─────────────────────────────────────────────────────────────
   const handleAddTask = useCallback(
     (text: string, estimatedMinutes?: number, energyLevel?: EnergyLevel) => {
-      addTask(text, { 
+      addTask(text, {
         ...(estimatedMinutes ? { estimatedMinutes } : {}),
         energyLevel: energyLevel ?? 'medium'
       });
@@ -524,7 +524,7 @@ export function HomeScreen({ navigation }: Props) {
                     });
                   });
                 }}
-                onDismiss={() => {}}
+                onDismiss={() => { }}
               />
             ) : (
               <EmptyState

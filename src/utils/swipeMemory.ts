@@ -41,7 +41,7 @@ export async function loadSwipeStats(): Promise<SwipeStats> {
       cachedStats = JSON.parse(data);
       return cachedStats!;
     }
-  } catch {}
+  } catch { }
 
   cachedStats = { ...DEFAULT_STATS };
   return cachedStats;

@@ -101,7 +101,7 @@ export function ArchiveScreen({ navigation }: Props) {
         task={item}
         onPress={handleTaskPress}
         onComplete={handleRestore}
-        onDefer={() => {}}
+        onDefer={() => { }}
       />
     ),
     [handleTaskPress, handleRestore],

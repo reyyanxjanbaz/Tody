@@ -266,7 +266,7 @@ export function TaskProvider({ children }: { children: React.ReactNode }) {
       const completedTask = updated.find(t => t.id === id);
       if (completedTask?.actualMinutes && !isTooShort(completedTask.actualMinutes)) {
         const allCompleted = updated.filter(t => t.isCompleted && t.actualMinutes && t.actualMinutes >= 1);
-        updatePatternsOnCompletion(completedTask, allCompleted).catch(() => {});
+        updatePatternsOnCompletion(completedTask, allCompleted).catch(() => { });
       }
 
       return updated;
@@ -306,7 +306,7 @@ export function TaskProvider({ children }: { children: React.ReactNode }) {
       const completedTask = updated.find(t => t.id === id);
       if (completedTask?.actualMinutes && !isTooShort(completedTask.actualMinutes)) {
         const allCompleted = updated.filter(t => t.isCompleted && t.actualMinutes && t.actualMinutes >= 1);
-        updatePatternsOnCompletion(completedTask, allCompleted).catch(() => {});
+        updatePatternsOnCompletion(completedTask, allCompleted).catch(() => { });
       }
 
       return updated;
@@ -333,12 +333,12 @@ export function TaskProvider({ children }: { children: React.ReactNode }) {
       prev.map(t =>
         t.id === id
           ? {
-              ...t,
-              deadline: tomorrow.getTime(),
-              deferCount: t.deferCount + 1,
-              overdueStartDate: null,
-              updatedAt: Date.now(),
-            }
+            ...t,
+            deadline: tomorrow.getTime(),
+            deferCount: t.deferCount + 1,
+            overdueStartDate: null,
+            updatedAt: Date.now(),
+          }
           : t,
       ),
     );
@@ -474,12 +474,12 @@ export function TaskProvider({ children }: { children: React.ReactNode }) {
       prev.map(t =>
         t.id === id
           ? {
-              ...t,
-              overdueStartDate: null,
-              revivedAt: now,
-              deadline: todayEnd.getTime(),
-              updatedAt: now,
-            }
+            ...t,
+            overdueStartDate: null,
+            revivedAt: now,
+            deadline: todayEnd.getTime(),
+            updatedAt: now,
+          }
           : t,
       ),
     );

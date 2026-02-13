@@ -154,12 +154,11 @@ export const TaskItem = memo(function TaskItem({
         extrapolate: 'clamp',
       });
 
-      // Show START for unstarted tasks, DEFER for others
-      const label = !task.startedAt && !task.isCompleted && onStart ? 'START' : 'DEFER';
+      const label = isOverdue && onRevive ? 'REVIVE' : isInProgress ? 'COMPLETE' : 'DONE';
 
       return (
         <View style={styles.swipeRightContainer}>
-          <RectButton style={styles.swipeActionRight} onPress={() => {}}>
+          <RectButton style={[styles.swipeActionRight, { backgroundColor: Colors.black }]} onPress={() => { }}>
             <Animated.Text style={[styles.swipeActionText, { transform: [{ scale }] }]}>
               {label}
             </Animated.Text>
@@ -167,7 +166,7 @@ export const TaskItem = memo(function TaskItem({
         </View>
       );
     },
-    [task.startedAt, task.isCompleted, onStart],
+    [isOverdue, onRevive, isInProgress, task.isCompleted],
   );
 
   const renderLeftActions = useCallback(
@@ -178,38 +177,34 @@ export const TaskItem = memo(function TaskItem({
         extrapolate: 'clamp',
       });
 
-      // Show SUBTASK on left swipe (right direction), REVIVE for overdue, COMPLETE for in-progress, DONE otherwise
-      if (onAddSubtask && !task.isCompleted && task.depth < 3) {
-        return (
-          <RectButton style={styles.swipeActionSubtask} onPress={() => {}}>
-            <Animated.Text style={[styles.swipeActionText, { transform: [{ scale }] }]}>
-              SUBTASK
-            </Animated.Text>
-          </RectButton>
-        );
-      }
-
-      const label = isOverdue && onRevive ? 'REVIVE' : isInProgress ? 'COMPLETE' : 'DONE';
+      // Show START for unstarted tasks, DEFER for others
+      const label = !task.startedAt && !task.isCompleted && onStart ? 'START' : 'DEFER';
 
       return (
-        <RectButton style={styles.swipeActionLeft} onPress={() => {}}>
+        <RectButton style={[styles.swipeActionLeft, { backgroundColor: Colors.gray800 }]} onPress={() => { }}>
           <Animated.Text style={[styles.swipeActionText, { transform: [{ scale }] }]}>
             {label}
           </Animated.Text>
         </RectButton>
       );
     },
-    [isOverdue, onRevive, isInProgress, onAddSubtask, task.isCompleted, task.depth],
+    [task.startedAt, task.isCompleted, onStart],
   );
 
   const handleSwipeOpen = useCallback(
     (direction: 'left' | 'right') => {
       if (direction === 'left') {
         // Left actions opened = user swiped right
-        if (onAddSubtask && !task.isCompleted && task.depth < 3) {
-          recordSwipeAction('subtask');
-          onAddSubtask(task);
-        } else if (isOverdue && onRevive) {
+        if (!task.startedAt && !task.isCompleted && onStart) {
+          recordSwipeAction('start');
+          onStart(task.id);
+        } else {
+          recordSwipeAction('defer');
+          onDefer(task.id);
+        }
+      } else {
+        // Right actions opened = user swiped left
+        if (isOverdue && onRevive) {
           recordSwipeAction('revive');
           onRevive(task.id);
         } else if (isInProgress && onCompleteTimed) {
@@ -244,25 +239,17 @@ export const TaskItem = memo(function TaskItem({
               ],
             );
           } else {
-            onCompleteTimed(task.id);
+            recordSwipeAction('complete');
+            onComplete(task.id);
           }
         } else {
           recordSwipeAction('complete');
           onComplete(task.id);
         }
-      } else {
-        // Right actions opened = user swiped left
-        if (!task.startedAt && !task.isCompleted && onStart) {
-          recordSwipeAction('start');
-          onStart(task.id);
-        } else {
-          recordSwipeAction('defer');
-          onDefer(task.id);
-        }
       }
       setTimeout(() => swipeableRef.current?.close(), 100);
     },
-    [task.id, task.startedAt, task.isCompleted, task.depth, onComplete, onDefer, onRevive, onStart, onCompleteTimed, onAddSubtask, isOverdue, isInProgress],
+    [task.id, task.startedAt, task.isCompleted, onComplete, onDefer, onRevive, onStart, onCompleteTimed, isOverdue, isInProgress],
   );
 
   const indentation = (task.depth || 0) * 16;
