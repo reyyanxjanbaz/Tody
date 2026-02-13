@@ -9,12 +9,17 @@ import { HomeScreen } from '../screens/HomeScreen';
 import { ArchiveScreen } from '../screens/ArchiveScreen';
 import { TaskDetailScreen } from '../screens/TaskDetailScreen';
 import { ProcessInboxScreen } from '../screens/ProcessInboxScreen';
+import { RealityScoreScreen } from '../screens/RealityScoreScreen';
 import { RootStackParamList } from '../types';
 import { Colors } from '../utils/colors';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
-const SCREEN_OPTIONS = { headerShown: false } as const;
+const SCREEN_OPTIONS = {
+  headerShown: false,
+  animation: 'slide_from_right' as const,
+  animationDuration: 250,
+};
 
 export function RootNavigator() {
   const { user, isLoading } = useAuth();
@@ -36,6 +41,7 @@ export function RootNavigator() {
             <Stack.Screen name="Archive" component={ArchiveScreen} />
             <Stack.Screen name="TaskDetail" component={TaskDetailScreen} />
             <Stack.Screen name="ProcessInbox" component={ProcessInboxScreen} />
+            <Stack.Screen name="RealityScore" component={RealityScoreScreen} />
           </>
         ) : (
           <>

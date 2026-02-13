@@ -16,7 +16,11 @@ import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/dat
 import { useTasks } from '../context/TaskContext';
 import { Colors, Spacing, Typography } from '../utils/colors';
 import { formatDeadline } from '../utils/dateUtils';
-import { Priority, RootStackParamList } from '../types';
+import { formatMinutes, parseEstimateInput, getElapsedMinutes } from '../utils/timeTracking';
+import { isTaskLocked, getChildren, countDescendants } from '../utils/dependencyChains';
+import { Priority, RootStackParamList, EnergyLevel } from '../types';
+import { EnergySelector } from '../components/EnergySelector';
+import { LayoutAnimation, UIManager } from 'react-native';
 
 type Props = {
   navigation: NativeStackNavigationProp<RootStackParamList, 'TaskDetail'>;
@@ -32,14 +36,18 @@ const PRIORITIES: Array<{ value: Priority; label: string }> = [
 
 export function TaskDetailScreen({ navigation, route }: Props) {
   const insets = useSafeAreaInsets();
-  const { getTask, updateTask, deleteTask, completeTask, uncompleteTask } = useTasks();
+  const { tasks, getTask, updateTask, deleteTask, deleteTaskWithCascade, completeTask, uncompleteTask, startTask, completeTimedTask, addSubtask } = useTasks();
   const task = getTask(route.params.taskId);
 
   // ── Local editable state ─────────────────────────────────────────────────
   const [title, setTitle] = useState(task?.title ?? '');
   const [description, setDescription] = useState(task?.description ?? '');
   const [priority, setPriority] = useState<Priority>(task?.priority ?? 'none');
+  const [energyLevel, setEnergyLevel] = useState<EnergyLevel>(task?.energyLevel ?? 'medium');
   const [deadline, setDeadline] = useState<number | null>(task?.deadline ?? null);
+  const [estimateText, setEstimateText] = useState(
+    task?.estimatedMinutes ? String(task.estimatedMinutes) : '',
+  );
 
   // ── Date picker state ────────────────────────────────────────────────────
   const [showDatePicker, setShowDatePicker] = useState(false);
@@ -52,6 +60,7 @@ export function TaskDetailScreen({ navigation, route }: Props) {
       setTitle(task.title);
       setDescription(task.description);
       setPriority(task.priority);
+      setEnergyLevel(task.energyLevel);
       setDeadline(task.deadline);
     }
   }, [task]);
@@ -88,6 +97,11 @@ export function TaskDetailScreen({ navigation, route }: Props) {
   const handlePriorityChange = (p: Priority) => {
     setPriority(p);
     updateTask(task.id, { priority: p });
+  };
+
+  const handleEnergyChange = (level: EnergyLevel) => {
+    setEnergyLevel(level);
+    updateTask(task.id, { energyLevel: level });
   };
 
   // ── Deadline picker ──────────────────────────────────────────────────────
@@ -135,23 +149,67 @@ export function TaskDetailScreen({ navigation, route }: Props) {
     if (task.isCompleted) {
       uncompleteTask(task.id);
     } else {
+      const locked = isTaskLocked(task, tasks);
+      if (locked) {
+        Alert.alert('Locked', 'Complete all subtasks first.');
+        return;
+      }
       completeTask(task.id);
     }
   };
 
   const handleDelete = () => {
-    Alert.alert('Delete task', 'This cannot be undone.', [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Delete',
-        style: 'destructive',
-        onPress: () => {
-          deleteTask(task.id);
-          navigation.goBack();
+    const descendantCount = countDescendants(task.id, tasks);
+    if (descendantCount > 0) {
+      Alert.alert(
+        'Delete task',
+        `Delete task and ${descendantCount} subtask${descendantCount !== 1 ? 's' : ''}?`,
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Delete',
+            style: 'destructive',
+            onPress: () => {
+              deleteTaskWithCascade(task.id);
+              navigation.goBack();
+            },
+          },
+        ],
+      );
+    } else {
+      Alert.alert('Delete task', 'This cannot be undone.', [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: () => {
+            deleteTask(task.id);
+            navigation.goBack();
+          },
         },
-      },
-    ]);
+      ]);
+    }
   };
+
+  const handleAddSubtask = () => {
+    if (task.depth >= 3) {
+      Alert.alert('Max depth', 'Max 3 levels of subtasks');
+      return;
+    }
+    Alert.prompt(
+      'Add subtask',
+      'Enter subtask title',
+      (text) => {
+        if (text && text.trim()) {
+          addSubtask(task.id, text.trim());
+        }
+      },
+      'plain-text',
+    );
+  };
+
+  const children = useMemo(() => getChildren(task, tasks), [task, tasks]);
+  const locked = useMemo(() => isTaskLocked(task, tasks), [task, tasks]);
 
   const handleBack = () => {
     // Ensure latest changes are saved
@@ -230,6 +288,12 @@ export function TaskDetailScreen({ navigation, route }: Props) {
           ))}
         </View>
 
+        {/* Energy Level */}
+        <Text style={[styles.fieldLabel, { marginTop: Spacing.xxl }]}>ENERGY LEVEL</Text>
+        <View style={{ marginTop: Spacing.sm }}>
+          <EnergySelector value={energyLevel} onChange={handleEnergyChange} />
+        </View>
+
         {/* Deadline */}
         <Text style={[styles.fieldLabel, { marginTop: Spacing.xxl }]}>DEADLINE</Text>
         <View style={styles.deadlineRow}>
@@ -276,12 +340,113 @@ export function TaskDetailScreen({ navigation, route }: Props) {
         {/* Divider */}
         <View style={[styles.divider, { marginTop: Spacing.xxl }]} />
 
+        {/* Estimate */}
+        <Text style={styles.fieldLabel}>ESTIMATE</Text>
+        <View style={styles.deadlineRow}>
+          <TextInput
+            style={[styles.deadlineValue, { flex: 1, padding: 0 }]}
+            value={estimateText}
+            onChangeText={setEstimateText}
+            onBlur={() => {
+              const mins = parseEstimateInput(estimateText);
+              if (mins && mins !== task.estimatedMinutes) {
+                updateTask(task.id, { estimatedMinutes: mins });
+                setEstimateText(String(mins));
+              } else if (!estimateText.trim()) {
+                updateTask(task.id, { estimatedMinutes: null });
+              }
+            }}
+            placeholder="30 minutes"
+            placeholderTextColor={Colors.gray400}
+            keyboardType="default"
+          />
+          {estimateText ? (
+            <Text style={styles.clearText}>
+              {parseEstimateInput(estimateText)
+                ? formatMinutes(parseEstimateInput(estimateText)!)
+                : ''}
+            </Text>
+          ) : null}
+        </View>
+
+        {/* Timing info */}
+        {task.startedAt && !task.isCompleted ? (
+          <Text style={[styles.metaText, { marginTop: Spacing.md }]}>
+            ● In progress — {formatMinutes(getElapsedMinutes(task.startedAt))} elapsed
+          </Text>
+        ) : task.actualMinutes != null && task.actualMinutes > 0 ? (
+          <Text style={[styles.metaText, { marginTop: Spacing.md }]}>
+            Actual time: {formatMinutes(task.actualMinutes)}
+          </Text>
+        ) : null}
+
+        {/* Divider */}
+        <View style={[styles.divider, { marginTop: Spacing.xxl }]} />
+
+        {/* Subtasks section */}
+        {(children.length > 0 || task.depth < 3) && (
+          <>
+            <Text style={styles.fieldLabel}>SUBTASKS</Text>
+            {children.map(child => (
+              <Pressable
+                key={child.id}
+                style={styles.subtaskRow}
+                onPress={() => navigation.push('TaskDetail', { taskId: child.id })}>
+                <View style={[styles.subtaskCheckbox, child.isCompleted && styles.subtaskCheckboxDone]}>
+                  {child.isCompleted && <View style={styles.subtaskCheckboxInner} />}
+                </View>
+                <Text
+                  style={[styles.subtaskTitle, child.isCompleted && styles.subtaskTitleDone]}
+                  numberOfLines={1}>
+                  {child.title}
+                </Text>
+              </Pressable>
+            ))}
+            {task.depth < 3 && (
+              <Pressable style={styles.actionRow} onPress={handleAddSubtask}>
+                <Text style={styles.addSubtaskText}>+ Add subtask</Text>
+              </Pressable>
+            )}
+            {locked && (
+              <Text style={styles.lockedHint}>
+                🔒 Complete all subtasks to unlock this task
+              </Text>
+            )}
+            <View style={[styles.divider, { marginTop: Spacing.md }]} />
+          </>
+        )}
+
+        {/* Start/Complete Time Tracking */}
+        {!task.isCompleted && !task.startedAt && (
+          <Pressable
+            style={styles.actionRow}
+            onPress={() => startTask(task.id)}>
+            <Text style={styles.actionText}>Start timer</Text>
+          </Pressable>
+        )}
+        {!task.isCompleted && task.startedAt && (
+          <Pressable
+            style={styles.actionRow}
+            onPress={() => completeTimedTask(task.id)}>
+            <Text style={styles.actionText}>Complete (stop timer)</Text>
+          </Pressable>
+        )}
+
         {/* Complete / Restore */}
         <Pressable style={styles.actionRow} onPress={handleToggleComplete}>
           <Text style={styles.actionText}>
-            {task.isCompleted ? 'Restore task' : 'Mark as done'}
+            {task.isCompleted ? 'Restore task' : locked ? 'Mark as done (locked)' : 'Mark as done'}
           </Text>
         </Pressable>
+
+        {/* Parent info */}
+        {task.parentId && (
+          <Pressable
+            style={styles.actionRow}
+            onPress={() => navigation.push('TaskDetail', { taskId: task.parentId! })}>
+            <Text style={[styles.metaText, { marginTop: 0 }]}>↑ Go to parent task</Text>
+          </Pressable>
+        )}
 
         {/* Meta info */}
         {task.deferCount > 0 && (
@@ -420,5 +585,49 @@ const styles = StyleSheet.create({
   emptyText: {
     ...Typography.body,
     color: Colors.gray500,
+  },
+  // Subtask styles
+  subtaskRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: Spacing.sm,
+    paddingLeft: Spacing.sm,
+  },
+  subtaskCheckbox: {
+    width: 14,
+    height: 14,
+    borderWidth: 1.5,
+    borderColor: Colors.gray400,
+    borderRadius: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: Spacing.md,
+  },
+  subtaskCheckboxDone: {
+    borderColor: Colors.black,
+    backgroundColor: Colors.black,
+  },
+  subtaskCheckboxInner: {
+    width: 6,
+    height: 6,
+    backgroundColor: Colors.white,
+  },
+  subtaskTitle: {
+    ...Typography.body,
+    color: Colors.text,
+    flex: 1,
+  },
+  subtaskTitleDone: {
+    textDecorationLine: 'line-through',
+    color: Colors.gray500,
+  },
+  addSubtaskText: {
+    ...Typography.body,
+    color: Colors.gray500,
+  },
+  lockedHint: {
+    ...Typography.small,
+    color: Colors.gray400,
+    marginTop: Spacing.sm,
   },
 });

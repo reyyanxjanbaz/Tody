@@ -9,20 +9,24 @@ import {
   StyleSheet,
   Keyboard,
   Modal,
+  Alert,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useTasks } from '../context/TaskContext';
 import { TaskInput } from '../components/TaskInput';
 import { TaskItem } from '../components/TaskItem';
+import { EnergyFilter } from '../components/EnergyFilter';
 import { SectionHeader } from '../components/SectionHeader';
 import { EmptyState } from '../components/EmptyState';
 import { QuickCaptureFAB } from '../components/QuickCaptureFAB';
 import { InboxBadge } from '../components/InboxBadge';
+import { TaskContextMenu } from '../components/TaskContextMenu';
 import { organizeTasks, searchTasks } from '../utils/taskIntelligence';
 import { isFullyDecayed } from '../utils/decay';
+import { isTaskLocked, countDescendants, flattenTasksHierarchically } from '../utils/dependencyChains';
 import { Colors, Spacing, Typography } from '../utils/colors';
-import { Task, RootStackParamList } from '../types';
+import { Task, RootStackParamList, EnergyLevel } from '../types';
 
 type Props = {
   navigation: NativeStackNavigationProp<RootStackParamList, 'Home'>;
@@ -30,18 +34,80 @@ type Props = {
 
 export function HomeScreen({ navigation }: Props) {
   const insets = useSafeAreaInsets();
-  const { tasks, addTask, completeTask, deferTask, reviveTask, archiveOverdueTasks } = useTasks();
+  const { tasks, addTask, addSubtask, completeTask, deferTask, reviveTask, archiveOverdueTasks, startTask, completeTimedTask, deleteTaskWithCascade, deleteTask: deleteSingleTask, activeEnergyFilter, setActiveEnergyFilter } = useTasks();
   const [isSearching, setIsSearching] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [showArchiveModal, setShowArchiveModal] = useState(false);
   const searchInputRef = useRef<TextInput>(null);
 
+  // Context menu state
+  const [contextMenuTask, setContextMenuTask] = useState<Task | null>(null);
+  const [showContextMenu, setShowContextMenu] = useState(false);
+  // Subtask input state
+  const [subtaskParentId, setSubtaskParentId] = useState<string | null>(null);
+  const [showSubtaskInput, setShowSubtaskInput] = useState(false);
+  // Child highlight state (for shake feedback)
+  const [highlightChildrenOf, setHighlightChildrenOf] = useState<string | null>(null);
+
+  // ── Lock state map (computed) ─────────────────────────────────────────────
+  const lockMap = useMemo(() => {
+    const map = new Map<string, boolean>();
+    for (const task of tasks) {
+      map.set(task.id, isTaskLocked(task, tasks));
+    }
+    return map;
+  }, [tasks]);
+
+  // ── Filtered set for Energy ─────────────────────────────────────────────
+  const visibleTaskIds = useMemo(() => {
+    if (activeEnergyFilter === 'all') return null; // Logic optimization: null means all
+
+    const ids = new Set<string>();
+    const taskMap = new Map(tasks.map(t => [t.id, t]));
+
+    const addWithAncestors = (task: Task) => {
+      if (ids.has(task.id)) return;
+      ids.add(task.id);
+      if (task.parentId) {
+        const parent = taskMap.get(task.parentId);
+        if (parent) addWithAncestors(parent);
+      }
+    };
+
+    tasks
+      .filter(t => t.energyLevel === activeEnergyFilter)
+      .forEach(addWithAncestors);
+    
+    return ids;
+  }, [tasks, activeEnergyFilter]);
+
+  const tasksForDisplay = useMemo(() => {
+    if (visibleTaskIds === null) return tasks;
+    return tasks.filter(t => visibleTaskIds.has(t.id));
+  }, [tasks, visibleTaskIds]);
+
+  const displayedTaskCount = useMemo(() => {
+    if (activeEnergyFilter === 'all') return tasks.filter(t => !t.isCompleted).length;
+    // Count only the MATCHING tasks, not the context tasks
+    return tasks.filter(t => !t.isCompleted && t.energyLevel === activeEnergyFilter).length;
+  }, [tasks, activeEnergyFilter]);
+
   // ── Computed data ────────────────────────────────────────────────────────
-  const sections = useMemo(() => organizeTasks(tasks), [tasks]);
+  const sections = useMemo(() => {
+    // Only pass relevant tasks to organizer
+    const baseSections = organizeTasks(tasksForDisplay);
+    // Flatten each section's data to maintain hierarchy
+    return baseSections.map(section => ({
+      ...section,
+      data: flattenTasksHierarchically(section.data),
+    }));
+  }, [tasksForDisplay]);
+
   const searchResults = useMemo(
     () => (searchQuery.trim() ? searchTasks(tasks, searchQuery) : []),
     [tasks, searchQuery],
   );
+  
   const activeCount = useMemo(
     () => tasks.filter(t => !t.isCompleted).length,
     [tasks],
@@ -53,10 +119,24 @@ export function HomeScreen({ navigation }: Props) {
     [tasks],
   );
 
+  // Performance: pre-computed layout for FlatList items
+  const ITEM_HEIGHT = 52;
+  const getItemLayout = useCallback(
+    (_data: unknown, index: number) => ({
+      length: ITEM_HEIGHT,
+      offset: ITEM_HEIGHT * index,
+      index,
+    }),
+    [],
+  );
+
   // ── Handlers ─────────────────────────────────────────────────────────────
   const handleAddTask = useCallback(
-    (text: string) => {
-      addTask(text);
+    (text: string, estimatedMinutes?: number, energyLevel?: EnergyLevel) => {
+      addTask(text, { 
+        ...(estimatedMinutes ? { estimatedMinutes } : {}),
+        energyLevel: energyLevel ?? 'medium'
+      });
     },
     [addTask],
   );
@@ -107,18 +187,141 @@ export function HomeScreen({ navigation }: Props) {
     [reviveTask],
   );
 
+  const handleStartTask = useCallback(
+    (id: string) => {
+      startTask(id);
+    },
+    [startTask],
+  );
+
+  const handleCompleteTimedTask = useCallback(
+    (id: string, adjustedMinutes?: number) => {
+      completeTimedTask(id, adjustedMinutes);
+    },
+    [completeTimedTask],
+  );
+
+  const handleOpenStats = useCallback(() => {
+    navigation.navigate('RealityScore');
+  }, [navigation]);
+
+  // ── Long-press / Context menu handlers ──────────────────────────────────
+  const handleLongPress = useCallback((task: Task) => {
+    setContextMenuTask(task);
+    setShowContextMenu(true);
+  }, []);
+
+  const handleCloseContextMenu = useCallback(() => {
+    setShowContextMenu(false);
+    setContextMenuTask(null);
+  }, []);
+
+  const handleContextAddSubtask = useCallback(() => {
+    if (!contextMenuTask) return;
+    if (contextMenuTask.depth >= 3) {
+      Alert.alert('Max depth', 'Max 3 levels of subtasks');
+      return;
+    }
+    setSubtaskParentId(contextMenuTask.id);
+    setShowSubtaskInput(true);
+  }, [contextMenuTask]);
+
+  const handleContextDelete = useCallback(() => {
+    if (!contextMenuTask) return;
+    const descendantCount = countDescendants(contextMenuTask.id, tasks);
+    if (descendantCount > 0) {
+      Alert.alert(
+        'Delete task',
+        `Delete task and ${descendantCount} subtask${descendantCount !== 1 ? 's' : ''}?`,
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Delete',
+            style: 'destructive',
+            onPress: () => deleteTaskWithCascade(contextMenuTask.id),
+          },
+        ],
+      );
+    } else {
+      Alert.alert('Delete task', 'This cannot be undone.', [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: () => deleteSingleTask(contextMenuTask.id),
+        },
+      ]);
+    }
+  }, [contextMenuTask, tasks, deleteTaskWithCascade, deleteSingleTask]);
+
+  const handleSubtaskSubmit = useCallback(
+    (text: string, estimatedMinutes?: number) => {
+      if (!subtaskParentId) return;
+      addSubtask(subtaskParentId, text, estimatedMinutes ? { estimatedMinutes } : undefined);
+      setShowSubtaskInput(false);
+      setSubtaskParentId(null);
+    },
+    [subtaskParentId, addSubtask],
+  );
+
+  const handleAddSubtaskViaSwipe = useCallback((task: Task) => {
+    if (task.depth >= 3) {
+      Alert.alert('Max depth', 'Max 3 levels of subtasks');
+      return;
+    }
+    setSubtaskParentId(task.id);
+    setShowSubtaskInput(true);
+  }, []);
+
+  const handleCompleteWithLockCheck = useCallback(
+    (id: string) => {
+      const locked = lockMap.get(id) ?? false;
+      if (locked) {
+        // Trigger highlight on incomplete children
+        setHighlightChildrenOf(id);
+        setTimeout(() => setHighlightChildrenOf(null), 300);
+        return;
+      }
+      completeTask(id);
+    },
+    [completeTask, lockMap],
+  );
+
   // ── Render helpers ───────────────────────────────────────────────────────
   const renderTaskItem = useCallback(
-    ({ item }: { item: Task }) => (
-      <TaskItem
-        task={item}
-        onPress={handleTaskPress}
-        onComplete={completeTask}
-        onDefer={deferTask}
-        onRevive={handleRevive}
-      />
-    ),
-    [handleTaskPress, completeTask, deferTask, handleRevive],
+    ({ item }: { item: Task }) => {
+      const locked = lockMap.get(item.id) ?? false;
+      // Check if this is the last child of its parent
+      const parentTask = item.parentId
+        ? tasks.find(t => t.id === item.parentId)
+        : null;
+      const parentChildIds = parentTask?.childIds ?? [];
+      const isLastChild = parentChildIds.length > 0
+        ? parentChildIds[parentChildIds.length - 1] === item.id
+        : false;
+      // Highlight if parent was shaken
+      const shouldHighlight = highlightChildrenOf != null &&
+        item.parentId === highlightChildrenOf &&
+        !item.isCompleted;
+
+      return (
+        <TaskItem
+          task={item}
+          onPress={handleTaskPress}
+          onComplete={handleCompleteWithLockCheck}
+          onDefer={deferTask}
+          onRevive={handleRevive}
+          onStart={handleStartTask}
+          onCompleteTimed={handleCompleteTimedTask}
+          isLocked={locked}
+          isLastChild={isLastChild}
+          onLongPress={handleLongPress}
+          onAddSubtask={handleAddSubtaskViaSwipe}
+          childHighlight={shouldHighlight}
+        />
+      );
+    },
+    [handleTaskPress, handleCompleteWithLockCheck, deferTask, handleRevive, handleStartTask, handleCompleteTimedTask, lockMap, tasks, highlightChildrenOf, handleLongPress, handleAddSubtaskViaSwipe],
   );
 
   const renderSectionHeader = useCallback(
@@ -168,6 +371,9 @@ export function HomeScreen({ navigation }: Props) {
             <Pressable onPress={handleOpenArchive} hitSlop={8} style={styles.headerButton}>
               <Text style={styles.headerButtonText}>Archive</Text>
             </Pressable>
+            <Pressable onPress={handleOpenStats} hitSlop={8} style={styles.headerButton}>
+              <Text style={styles.headerButtonText}>Stats</Text>
+            </Pressable>
           </View>
         </View>
       )}
@@ -182,6 +388,7 @@ export function HomeScreen({ navigation }: Props) {
             data={searchResults}
             renderItem={renderTaskItem}
             keyExtractor={keyExtractor}
+            getItemLayout={getItemLayout}
             keyboardShouldPersistTaps="handled"
             ListEmptyComponent={
               <EmptyState title="No tasks found" />
@@ -189,15 +396,28 @@ export function HomeScreen({ navigation }: Props) {
             contentContainerStyle={styles.listContent}
           />
         ) : (
-          <EmptyState title="Type to search" subtitle="Search across all tasks" />
+          <EmptyState title="No results" subtitle={`for "${searchQuery}"`} />
         )
-      ) : sections.length > 0 ? (
+      ) : (
         <SectionList
           sections={sections}
           renderItem={renderTaskItem}
           renderSectionHeader={renderSectionHeader}
           keyExtractor={keyExtractor}
           stickySectionHeadersEnabled={false}
+          ListHeaderComponent={
+            <EnergyFilter
+              activeFilter={activeEnergyFilter}
+              onFilterChange={setActiveEnergyFilter}
+              taskCount={displayedTaskCount}
+            />
+          }
+          ListEmptyComponent={
+            <EmptyState
+              title={activeEnergyFilter === 'all' ? "No tasks yet" : `No ${activeEnergyFilter} energy tasks`}
+              subtitle={activeEnergyFilter === 'all' ? "Type above to add your first task" : "Try adjusting the filter"}
+            />
+          }
           keyboardShouldPersistTaps="handled"
           contentContainerStyle={styles.listContent}
           ListFooterComponent={
@@ -211,11 +431,6 @@ export function HomeScreen({ navigation }: Props) {
               </Pressable>
             ) : null
           }
-        />
-      ) : (
-        <EmptyState
-          title="No tasks yet"
-          subtitle='Type above to add your first task'
         />
       )}
 
@@ -248,6 +463,44 @@ export function HomeScreen({ navigation }: Props) {
                 <Text style={styles.modalArchiveText}>Archive</Text>
               </Pressable>
             </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Context Menu */}
+      <TaskContextMenu
+        visible={showContextMenu}
+        onClose={handleCloseContextMenu}
+        onAddSubtask={handleContextAddSubtask}
+        onDelete={handleContextDelete}
+        canAddSubtask={contextMenuTask ? contextMenuTask.depth < 3 : false}
+      />
+
+      {/* Subtask Input Modal */}
+      <Modal
+        visible={showSubtaskInput}
+        transparent
+        animationType="fade"
+        onRequestClose={() => {
+          setShowSubtaskInput(false);
+          setSubtaskParentId(null);
+        }}>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>Add subtask</Text>
+            <TaskInput
+              onSubmit={handleSubtaskSubmit}
+              placeholder="Subtask title..."
+              autoFocus
+            />
+            <Pressable
+              style={styles.modalCancelButton}
+              onPress={() => {
+                setShowSubtaskInput(false);
+                setSubtaskParentId(null);
+              }}>
+              <Text style={styles.modalCancelText}>Cancel</Text>
+            </Pressable>
           </View>
         </View>
       </Modal>

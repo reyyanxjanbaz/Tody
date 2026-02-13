@@ -1,5 +1,7 @@
 export type Priority = 'high' | 'medium' | 'low' | 'none';
 
+export type EnergyLevel = 'high' | 'medium' | 'low';
+
 export type Section = 'overdue' | 'now' | 'next' | 'later' | 'someday';
 
 export type RecurringFrequency = 'daily' | 'weekly' | 'biweekly' | 'monthly';
@@ -13,7 +15,7 @@ export interface Task {
   deadline: number | null;
   completedAt: number | null;
   priority: Priority;
-  energyLevel?: 'high' | 'medium' | 'low';
+  energyLevel: EnergyLevel; // Required: 'high' | 'medium' | 'low'
   isCompleted: boolean;
   isRecurring: boolean;
   recurringFrequency: RecurringFrequency | null;
@@ -23,6 +25,32 @@ export interface Task {
   revivedAt?: number | null; // When user revived the task (timestamp)
   archivedAt?: number | null; // When task was archived (timestamp)
   isArchived?: boolean; // Whether task is in the overdue archive
+  // Time Block Integrity fields
+  estimatedMinutes?: number | null; // User's estimate
+  actualMinutes?: number | null; // Calculated on completion
+  startedAt?: number | null; // Timestamp when user marks task as "started"
+  // Dependency Chains fields
+  parentId?: string | null; // null for root tasks
+  childIds: string[]; // Array of child task IDs
+  depth: number; // 0 = root, 1 = first level subtask, 2 = second level, 3 = max
+
+  // User
+  userId?: string; // Owner of this task
+}
+
+export interface TaskPattern {
+  keywords: string[]; // Extracted from similar task titles
+  averageActualMinutes: number;
+  sampleSize: number; // How many tasks in this pattern
+  accuracyScore: number; // How close estimates are to reality (0-100)
+}
+
+export interface UserStats {
+  totalCompletedTasks: number;
+  totalEstimatedMinutes: number;
+  totalActualMinutes: number;
+  realityScore: number; // Overall accuracy percentage
+  underestimationRate: number; // How much user typically underestimates (as percentage)
 }
 
 export interface User {
@@ -49,8 +77,6 @@ export interface ParsedTaskInput {
   priority: Priority;
 }
 
-export type EnergyLevel = 'high' | 'medium' | 'low';
-
 export interface InboxTask {
   id: string;
   rawText: string;
@@ -74,4 +100,5 @@ export type RootStackParamList = {
   Archive: undefined;
   TaskDetail: { taskId: string };
   ProcessInbox: undefined;
+  RealityScore: undefined;
 };

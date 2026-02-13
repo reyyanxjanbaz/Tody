@@ -7,11 +7,15 @@ import React, {
   useRef,
 } from 'react';
 import { LayoutAnimation, Platform, UIManager } from 'react-native';
-import { Task, Priority } from '../types';
-import { saveTasks, getTasks, saveArchivedTasks, getArchivedTasks } from '../utils/storage';
+import { Task, Priority, EnergyLevel } from '../types';
+import { saveTasks, getTasks, saveArchivedTasks, getArchivedTasks, saveEnergyFilter, getEnergyFilter } from '../utils/storage';
 import { generateId } from '../utils/id';
+import { useAuth } from './AuthContext';
 import { parseTaskInput } from '../utils/taskParser';
 import { initializeOverdueDates, isFullyDecayed } from '../utils/decay';
+import { calculateActualMinutes, isTooShort } from '../utils/timeTracking';
+import { updatePatternsOnCompletion } from '../utils/patternLearning';
+import { getAllDescendantIds, isTaskLocked } from '../utils/dependencyChains';
 
 // Enable LayoutAnimation on Android
 if (Platform.OS === 'android') {
@@ -24,16 +28,23 @@ interface TaskContextType {
   tasks: Task[];
   archivedTasks: Task[];
   isLoading: boolean;
+  activeEnergyFilter: EnergyLevel | 'all';
+  setActiveEnergyFilter: (level: EnergyLevel | 'all') => void;
   addTask: (input: string, overrides?: Partial<Task>) => Task;
+  addSubtask: (parentId: string, input: string, overrides?: Partial<Task>) => Task | null;
   updateTask: (id: string, updates: Partial<Task>) => void;
   completeTask: (id: string) => void;
   uncompleteTask: (id: string) => void;
   deferTask: (id: string) => void;
   deleteTask: (id: string) => void;
+  deleteTaskWithCascade: (id: string) => void;
   getTask: (id: string) => Task | undefined;
   reviveTask: (id: string) => void;
   archiveOverdueTasks: () => void;
   getFullyDecayedTasks: () => Task[];
+  startTask: (id: string) => void;
+  completeTimedTask: (id: string, adjustedMinutes?: number) => void;
+  moveTaskToParent: (taskId: string, newParentId: string | null) => void;
 }
 
 const TaskContext = createContext<TaskContextType | undefined>(undefined);
@@ -41,8 +52,10 @@ const TaskContext = createContext<TaskContextType | undefined>(undefined);
 // ── Provider ─────────────────────────────────────────────────────────────────
 
 export function TaskProvider({ children }: { children: React.ReactNode }) {
+  const { user } = useAuth();
   const [tasks, setTasks] = useState<Task[]>([]);
   const [archivedTasks, setArchivedTasks] = useState<Task[]>([]);
+  const [activeEnergyFilter, setActiveEnergyFilter] = useState<EnergyLevel | 'all'>('all');
   const [isLoading, setIsLoading] = useState(true);
   const tasksRef = useRef(tasks);
   tasksRef.current = tasks;
@@ -55,12 +68,25 @@ export function TaskProvider({ children }: { children: React.ReactNode }) {
     (async () => {
       try {
         const stored = await getTasks<Task>();
+        // Migrate: ensure dependency chain fields exist and energyLevel is present
+        const migrated = stored.map(t => ({
+          ...t,
+          childIds: t.childIds ?? [],
+          depth: t.depth ?? 0,
+          parentId: t.parentId ?? null,
+          energyLevel: t.energyLevel ?? 'medium',
+        }));
         // Initialize overdueStartDate for tasks that became overdue
-        const initialized = initializeOverdueDates(stored);
+        const initialized = initializeOverdueDates(migrated);
         setTasks(initialized);
 
         const storedArchived = await getArchivedTasks<Task>();
         setArchivedTasks(storedArchived);
+
+        const storedFilter = await getEnergyFilter();
+        if (storedFilter) {
+          setActiveEnergyFilter(storedFilter as EnergyLevel | 'all');
+        }
       } catch {
         // Start fresh if storage is corrupt
       } finally {
@@ -78,7 +104,7 @@ export function TaskProvider({ children }: { children: React.ReactNode }) {
     }
     persistTimeout.current = setTimeout(() => {
       saveTasks(tasks);
-    }, 300);
+    }, 500);
 
     return () => {
       if (persistTimeout.current) {
@@ -97,7 +123,7 @@ export function TaskProvider({ children }: { children: React.ReactNode }) {
     }
     archivePersistTimeout.current = setTimeout(() => {
       saveArchivedTasks(archivedTasks);
-    }, 300);
+    }, 500);
 
     return () => {
       if (archivePersistTimeout.current) {
@@ -105,6 +131,13 @@ export function TaskProvider({ children }: { children: React.ReactNode }) {
       }
     };
   }, [archivedTasks, isLoading]);
+
+  // Persist filter preference
+  useEffect(() => {
+    if (!isLoading) {
+      saveEnergyFilter(activeEnergyFilter);
+    }
+  }, [activeEnergyFilter, isLoading]);
 
   const addTask = useCallback((input: string, overrides?: Partial<Task>): Task => {
     const parsed = parseTaskInput(input);
@@ -129,13 +162,72 @@ export function TaskProvider({ children }: { children: React.ReactNode }) {
       revivedAt: null,
       archivedAt: null,
       isArchived: false,
+      estimatedMinutes: null,
+      actualMinutes: null,
+      startedAt: null,
+      parentId: null,
+      childIds: [],
+      depth: 0,
+      userId: user?.id,
       ...overrides,
     };
 
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
     setTasks(prev => [task, ...prev]);
     return task;
-  }, []);
+  }, [user]);
+
+  const addSubtask = useCallback((parentId: string, input: string, overrides?: Partial<Task>): Task | null => {
+    const parent = tasksRef.current.find(t => t.id === parentId);
+    if (!parent || parent.depth >= 3) return null;
+
+    const parsed = parseTaskInput(input);
+    const now = Date.now();
+
+    const subtask: Task = {
+      id: generateId(),
+      title: parsed.title,
+      description: '',
+      createdAt: now,
+      updatedAt: now,
+      deadline: parsed.deadline,
+      completedAt: null,
+      priority: parsed.priority,
+      energyLevel: parent.energyLevel ?? 'medium', // Inherit parent's energy level
+      isCompleted: false,
+      isRecurring: false,
+      recurringFrequency: null,
+      deferCount: 0,
+      createdHour: new Date().getHours(),
+      overdueStartDate: null,
+      revivedAt: null,
+      archivedAt: null,
+      isArchived: false,
+      estimatedMinutes: null,
+      actualMinutes: null,
+      startedAt: null,
+      parentId,
+      childIds: [],
+      depth: parent.depth + 1,
+      userId: user?.id,
+      ...overrides,
+    };
+
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    setTasks(prev => {
+      const updated = prev.map(t =>
+        t.id === parentId
+          ? { ...t, childIds: [...t.childIds, subtask.id], updatedAt: now }
+          : t,
+      );
+      // Insert subtask right after parent in the list
+      const parentIndex = updated.findIndex(t => t.id === parentId);
+      const insertIndex = parentIndex >= 0 ? parentIndex + 1 : 0;
+      updated.splice(insertIndex, 0, subtask);
+      return updated;
+    });
+    return subtask;
+  }, [user]);
 
   const updateTask = useCallback((id: string, updates: Partial<Task>) => {
     setTasks(prev =>
@@ -153,13 +245,71 @@ export function TaskProvider({ children }: { children: React.ReactNode }) {
 
   const completeTask = useCallback((id: string) => {
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    const now = Date.now();
+    setTasks(prev => {
+      const updated = prev.map(t => {
+        if (t.id !== id) { return t; }
+        const actualMins = t.startedAt
+          ? calculateActualMinutes(t.startedAt, now)
+          : null;
+        return {
+          ...t,
+          isCompleted: true,
+          completedAt: now,
+          updatedAt: now,
+          actualMinutes: actualMins,
+        };
+      });
+
+      // Run pattern learning in background
+      const completedTask = updated.find(t => t.id === id);
+      if (completedTask?.actualMinutes && !isTooShort(completedTask.actualMinutes)) {
+        const allCompleted = updated.filter(t => t.isCompleted && t.actualMinutes && t.actualMinutes >= 1);
+        updatePatternsOnCompletion(completedTask, allCompleted).catch(() => {});
+      }
+
+      return updated;
+    });
+  }, []);
+
+  const startTask = useCallback((id: string) => {
+    const now = Date.now();
     setTasks(prev =>
       prev.map(t =>
         t.id === id
-          ? { ...t, isCompleted: true, completedAt: Date.now(), updatedAt: Date.now() }
+          ? { ...t, startedAt: now, updatedAt: now }
           : t,
       ),
     );
+  }, []);
+
+  const completeTimedTask = useCallback((id: string, adjustedMinutes?: number) => {
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    const now = Date.now();
+    setTasks(prev => {
+      const updated = prev.map(t => {
+        if (t.id !== id) { return t; }
+        const calcMins = t.startedAt
+          ? calculateActualMinutes(t.startedAt, now)
+          : null;
+        const actualMins = adjustedMinutes != null ? adjustedMinutes : calcMins;
+        return {
+          ...t,
+          isCompleted: true,
+          completedAt: now,
+          updatedAt: now,
+          actualMinutes: actualMins,
+        };
+      });
+
+      const completedTask = updated.find(t => t.id === id);
+      if (completedTask?.actualMinutes && !isTooShort(completedTask.actualMinutes)) {
+        const allCompleted = updated.filter(t => t.isCompleted && t.actualMinutes && t.actualMinutes >= 1);
+        updatePatternsOnCompletion(completedTask, allCompleted).catch(() => {});
+      }
+
+      return updated;
+    });
   }, []);
 
   const uncompleteTask = useCallback((id: string) => {
@@ -195,7 +345,101 @@ export function TaskProvider({ children }: { children: React.ReactNode }) {
 
   const deleteTask = useCallback((id: string) => {
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-    setTasks(prev => prev.filter(t => t.id !== id));
+    setTasks(prev => {
+      const task = prev.find(t => t.id === id);
+      if (!task) return prev;
+      // Remove from parent's childIds
+      let updated = prev;
+      if (task.parentId) {
+        updated = updated.map(t =>
+          t.id === task.parentId
+            ? { ...t, childIds: t.childIds.filter(cid => cid !== id), updatedAt: Date.now() }
+            : t,
+        );
+      }
+      return updated.filter(t => t.id !== id);
+    });
+  }, []);
+
+  const deleteTaskWithCascade = useCallback((id: string) => {
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    setTasks(prev => {
+      const task = prev.find(t => t.id === id);
+      if (!task) return prev;
+      const descendantIds = getAllDescendantIds(id, prev);
+      const idsToRemove = new Set([id, ...descendantIds]);
+      // Remove from parent's childIds
+      let updated = prev;
+      if (task.parentId) {
+        updated = updated.map(t =>
+          t.id === task.parentId
+            ? { ...t, childIds: t.childIds.filter(cid => cid !== id), updatedAt: Date.now() }
+            : t,
+        );
+      }
+      return updated.filter(t => !idsToRemove.has(t.id));
+    });
+  }, []);
+
+  const moveTaskToParent = useCallback((taskId: string, newParentId: string | null) => {
+    const now = Date.now();
+    setTasks(prev => {
+      const task = prev.find(t => t.id === taskId);
+      if (!task) return prev;
+
+      let updated = [...prev];
+
+      // Remove from old parent's childIds
+      if (task.parentId) {
+        updated = updated.map(t =>
+          t.id === task.parentId
+            ? { ...t, childIds: t.childIds.filter(cid => cid !== taskId), updatedAt: now }
+            : t,
+        );
+      }
+
+      if (newParentId) {
+        const newParent = updated.find(t => t.id === newParentId);
+        if (!newParent || newParent.depth >= 3) return prev;
+
+        const depthDiff = (newParent.depth + 1) - task.depth;
+
+        // Update new parent's childIds
+        updated = updated.map(t => {
+          if (t.id === newParentId) {
+            return { ...t, childIds: [...t.childIds, taskId], updatedAt: now };
+          }
+          return t;
+        });
+
+        // Update the task and all descendants' depths
+        const descendantIds = getAllDescendantIds(taskId, updated);
+        updated = updated.map(t => {
+          if (t.id === taskId) {
+            return { ...t, parentId: newParentId, depth: newParent.depth + 1, updatedAt: now };
+          }
+          if (descendantIds.includes(t.id)) {
+            return { ...t, depth: t.depth + depthDiff, updatedAt: now };
+          }
+          return t;
+        });
+      } else {
+        // Moving to root
+        const depthDiff = -task.depth;
+        const descendantIds = getAllDescendantIds(taskId, updated);
+        updated = updated.map(t => {
+          if (t.id === taskId) {
+            return { ...t, parentId: null, depth: 0, updatedAt: now };
+          }
+          if (descendantIds.includes(t.id)) {
+            return { ...t, depth: t.depth + depthDiff, updatedAt: now };
+          }
+          return t;
+        });
+      }
+
+      return updated;
+    });
   }, []);
 
   const reviveTask = useCallback((id: string) => {
@@ -250,17 +494,24 @@ export function TaskProvider({ children }: { children: React.ReactNode }) {
       value={{
         tasks,
         archivedTasks,
+        activeEnergyFilter,
+        setActiveEnergyFilter,
         isLoading,
         addTask,
+        addSubtask,
         updateTask,
         completeTask,
         uncompleteTask,
         deferTask,
         deleteTask,
+        deleteTaskWithCascade,
         getTask,
         reviveTask,
         archiveOverdueTasks,
         getFullyDecayedTasks,
+        startTask,
+        completeTimedTask,
+        moveTaskToParent,
       }}>
       {children}
     </TaskContext.Provider>

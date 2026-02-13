@@ -1,54 +1,189 @@
-import React, { memo, useState, useCallback, useRef } from 'react';
+import React, { memo, useState, useCallback, useRef, useEffect } from 'react';
 import {
   View,
   TextInput,
   StyleSheet,
   Pressable,
   Text,
+  LayoutAnimation,
 } from 'react-native';
 import { Colors, Spacing, Typography } from '../utils/colors';
+import { parseEstimateInput, formatMinutes } from '../utils/timeTracking';
+import { EstimateSuggestion } from './EstimateSuggestion';
+import { EnergyLevel } from '../types';
+import { EnergySelector } from './EnergySelector';
 
 interface TaskInputProps {
-  onSubmit: (text: string) => void;
+  onSubmit: (text: string, estimatedMinutes?: number, energyLevel?: EnergyLevel) => void;
+  placeholder?: string;
+  autoFocus?: boolean;
 }
 
-export const TaskInput = memo(function TaskInput({ onSubmit }: TaskInputProps) {
+export const TaskInput = memo(function TaskInput({ onSubmit, placeholder, autoFocus }: TaskInputProps) {
   const [value, setValue] = useState('');
+  const [estimateText, setEstimateText] = useState('');
+  const [showEstimate, setShowEstimate] = useState(false);
+  const [energyLevel, setEnergyLevel] = useState<EnergyLevel>('medium');
+  const [hasManuallySetEnergy, setHasManuallySetEnergy] = useState(false);
+  
   const inputRef = useRef<TextInput>(null);
+  const estimateInputRef = useRef<TextInput>(null);
+
+  const parsedEstimate = estimateText ? parseEstimateInput(estimateText) : null;
+
+  const suggestEnergy = useCallback((text: string) => {
+    const lower = text.toLowerCase();
+    if (lower.match(/write|design|plan|strategy/)) return 'high';
+    if (lower.match(/call|email|review|check/)) return 'medium';
+    if (lower.match(/respond|forward|pay|buy/)) return 'low';
+    return null;
+  }, []);
 
   const handleSubmit = useCallback(() => {
     const trimmed = value.trim();
     if (!trimmed) { return; }
-    onSubmit(trimmed);
+    const minutes = estimateText ? parseEstimateInput(estimateText) : undefined;
+    onSubmit(trimmed, minutes ?? undefined, energyLevel);
     setValue('');
-  }, [value, onSubmit]);
+    setEstimateText('');
+    setEnergyLevel('medium');
+    setHasManuallySetEnergy(false);
+    setShowEstimate(false);
+  }, [value, estimateText, onSubmit, energyLevel]);
+
+  const handleTitleChange = useCallback((text: string) => {
+    setValue(text);
+    if (text.trim().length > 0 && !showEstimate) {
+      setShowEstimate(true);
+      LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    } else if (text.trim().length === 0) {
+      setShowEstimate(false);
+      setEstimateText('');
+    }
+
+    if (!hasManuallySetEnergy) {
+      const suggestion = suggestEnergy(text);
+      if (suggestion) {
+        setEnergyLevel(suggestion);
+      }
+    }
+  }, [showEstimate, hasManuallySetEnergy, suggestEnergy]);
+
+  const handleEnergyChange = useCallback((level: EnergyLevel) => {
+    setEnergyLevel(level);
+    setHasManuallySetEnergy(true);
+  }, []);
 
   return (
-    <View style={styles.container}>
-      <TextInput
-        ref={inputRef}
-        style={styles.input}
-        placeholder='Add a task... try "buy milk tomorrow"'
-        placeholderTextColor={Colors.gray400}
-        value={value}
-        onChangeText={setValue}
-        onSubmitEditing={handleSubmit}
-        returnKeyType="done"
-        blurOnSubmit={false}
-        autoCorrect={false}
-        autoCapitalize="sentences"
-      />
-      {value.trim().length > 0 && (
-        <Pressable
-          style={styles.addButton}
-          onPress={handleSubmit}
-          hitSlop={8}>
-          <Text style={styles.addButtonText}>+</Text>
-        </Pressable>
+    <View>
+      <View style={styles.container}>
+        <TextInput
+          ref={inputRef}
+          style={styles.input}
+          placeholder={placeholder || 'Add a task... try "buy milk tomorrow"'}
+          placeholderTextColor={Colors.gray400}
+          value={value}
+          onChangeText={handleTitleChange}
+          onSubmitEditing={() => {
+            if (showEstimate && !estimateText) {
+              estimateInputRef.current?.focus();
+            } else {
+              handleSubmit();
+            }
+          }}
+          returnKeyType={showEstimate && !estimateText ? 'next' : 'done'}
+          blurOnSubmit={false}
+          autoCorrect={false}
+          autoCapitalize="sentences"
+          autoFocus={autoFocus}
+        />
+        {value.trim().length > 0 && (
+          <Pressable
+            style={styles.addButton}
+            onPress={handleSubmit}
+            hitSlop={8}>
+            <Text style={styles.addButtonText}>+</Text>
+          </Pressable>
+        )}
+      </View>
+      {showEstimate && (
+        <View>
+          <View style={styles.estimateRow}>
+            <TextInput
+              ref={estimateInputRef}
+              style={styles.estimateInput}
+              placeholder="30 minutes"
+              placeholderTextColor={Colors.gray400}
+              value={estimateText}
+              onChangeText={setEstimateText}
+              onSubmitEditing={handleSubmit}
+              returnKeyType="done"
+              blurOnSubmit={false}
+              keyboardType="default"
+              autoCorrect={false}
+            />
+            {parsedEstimate != null && (
+              <Text style={styles.estimateParsed}>
+                {formatMinutes(parsedEstimate)}
+              </Text>
+            )}
+          </View>
+          <View style={styles.energySelectorWrapper}>
+            <EnergySelector value={energyLevel} onChange={handleEnergyChange} />
+          </View>
+        </View>
       )}
+      <EstimateSuggestion
+        taskTitle={value}
+        userEstimateMinutes={parsedEstimate}
+      />
     </View>
   );
 });
+
+const selectorStyles = StyleSheet.create({
+  container: {
+    paddingHorizontal: Spacing.lg,
+    paddingVertical: Spacing.sm,
+    backgroundColor: Colors.white,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: Colors.borderLight,
+  },
+  label: {
+    ...Typography.caption,
+    color: Colors.gray600,
+    marginBottom: Spacing.xs,
+  },
+  buttons: {
+    flexDirection: 'row',
+    borderRadius: 2,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: Colors.black,
+  },
+  button: {
+    flex: 1,
+    paddingVertical: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: Colors.white,
+    borderRightWidth: 1,
+    borderRightColor: Colors.black,
+  },
+  buttonSelected: {
+    backgroundColor: Colors.black,
+  },
+  buttonText: {
+    ...Typography.caption,
+    color: Colors.black,
+    fontWeight: '400',
+  },
+  buttonTextSelected: {
+    color: Colors.white,
+    fontWeight: '600',
+  },
+});
+
 
 const styles = StyleSheet.create({
   container: {
@@ -80,5 +215,30 @@ const styles = StyleSheet.create({
     fontWeight: '300',
     lineHeight: 22,
     marginTop: -1,
+  },
+  estimateRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: Spacing.lg,
+    backgroundColor: Colors.white,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: Colors.borderLight,
+  },
+  estimateInput: {
+    flex: 1,
+    height: 36,
+    fontSize: 13,
+    color: Colors.textSecondary,
+  },
+  estimateParsed: {
+    fontSize: 11,
+    color: Colors.gray500,
+    marginLeft: Spacing.sm,
+  },
+  energySelectorWrapper: {
+    paddingHorizontal: Spacing.lg,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: Colors.borderLight,
+    paddingBottom: Spacing.sm,
   },
 });

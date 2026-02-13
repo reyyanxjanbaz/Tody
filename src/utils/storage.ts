@@ -6,6 +6,8 @@ const KEYS = {
   SEARCH_HISTORY: '@tody_searches',
   INBOX_TASKS: '@tody_inbox_tasks',
   ARCHIVED_TASKS: '@tody_archived_tasks',
+  TASK_PATTERNS: '@tody_task_patterns',
+  ENERGY_FILTER: '@tody_energy_filter',
 } as const;
 
 export async function saveUser(user: object): Promise<void> {
@@ -29,7 +31,13 @@ export async function getTasks<T>(): Promise<T[]> {
   const data = await AsyncStorage.getItem(KEYS.TASKS);
   return data ? JSON.parse(data) : [];
 }
+export async function saveEnergyFilter(filter: string): Promise<void> {
+  await AsyncStorage.setItem(KEYS.ENERGY_FILTER, filter);
+}
 
+export async function getEnergyFilter(): Promise<string | null> {
+  return await AsyncStorage.getItem(KEYS.ENERGY_FILTER);
+}
 export async function saveSearchHistory(history: string[]): Promise<void> {
   await AsyncStorage.setItem(KEYS.SEARCH_HISTORY, JSON.stringify(history.slice(0, 10)));
 }

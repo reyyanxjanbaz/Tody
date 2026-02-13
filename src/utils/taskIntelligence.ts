@@ -80,6 +80,20 @@ const SECTION_META: ReadonlyArray<{ key: Section; title: string }> = [
 export function organizeTasks(tasks: Task[]): TaskSectionData[] {
   const active = tasks.filter(t => !t.isCompleted);
 
+  // Build a map from task ID to task for quick lookups
+  const taskMap = new Map(active.map(t => [t.id, t]));
+
+  // Find root ancestor for a task to place subtasks in same section as their root
+  function getRootAncestor(task: Task): Task {
+    let current = task;
+    while (current.parentId) {
+      const parent = taskMap.get(current.parentId);
+      if (!parent) break;
+      current = parent;
+    }
+    return current;
+  }
+
   const buckets: Record<Section, Task[]> = {
     overdue: [],
     now: [],
@@ -89,12 +103,25 @@ export function organizeTasks(tasks: Task[]): TaskSectionData[] {
   };
 
   for (const task of active) {
-    buckets[computeSection(task)].push(task);
+    // Place task in same section as its root ancestor
+    const root = getRootAncestor(task);
+    const section = task.parentId ? computeSection(root) : computeSection(task);
+    buckets[section].push(task);
   }
 
-  // Sort each bucket by urgency (highest first)
+  // Sort each bucket by urgency (highest first), but keep hierarchy intact
   for (const key of Object.keys(buckets) as Section[]) {
-    buckets[key].sort((a, b) => computeUrgencyScore(b) - computeUrgencyScore(a));
+    // Sort root tasks by urgency, children will be re-ordered by flattenTasksHierarchically
+    buckets[key].sort((a, b) => {
+      const rootA = getRootAncestor(a);
+      const rootB = getRootAncestor(b);
+      if (rootA.id !== rootB.id) {
+        return computeUrgencyScore(rootB) - computeUrgencyScore(rootA);
+      }
+      // Same root: sort by depth then creation time
+      if (a.depth !== b.depth) return a.depth - b.depth;
+      return a.createdAt - b.createdAt;
+    });
   }
 
   return SECTION_META
