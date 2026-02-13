@@ -16,6 +16,7 @@ import { Colors, Spacing, Typography } from '../utils/colors';
 import { formatDeadline, formatCompletedDate, daysFromNow } from '../utils/dateUtils';
 import { getTaskOpacity, formatOverdueGently } from '../utils/decay';
 import { formatMinutes, getElapsedMinutes, isUnreasonableDuration } from '../utils/timeTracking';
+import { recordSwipeAction } from '../utils/swipeMemory';
 
 interface TaskItemProps {
   task: Task;
@@ -206,8 +207,10 @@ export const TaskItem = memo(function TaskItem({
       if (direction === 'left') {
         // Left actions opened = user swiped right
         if (onAddSubtask && !task.isCompleted && task.depth < 3) {
+          recordSwipeAction('subtask');
           onAddSubtask(task);
         } else if (isOverdue && onRevive) {
+          recordSwipeAction('revive');
           onRevive(task.id);
         } else if (isInProgress && onCompleteTimed) {
           // Complete a timed task
@@ -244,13 +247,16 @@ export const TaskItem = memo(function TaskItem({
             onCompleteTimed(task.id);
           }
         } else {
+          recordSwipeAction('complete');
           onComplete(task.id);
         }
       } else {
         // Right actions opened = user swiped left
         if (!task.startedAt && !task.isCompleted && onStart) {
+          recordSwipeAction('start');
           onStart(task.id);
         } else {
+          recordSwipeAction('defer');
           onDefer(task.id);
         }
       }
@@ -278,7 +284,7 @@ export const TaskItem = memo(function TaskItem({
         style={[styles.container, { opacity }]}
         onPress={handlePress}
         onLongPress={handleLongPress}
-        delayLongPress={500}
+        delayLongPress={350}
         android_ripple={{ color: Colors.gray100 }}>
         <Animated.View
           style={[

@@ -20,6 +20,7 @@ import { formatMinutes, parseEstimateInput, getElapsedMinutes } from '../utils/t
 import { isTaskLocked, getChildren, countDescendants } from '../utils/dependencyChains';
 import { Priority, RootStackParamList, EnergyLevel } from '../types';
 import { EnergySelector } from '../components/EnergySelector';
+import { DeadlineSnapper } from '../components/DeadlineSnapper';
 import { LayoutAnimation, UIManager } from 'react-native';
 
 type Props = {
@@ -296,10 +297,17 @@ export function TaskDetailScreen({ navigation, route }: Props) {
 
         {/* Deadline */}
         <Text style={[styles.fieldLabel, { marginTop: Spacing.xxl }]}>DEADLINE</Text>
+        <DeadlineSnapper
+          onSelectDeadline={(ts) => {
+            setDeadline(ts);
+            updateTask(task.id, { deadline: ts });
+          }}
+          currentDeadline={deadline}
+        />
         <View style={styles.deadlineRow}>
           <Pressable style={styles.deadlineButton} onPress={handleOpenDatePicker}>
             <Text style={styles.deadlineValue}>
-              {deadline ? formatDeadline(deadline) : 'No deadline'}
+              {deadline ? formatDeadline(deadline) : 'Pick custom time...'}
             </Text>
           </Pressable>
           {deadline && (

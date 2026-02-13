@@ -45,6 +45,7 @@ interface TaskContextType {
   startTask: (id: string) => void;
   completeTimedTask: (id: string, adjustedMinutes?: number) => void;
   moveTaskToParent: (taskId: string, newParentId: string | null) => void;
+  restoreTasks: (snapshots: Task[]) => void;
 }
 
 const TaskContext = createContext<TaskContextType | undefined>(undefined);
@@ -381,6 +382,27 @@ export function TaskProvider({ children }: { children: React.ReactNode }) {
     });
   }, []);
 
+  // Restore previously deleted/completed tasks from snapshots (for Undo)
+  const restoreTasks = useCallback((snapshots: Task[]) => {
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    setTasks(prev => {
+      const existingIds = new Set(prev.map(t => t.id));
+      const toRestore = snapshots.filter(s => !existingIds.has(s.id));
+      let updated = [...prev, ...toRestore];
+      // Re-attach children to parents
+      for (const restored of toRestore) {
+        if (restored.parentId) {
+          updated = updated.map(t =>
+            t.id === restored.parentId && !t.childIds.includes(restored.id)
+              ? { ...t, childIds: [...t.childIds, restored.id], updatedAt: Date.now() }
+              : t,
+          );
+        }
+      }
+      return updated;
+    });
+  }, []);
+
   const moveTaskToParent = useCallback((taskId: string, newParentId: string | null) => {
     const now = Date.now();
     setTasks(prev => {
@@ -512,6 +534,7 @@ export function TaskProvider({ children }: { children: React.ReactNode }) {
         startTask,
         completeTimedTask,
         moveTaskToParent,
+        restoreTasks,
       }}>
       {children}
     </TaskContext.Provider>

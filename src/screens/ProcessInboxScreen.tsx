@@ -20,6 +20,7 @@ import { useTasks } from '../context/TaskContext';
 import { Colors, Spacing, Typography } from '../utils/colors';
 import { formatDeadline } from '../utils/dateUtils';
 import { Priority, RootStackParamList, EnergyLevel } from '../types';
+import Icon from 'react-native-vector-icons/Ionicons';
 
 type Props = {
   navigation: NativeStackNavigationProp<RootStackParamList, 'ProcessInbox'>;
@@ -251,9 +252,10 @@ export function ProcessInboxScreen({ navigation }: Props) {
           <View style={{ width: 50 }} />
         </View>
         <View style={styles.emptyContainer}>
-          <Text style={styles.emptyTitle}>Inbox is empty</Text>
+          <Icon name="checkmark-done-circle-outline" size={48} color="#22C55E" />
+          <Text style={styles.emptyTitle}>Inbox is clear</Text>
           <Text style={styles.emptySubtitle}>
-            Capture tasks with the + button, then come here to process them.
+            Quick capture new thoughts with the + button.
           </Text>
         </View>
       </View>

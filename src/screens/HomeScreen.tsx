@@ -10,8 +10,10 @@ import {
   Keyboard,
   Modal,
   Alert,
+  RefreshControl,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import Icon from 'react-native-vector-icons/Ionicons';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useTasks } from '../context/TaskContext';
 import { TaskInput } from '../components/TaskInput';
@@ -22,6 +24,12 @@ import { EmptyState } from '../components/EmptyState';
 import { QuickCaptureFAB } from '../components/QuickCaptureFAB';
 import { InboxBadge } from '../components/InboxBadge';
 import { TaskContextMenu } from '../components/TaskContextMenu';
+import { TaskPreviewOverlay } from '../components/TaskPreviewOverlay';
+import { BatchModeBar, BatchCheckbox } from '../components/BatchMode';
+import { ZeroStateOnboarding } from '../components/ZeroStateOnboarding';
+import { FocusMode } from '../components/FocusMode';
+import { TodayLine } from '../components/TodayLine';
+import { useUndo } from '../components/UndoToast';
 import { organizeTasks, searchTasks } from '../utils/taskIntelligence';
 import { isFullyDecayed } from '../utils/decay';
 import { isTaskLocked, countDescendants, flattenTasksHierarchically } from '../utils/dependencyChains';
@@ -34,7 +42,8 @@ type Props = {
 
 export function HomeScreen({ navigation }: Props) {
   const insets = useSafeAreaInsets();
-  const { tasks, addTask, addSubtask, completeTask, deferTask, reviveTask, archiveOverdueTasks, startTask, completeTimedTask, deleteTaskWithCascade, deleteTask: deleteSingleTask, activeEnergyFilter, setActiveEnergyFilter } = useTasks();
+  const { tasks, addTask, addSubtask, completeTask, deferTask, reviveTask, archiveOverdueTasks, startTask, completeTimedTask, deleteTaskWithCascade, deleteTask: deleteSingleTask, activeEnergyFilter, setActiveEnergyFilter, uncompleteTask, restoreTasks } = useTasks();
+  const { showUndo } = useUndo();
   const [isSearching, setIsSearching] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [showArchiveModal, setShowArchiveModal] = useState(false);
@@ -48,6 +57,11 @@ export function HomeScreen({ navigation }: Props) {
   const [showSubtaskInput, setShowSubtaskInput] = useState(false);
   // Child highlight state (for shake feedback)
   const [highlightChildrenOf, setHighlightChildrenOf] = useState<string | null>(null);
+  // Batch mode state (Feature 6)
+  const [isBatchMode, setIsBatchMode] = useState(false);
+  const [selectedTaskIds, setSelectedTaskIds] = useState<Set<string>>(new Set());
+  // Focus mode state (Feature 9)
+  const [isFocusMode, setIsFocusMode] = useState(false);
 
   // ── Lock state map (computed) ─────────────────────────────────────────────
   const lockMap = useMemo(() => {
@@ -110,6 +124,17 @@ export function HomeScreen({ navigation }: Props) {
   
   const activeCount = useMemo(
     () => tasks.filter(t => !t.isCompleted).length,
+    [tasks],
+  );
+
+  // Focus mode: tasks sorted by urgency for the focus view
+  const focusTasks = useMemo(
+    () => tasks.filter(t => !t.isCompleted && t.depth === 0).sort((a, b) => {
+      // Priority sort: overdue first, then by deadline proximity
+      const aScore = a.deadline ? (a.deadline < Date.now() ? 0 : a.deadline) : Infinity;
+      const bScore = b.deadline ? (b.deadline < Date.now() ? 0 : b.deadline) : Infinity;
+      return aScore - bScore;
+    }),
     [tasks],
   );
 
@@ -238,21 +263,27 @@ export function HomeScreen({ navigation }: Props) {
           {
             text: 'Delete',
             style: 'destructive',
-            onPress: () => deleteTaskWithCascade(contextMenuTask.id),
+            onPress: () => {
+              // Capture snapshots before deletion for undo
+              const getDescIds = (id: string): string[] => {
+                const t = tasks.find(x => x.id === id);
+                if (!t) return [];
+                return t.childIds.flatMap(cid => [cid, ...getDescIds(cid)]);
+              };
+              const allIds = [contextMenuTask.id, ...getDescIds(contextMenuTask.id)];
+              const snapshots = tasks.filter(t => allIds.includes(t.id));
+              deleteTaskWithCascade(contextMenuTask.id);
+              showUndo(`"${contextMenuTask.title}" + ${descendantCount} deleted`, () => restoreTasks(snapshots));
+            },
           },
         ],
       );
     } else {
-      Alert.alert('Delete task', 'This cannot be undone.', [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: () => deleteSingleTask(contextMenuTask.id),
-        },
-      ]);
+      const snapshot = { ...contextMenuTask };
+      deleteSingleTask(contextMenuTask.id);
+      showUndo(`"${contextMenuTask.title}" deleted`, () => restoreTasks([snapshot]));
     }
-  }, [contextMenuTask, tasks, deleteTaskWithCascade, deleteSingleTask]);
+  }, [contextMenuTask, tasks, deleteTaskWithCascade, deleteSingleTask, showUndo, restoreTasks]);
 
   const handleSubtaskSubmit = useCallback(
     (text: string, estimatedMinutes?: number) => {
@@ -282,9 +313,13 @@ export function HomeScreen({ navigation }: Props) {
         setTimeout(() => setHighlightChildrenOf(null), 300);
         return;
       }
+      const task = tasks.find(t => t.id === id);
       completeTask(id);
+      if (task) {
+        showUndo(`"${task.title}" completed`, () => uncompleteTask(id));
+      }
     },
-    [completeTask, lockMap],
+    [completeTask, lockMap, tasks, showUndo, uncompleteTask],
   );
 
   // ── Render helpers ───────────────────────────────────────────────────────
@@ -305,29 +340,67 @@ export function HomeScreen({ navigation }: Props) {
         !item.isCompleted;
 
       return (
-        <TaskItem
-          task={item}
-          onPress={handleTaskPress}
-          onComplete={handleCompleteWithLockCheck}
-          onDefer={deferTask}
-          onRevive={handleRevive}
-          onStart={handleStartTask}
-          onCompleteTimed={handleCompleteTimedTask}
-          isLocked={locked}
-          isLastChild={isLastChild}
-          onLongPress={handleLongPress}
-          onAddSubtask={handleAddSubtaskViaSwipe}
-          childHighlight={shouldHighlight}
-        />
+        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+          {isBatchMode && (
+            <BatchCheckbox
+              selected={selectedTaskIds.has(item.id)}
+              onToggle={() => {
+                setSelectedTaskIds(prev => {
+                  const next = new Set(prev);
+                  if (next.has(item.id)) {
+                    next.delete(item.id);
+                  } else {
+                    next.add(item.id);
+                  }
+                  return next;
+                });
+              }}
+            />
+          )}
+          <View style={{ flex: 1 }}>
+            <TaskItem
+              task={item}
+              onPress={isBatchMode ? () => {
+                setSelectedTaskIds(prev => {
+                  const next = new Set(prev);
+                  if (next.has(item.id)) {
+                    next.delete(item.id);
+                  } else {
+                    next.add(item.id);
+                  }
+                  return next;
+                });
+              } : handleTaskPress}
+              onComplete={handleCompleteWithLockCheck}
+              onDefer={deferTask}
+              onRevive={handleRevive}
+              onStart={handleStartTask}
+              onCompleteTimed={handleCompleteTimedTask}
+              isLocked={locked}
+              isLastChild={isLastChild}
+              onLongPress={isBatchMode ? undefined : handleLongPress}
+              onAddSubtask={handleAddSubtaskViaSwipe}
+              childHighlight={shouldHighlight}
+            />
+          </View>
+        </View>
       );
     },
-    [handleTaskPress, handleCompleteWithLockCheck, deferTask, handleRevive, handleStartTask, handleCompleteTimedTask, lockMap, tasks, highlightChildrenOf, handleLongPress, handleAddSubtaskViaSwipe],
+    [handleTaskPress, handleCompleteWithLockCheck, deferTask, handleRevive, handleStartTask, handleCompleteTimedTask, lockMap, tasks, highlightChildrenOf, handleLongPress, handleAddSubtaskViaSwipe, isBatchMode, selectedTaskIds],
   );
 
   const renderSectionHeader = useCallback(
-    ({ section }: { section: { title: string; data: Task[] } }) => (
-      <SectionHeader title={section.title} count={section.data.length} />
-    ),
+    ({ section }: { section: { title: string; data: Task[] } }) => {
+      // Show the distinctive TODAY line before the TODAY section
+      if (section.title === 'TODAY') {
+        return (
+          <View>
+            <TodayLine />
+          </View>
+        );
+      }
+      return <SectionHeader title={section.title} count={section.data.length} />;
+    },
     [],
   );
 
@@ -374,6 +447,16 @@ export function HomeScreen({ navigation }: Props) {
             <Pressable onPress={handleOpenStats} hitSlop={8} style={styles.headerButton}>
               <Text style={styles.headerButtonText}>Stats</Text>
             </Pressable>
+            <Pressable
+              onPress={() => {
+                setIsBatchMode(!isBatchMode);
+                setSelectedTaskIds(new Set());
+              }}
+              hitSlop={8}
+              style={styles.headerButton}
+            >
+              <Icon name={isBatchMode ? 'checkbox' : 'checkbox-outline'} size={18} color={isBatchMode ? Colors.text : Colors.textTertiary} />
+            </Pressable>
           </View>
         </View>
       )}
@@ -391,12 +474,20 @@ export function HomeScreen({ navigation }: Props) {
             getItemLayout={getItemLayout}
             keyboardShouldPersistTaps="handled"
             ListEmptyComponent={
-              <EmptyState title="No tasks found" />
+              <EmptyState
+                title="No tasks found"
+                subtitle="Try different keywords"
+                icon="search-outline"
+              />
             }
             contentContainerStyle={styles.listContent}
           />
         ) : (
-          <EmptyState title="No results" subtitle={`for "${searchQuery}"`} />
+          <EmptyState
+            title="No results"
+            subtitle={`for "${searchQuery}"`}
+            icon="search-outline"
+          />
         )
       ) : (
         <SectionList
@@ -405,6 +496,15 @@ export function HomeScreen({ navigation }: Props) {
           renderSectionHeader={renderSectionHeader}
           keyExtractor={keyExtractor}
           stickySectionHeadersEnabled={false}
+          refreshControl={
+            <RefreshControl
+              refreshing={false}
+              onRefresh={() => setIsFocusMode(true)}
+              tintColor={Colors.black}
+              title="Pull for Focus Mode"
+              titleColor={Colors.gray400}
+            />
+          }
           ListHeaderComponent={
             <EnergyFilter
               activeFilter={activeEnergyFilter}
@@ -413,10 +513,27 @@ export function HomeScreen({ navigation }: Props) {
             />
           }
           ListEmptyComponent={
-            <EmptyState
-              title={activeEnergyFilter === 'all' ? "No tasks yet" : `No ${activeEnergyFilter} energy tasks`}
-              subtitle={activeEnergyFilter === 'all' ? "Type above to add your first task" : "Try adjusting the filter"}
-            />
+            activeCount === 0 && activeEnergyFilter === 'all' ? (
+              <ZeroStateOnboarding
+                onSelectTemplate={(templateTasks) => {
+                  templateTasks.forEach(t => {
+                    addTask(t.title, {
+                      priority: t.priority,
+                      energyLevel: t.energyLevel,
+                      estimatedMinutes: t.estimatedMinutes ?? null,
+                    });
+                  });
+                }}
+                onDismiss={() => {}}
+              />
+            ) : (
+              <EmptyState
+                title={activeEnergyFilter === 'all' ? "No tasks yet" : `No ${activeEnergyFilter} energy tasks`}
+                subtitle={activeEnergyFilter === 'all' ? "Type above to add your first task" : "Create one or switch filter"}
+                icon={activeEnergyFilter === 'all' ? undefined : 'flash-outline'}
+                iconColor={activeEnergyFilter === 'high' ? '#EF4444' : activeEnergyFilter === 'medium' ? '#F59E0B' : '#22C55E'}
+              />
+            )
           }
           keyboardShouldPersistTaps="handled"
           contentContainerStyle={styles.listContent}
@@ -435,7 +552,46 @@ export function HomeScreen({ navigation }: Props) {
       )}
 
       {/* Quick Capture FAB */}
-      {!isSearching && <QuickCaptureFAB />}
+      {!isSearching && !isBatchMode && <QuickCaptureFAB />}
+
+      {/* Batch Mode Bottom Bar (Feature 6) */}
+      {isBatchMode && (
+        <BatchModeBar
+          selectedCount={selectedTaskIds.size}
+          onCompleteAll={() => {
+            const ids = Array.from(selectedTaskIds);
+            ids.forEach(id => completeTask(id));
+            showUndo(`${ids.length} task${ids.length !== 1 ? 's' : ''} completed`, () => {
+              ids.forEach(id => uncompleteTask(id));
+            });
+            setSelectedTaskIds(new Set());
+            setIsBatchMode(false);
+          }}
+          onDeleteAll={() => {
+            const ids = Array.from(selectedTaskIds);
+            const snapshots = tasks.filter(t => ids.includes(t.id));
+            ids.forEach(id => deleteSingleTask(id));
+            showUndo(`${ids.length} task${ids.length !== 1 ? 's' : ''} deleted`, () => {
+              restoreTasks(snapshots);
+            });
+            setSelectedTaskIds(new Set());
+            setIsBatchMode(false);
+          }}
+          onArchiveAll={() => {
+            const ids = Array.from(selectedTaskIds);
+            ids.forEach(id => completeTask(id));
+            showUndo(`${ids.length} task${ids.length !== 1 ? 's' : ''} archived`, () => {
+              ids.forEach(id => uncompleteTask(id));
+            });
+            setSelectedTaskIds(new Set());
+            setIsBatchMode(false);
+          }}
+          onCancel={() => {
+            setIsBatchMode(false);
+            setSelectedTaskIds(new Set());
+          }}
+        />
+      )}
 
       {/* Archive Confirmation Modal */}
       <Modal
@@ -467,13 +623,25 @@ export function HomeScreen({ navigation }: Props) {
         </View>
       </Modal>
 
-      {/* Context Menu */}
-      <TaskContextMenu
+      {/* Long-Press Preview Overlay (Feature 3) */}
+      <TaskPreviewOverlay
         visible={showContextMenu}
+        task={contextMenuTask}
         onClose={handleCloseContextMenu}
-        onAddSubtask={handleContextAddSubtask}
-        onDelete={handleContextDelete}
-        canAddSubtask={contextMenuTask ? contextMenuTask.depth < 3 : false}
+        onEdit={(task) => navigation.navigate('TaskDetail', { taskId: task.id })}
+        onAddSubtask={(task) => {
+          if (task.depth >= 3) {
+            Alert.alert('Max depth', 'Max 3 levels of subtasks');
+            return;
+          }
+          setSubtaskParentId(task.id);
+          setShowSubtaskInput(true);
+        }}
+        onDelete={(task) => {
+          handleCloseContextMenu();
+          setContextMenuTask(task);
+          handleContextDelete();
+        }}
       />
 
       {/* Subtask Input Modal */}
@@ -504,6 +672,14 @@ export function HomeScreen({ navigation }: Props) {
           </View>
         </View>
       </Modal>
+
+      {/* Focus Mode Overlay (Feature 9) */}
+      <FocusMode
+        visible={isFocusMode}
+        tasks={focusTasks}
+        onComplete={(id) => completeTask(id)}
+        onExit={() => setIsFocusMode(false)}
+      />
     </View>
   );
 }

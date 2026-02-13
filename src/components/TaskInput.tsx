@@ -12,6 +12,7 @@ import { parseEstimateInput, formatMinutes } from '../utils/timeTracking';
 import { EstimateSuggestion } from './EstimateSuggestion';
 import { EnergyLevel } from '../types';
 import { EnergySelector } from './EnergySelector';
+import { SmartKeyboardToolbar } from './SmartKeyboardToolbar';
 
 interface TaskInputProps {
   onSubmit: (text: string, estimatedMinutes?: number, energyLevel?: EnergyLevel) => void;
@@ -25,6 +26,7 @@ export const TaskInput = memo(function TaskInput({ onSubmit, placeholder, autoFo
   const [showEstimate, setShowEstimate] = useState(false);
   const [energyLevel, setEnergyLevel] = useState<EnergyLevel>('medium');
   const [hasManuallySetEnergy, setHasManuallySetEnergy] = useState(false);
+  const [activeField, setActiveField] = useState<'title' | 'estimate' | null>(null);
   
   const inputRef = useRef<TextInput>(null);
   const estimateInputRef = useRef<TextInput>(null);
@@ -84,6 +86,8 @@ export const TaskInput = memo(function TaskInput({ onSubmit, placeholder, autoFo
           placeholderTextColor={Colors.gray400}
           value={value}
           onChangeText={handleTitleChange}
+          onFocus={() => setActiveField('title')}
+          onBlur={() => setActiveField(null)}
           onSubmitEditing={() => {
             if (showEstimate && !estimateText) {
               estimateInputRef.current?.focus();
@@ -116,6 +120,8 @@ export const TaskInput = memo(function TaskInput({ onSubmit, placeholder, autoFo
               placeholderTextColor={Colors.gray400}
               value={estimateText}
               onChangeText={setEstimateText}
+              onFocus={() => setActiveField('estimate')}
+              onBlur={() => setActiveField(null)}
               onSubmitEditing={handleSubmit}
               returnKeyType="done"
               blurOnSubmit={false}
@@ -136,6 +142,19 @@ export const TaskInput = memo(function TaskInput({ onSubmit, placeholder, autoFo
       <EstimateSuggestion
         taskTitle={value}
         userEstimateMinutes={parsedEstimate}
+      />
+      {/* Feature 5: Smart Keyboard Toolbar */}
+      <SmartKeyboardToolbar
+        mode={activeField === 'estimate' ? 'estimate' : 'title'}
+        visible={!!activeField && value.trim().length > 0}
+        onInsertPriority={() => {}}
+        onInsertEnergy={(energy) => {
+          setEnergyLevel(energy);
+          setHasManuallySetEnergy(true);
+        }}
+        onAddTime={(minutes) => {
+          setEstimateText(String(minutes));
+        }}
       />
     </View>
   );

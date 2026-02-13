@@ -5,6 +5,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { AuthProvider } from './src/context/AuthContext';
 import { TaskProvider } from './src/context/TaskContext';
 import { InboxProvider } from './src/context/InboxContext';
+import { UndoProvider } from './src/components/UndoToast';
 import { RootNavigator } from './src/navigation/RootNavigator';
 
 function App(): React.JSX.Element {
@@ -15,7 +16,9 @@ function App(): React.JSX.Element {
         <AuthProvider>
           <TaskProvider>
             <InboxProvider>
-              <RootNavigator />
+              <UndoProvider>
+                <RootNavigator />
+              </UndoProvider>
             </InboxProvider>
           </TaskProvider>
         </AuthProvider>

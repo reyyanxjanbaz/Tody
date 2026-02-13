@@ -158,7 +158,9 @@ export function ArchiveScreen({ navigation }: Props) {
           ListEmptyComponent={
             <EmptyState
               title={searchQuery ? 'No results' : 'No archived tasks'}
-              subtitle={searchQuery ? undefined : 'Archived tasks appear here'}
+              subtitle={searchQuery ? undefined : 'Overdue tasks auto-archive after 7 days'}
+              icon={searchQuery ? 'search-outline' : 'archive-outline'}
+              iconColor="#F59E0B"
             />
           }
           contentContainerStyle={styles.listContent}
@@ -167,6 +169,8 @@ export function ArchiveScreen({ navigation }: Props) {
         <EmptyState
           title={searchQuery ? 'No results' : 'No archived tasks'}
           subtitle={searchQuery ? undefined : 'Completed and overdue-archived tasks appear here'}
+          icon={searchQuery ? 'search-outline' : 'archive-outline'}
+          iconColor="#F59E0B"
         />
       )}
 
