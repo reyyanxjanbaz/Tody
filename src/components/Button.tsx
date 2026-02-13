@@ -1,13 +1,30 @@
-import React, { memo } from 'react';
+/**
+ * Button – spring-animated pressable with haptic feedback.
+ *
+ * Press: scale 1 → 0.96 with SPRING_SNAPPY, light haptic
+ * Loading: ActivityIndicator with crossfade
+ * Variants: primary (black fill), secondary (outlined), ghost (transparent)
+ */
+
+import React, { memo, useCallback } from 'react';
 import {
-  Pressable,
   Text,
   StyleSheet,
   ActivityIndicator,
   ViewStyle,
   TextStyle,
 } from 'react-native';
+import Animated, {
+  useSharedValue,
+  useAnimatedStyle,
+  withSpring,
+  withTiming,
+  runOnJS,
+} from 'react-native-reanimated';
+import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { Colors, Spacing } from '../utils/colors';
+import { SPRING_SNAPPY, PRESS_SCALE, TIMING_FADE } from '../utils/animations';
+import { haptic } from '../utils/haptics';
 
 interface ButtonProps {
   title: string;
@@ -29,36 +46,63 @@ export const Button = memo(function Button({
   textStyle,
 }: ButtonProps) {
   const isDisabled = disabled || loading;
+  const scale = useSharedValue(1);
+  const opacity = useSharedValue(1);
+
+  const firePress = useCallback(() => {
+    haptic('light');
+    onPress();
+  }, [onPress]);
+
+  const gesture = Gesture.Tap()
+    .enabled(!isDisabled)
+    .onBegin(() => {
+      'worklet';
+      scale.value = withSpring(PRESS_SCALE, SPRING_SNAPPY);
+      opacity.value = withTiming(0.85, TIMING_FADE);
+    })
+    .onFinalize((_e, success) => {
+      'worklet';
+      scale.value = withSpring(1, SPRING_SNAPPY);
+      opacity.value = withTiming(1, TIMING_FADE);
+      if (success) {
+        runOnJS(firePress)();
+      }
+    });
+
+  const animatedStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: scale.value }],
+    opacity: isDisabled ? 0.4 : opacity.value,
+  }));
 
   return (
-    <Pressable
-      style={({ pressed }) => [
-        styles.base,
-        styles[variant],
-        pressed && !isDisabled && styles.pressed,
-        isDisabled && styles.disabled,
-        style,
-      ]}
-      onPress={onPress}
-      disabled={isDisabled}>
-      {loading ? (
-        <ActivityIndicator
-          color={variant === 'primary' ? Colors.white : Colors.black}
-          size="small"
-        />
-      ) : (
-        <Text
-          style={[
-            styles.text,
-            variant === 'primary' && styles.textPrimary,
-            variant === 'secondary' && styles.textSecondary,
-            variant === 'ghost' && styles.textGhost,
-            textStyle,
-          ]}>
-          {title}
-        </Text>
-      )}
-    </Pressable>
+    <GestureDetector gesture={gesture}>
+      <Animated.View
+        style={[
+          styles.base,
+          styles[variant],
+          animatedStyle,
+          style,
+        ]}>
+        {loading ? (
+          <ActivityIndicator
+            color={variant === 'primary' ? Colors.white : Colors.black}
+            size="small"
+          />
+        ) : (
+          <Text
+            style={[
+              styles.text,
+              variant === 'primary' && styles.textPrimary,
+              variant === 'secondary' && styles.textSecondary,
+              variant === 'ghost' && styles.textGhost,
+              textStyle,
+            ]}>
+            {title}
+          </Text>
+        )}
+      </Animated.View>
+    </GestureDetector>
   );
 });
 
@@ -80,12 +124,6 @@ const styles = StyleSheet.create({
   },
   ghost: {
     backgroundColor: 'transparent',
-  },
-  pressed: {
-    opacity: 0.8,
-  },
-  disabled: {
-    opacity: 0.4,
   },
   text: {
     fontSize: 15,

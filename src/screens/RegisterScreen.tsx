@@ -1,18 +1,27 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import {
   View,
   Text,
   TextInput,
-  Pressable,
   StyleSheet,
   KeyboardAvoidingView,
   Platform,
 } from 'react-native';
+import Animated, {
+  FadeInDown,
+  FadeInUp,
+  useSharedValue,
+  useAnimatedStyle,
+  withSequence,
+  withTiming,
+} from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useAuth } from '../context/AuthContext';
 import { Colors, Spacing, Typography } from '../utils/colors';
 import { Button } from '../components/Button';
+import { AnimatedPressable } from '../components/ui';
+import { haptic } from '../utils/haptics';
 import { RootStackParamList } from '../types';
 
 type Props = {
@@ -27,6 +36,30 @@ export function RegisterScreen({ navigation }: Props) {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [localError, setLocalError] = useState<string | null>(null);
 
+  const displayError = localError || error;
+
+  // ── Error shake ────────────────────────────────────────────────────────
+  const errorShake = useSharedValue(0);
+
+  useEffect(() => {
+    if (displayError) {
+      haptic('error');
+      errorShake.value = withSequence(
+        withTiming(-8, { duration: 50 }),
+        withTiming(8, { duration: 50 }),
+        withTiming(-6, { duration: 50 }),
+        withTiming(6, { duration: 50 }),
+        withTiming(-3, { duration: 50 }),
+        withTiming(0, { duration: 50 }),
+      );
+    }
+  }, [displayError, errorShake]);
+
+  const errorAnimatedStyle = useAnimatedStyle(() => ({
+    transform: [{ translateX: errorShake.value }],
+  }));
+
+  // ── Handlers ───────────────────────────────────────────────────────────
   const handleRegister = useCallback(async () => {
     setLocalError(null);
     if (password !== confirmPassword) {
@@ -42,74 +75,94 @@ export function RegisterScreen({ navigation }: Props) {
     navigation.goBack();
   }, [clearError, navigation]);
 
-  const displayError = localError || error;
-
   return (
     <KeyboardAvoidingView
       style={[styles.container, { paddingTop: insets.top + 60 }]}
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       <View style={styles.content}>
-        {/* Header */}
-        <View style={styles.header}>
+        {/* Header – staggered entry */}
+        <Animated.View
+          entering={FadeInDown.duration(400)}
+          style={styles.header}>
           <Text style={styles.title}>Create{'\n'}Account</Text>
-        </View>
+        </Animated.View>
 
-        {/* Form */}
+        {/* Form – staggered entry */}
         <View style={styles.form}>
           {displayError ? (
-            <View style={styles.errorContainer}>
+            <Animated.View
+              entering={FadeInDown.duration(250)}
+              style={[styles.errorContainer, errorAnimatedStyle]}>
               <Text style={styles.errorText}>{displayError}</Text>
-            </View>
+            </Animated.View>
           ) : null}
 
-          <TextInput
-            style={styles.input}
-            placeholder="Email"
-            placeholderTextColor={Colors.gray500}
-            value={email}
-            onChangeText={setEmail}
-            keyboardType="email-address"
-            autoCapitalize="none"
-            autoCorrect={false}
-            textContentType="emailAddress"
-          />
+          <Animated.View
+            entering={FadeInDown.delay(100).duration(300)}>
+            <TextInput
+              style={styles.input}
+              placeholder="Email"
+              placeholderTextColor={Colors.gray500}
+              value={email}
+              onChangeText={setEmail}
+              keyboardType="email-address"
+              autoCapitalize="none"
+              autoCorrect={false}
+              textContentType="emailAddress"
+            />
+          </Animated.View>
 
-          <TextInput
-            style={styles.input}
-            placeholder="Password"
-            placeholderTextColor={Colors.gray500}
-            value={password}
-            onChangeText={setPassword}
-            secureTextEntry
-            textContentType="newPassword"
-          />
+          <Animated.View
+            entering={FadeInDown.delay(160).duration(300)}>
+            <TextInput
+              style={styles.input}
+              placeholder="Password"
+              placeholderTextColor={Colors.gray500}
+              value={password}
+              onChangeText={setPassword}
+              secureTextEntry
+              textContentType="newPassword"
+            />
+          </Animated.View>
 
-          <TextInput
-            style={styles.input}
-            placeholder="Confirm password"
-            placeholderTextColor={Colors.gray500}
-            value={confirmPassword}
-            onChangeText={setConfirmPassword}
-            secureTextEntry
-            textContentType="newPassword"
-          />
+          <Animated.View
+            entering={FadeInDown.delay(220).duration(300)}>
+            <TextInput
+              style={styles.input}
+              placeholder="Confirm password"
+              placeholderTextColor={Colors.gray500}
+              value={confirmPassword}
+              onChangeText={setConfirmPassword}
+              secureTextEntry
+              textContentType="newPassword"
+            />
+          </Animated.View>
 
-          <Button
-            title={isLoading ? 'Creating account...' : 'Create account'}
-            onPress={handleRegister}
-            loading={isLoading}
-            disabled={isLoading}
-            style={styles.button}
-          />
+          <Animated.View
+            entering={FadeInDown.delay(280).duration(300)}>
+            <Button
+              title={isLoading ? 'Creating account...' : 'Create account'}
+              onPress={handleRegister}
+              loading={isLoading}
+              disabled={isLoading}
+              style={styles.button}
+            />
+          </Animated.View>
         </View>
 
-        {/* Footer link */}
-        <Pressable style={styles.linkContainer} onPress={handleNavigateLogin}>
-          <Text style={styles.linkText}>
-            {'Already have an account? '}
-            <Text style={styles.linkTextBold}>Sign in</Text>
-          </Text>
-        </Pressable>
+        {/* Footer link – slides up */}
+        <Animated.View
+          entering={FadeInUp.delay(380).duration(350)}>
+          <AnimatedPressable
+            style={styles.linkContainer}
+            onPress={handleNavigateLogin}
+            hapticStyle="light">
+            <Text style={styles.linkText}>
+              {'Already have an account? '}
+              <Text style={styles.linkTextBold}>Sign in</Text>
+            </Text>
+          </AnimatedPressable>
+        </Animated.View>
       </View>
     </KeyboardAvoidingView>
   );

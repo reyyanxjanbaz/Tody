@@ -3,16 +3,26 @@ import {
   View,
   TextInput,
   StyleSheet,
-  Pressable,
   Text,
-  LayoutAnimation,
 } from 'react-native';
+import Animated, {
+  FadeInDown,
+  FadeOutUp,
+  LinearTransition,
+  useSharedValue,
+  useAnimatedStyle,
+  withSpring,
+  withTiming,
+} from 'react-native-reanimated';
 import { Colors, Spacing, Typography } from '../utils/colors';
 import { parseEstimateInput, formatMinutes } from '../utils/timeTracking';
 import { EstimateSuggestion } from './EstimateSuggestion';
 import { EnergyLevel } from '../types';
 import { EnergySelector } from './EnergySelector';
 import { SmartKeyboardToolbar } from './SmartKeyboardToolbar';
+import { AnimatedPressable } from './ui';
+import { haptic } from '../utils/haptics';
+import { SPRING_SNAPPY } from '../utils/animations';
 
 interface TaskInputProps {
   onSubmit: (text: string, estimatedMinutes?: number, energyLevel?: EnergyLevel) => void;
@@ -57,7 +67,6 @@ export const TaskInput = memo(function TaskInput({ onSubmit, placeholder, autoFo
     setValue(text);
     if (text.trim().length > 0 && !showEstimate) {
       setShowEstimate(true);
-      LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
     } else if (text.trim().length === 0) {
       setShowEstimate(false);
       setEstimateText('');
@@ -77,7 +86,7 @@ export const TaskInput = memo(function TaskInput({ onSubmit, placeholder, autoFo
   }, []);
 
   return (
-    <View>
+    <Animated.View layout={LinearTransition.duration(250)}>
       <View style={styles.container}>
         <TextInput
           ref={inputRef}
@@ -102,16 +111,20 @@ export const TaskInput = memo(function TaskInput({ onSubmit, placeholder, autoFo
           autoFocus={autoFocus}
         />
         {value.trim().length > 0 && (
-          <Pressable
-            style={styles.addButton}
-            onPress={handleSubmit}
-            hitSlop={8}>
-            <Text style={styles.addButtonText}>+</Text>
-          </Pressable>
+          <AnimatedPressable
+            onPress={() => { haptic('light'); handleSubmit(); }}
+            hapticStyle={null}
+            pressScale={0.9}>
+            <View style={styles.addButton}>
+              <Text style={styles.addButtonText}>+</Text>
+            </View>
+          </AnimatedPressable>
         )}
       </View>
       {showEstimate && (
-        <View>
+        <Animated.View
+          entering={FadeInDown.duration(250)}
+          exiting={FadeOutUp.duration(200)}>
           <View style={styles.estimateRow}>
             <TextInput
               ref={estimateInputRef}
@@ -137,7 +150,7 @@ export const TaskInput = memo(function TaskInput({ onSubmit, placeholder, autoFo
           <View style={styles.energySelectorWrapper}>
             <EnergySelector value={energyLevel} onChange={handleEnergyChange} />
           </View>
-        </View>
+        </Animated.View>
       )}
       <EstimateSuggestion
         taskTitle={value}
@@ -156,7 +169,7 @@ export const TaskInput = memo(function TaskInput({ onSubmit, placeholder, autoFo
           setEstimateText(String(minutes));
         }}
       />
-    </View>
+    </Animated.View>
   );
 });
 
@@ -208,32 +221,46 @@ const styles = StyleSheet.create({
   container: {
     flexDirection: 'row',
     alignItems: 'center',
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: Colors.border,
-    paddingHorizontal: Spacing.lg,
-    backgroundColor: Colors.white,
+    backgroundColor: Colors.surface, // Softer background
+    borderRadius: 12, // Rounded corners
+    marginHorizontal: Spacing.lg,
+    marginVertical: Spacing.sm,
+    paddingHorizontal: Spacing.md,
+    height: 56, // Slightly taller
+    // Shadow for depth
+    shadowColor: "#000",
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.05,
+    shadowRadius: 3.84,
+    elevation: 2,
+    borderWidth: 1,
+    borderColor: Colors.borderLight,
   },
   input: {
     flex: 1,
-    height: 52,
+    height: '100%',
     ...Typography.body,
+    fontSize: 16,
     color: Colors.text,
   },
   addButton: {
-    width: 32,
-    height: 32,
+    width: 36,
+    height: 36,
     justifyContent: 'center',
     alignItems: 'center',
     backgroundColor: Colors.black,
-    borderRadius: 2,
+    borderRadius: 18,
     marginLeft: Spacing.sm,
   },
   addButtonText: {
     color: Colors.white,
-    fontSize: 20,
+    fontSize: 22,
     fontWeight: '300',
-    lineHeight: 22,
-    marginTop: -1,
+    lineHeight: 24,
+    marginTop: -2,
   },
   estimateRow: {
     flexDirection: 'row',

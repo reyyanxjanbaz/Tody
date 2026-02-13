@@ -1,5 +1,6 @@
 import React, { memo } from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import { Text, StyleSheet } from 'react-native';
+import Animated, { FadeIn } from 'react-native-reanimated';
 import { Colors, Spacing, Typography } from '../utils/colors';
 
 interface SectionHeaderProps {
@@ -12,12 +13,14 @@ export const SectionHeader = memo(function SectionHeader({
   count,
 }: SectionHeaderProps) {
   return (
-    <View style={styles.container}>
+    <Animated.View
+      entering={FadeIn.duration(300)}
+      style={styles.container}>
       <Text style={styles.title}>
         {title}
         <Text style={styles.count}>{`  ${count}`}</Text>
       </Text>
-    </View>
+    </Animated.View>
   );
 });
 

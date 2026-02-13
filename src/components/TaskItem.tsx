@@ -1,22 +1,59 @@
-import React, { memo, useCallback, useRef, useMemo, useEffect, useState } from 'react';
+/**
+ * TaskItem – the centrepiece interaction component.
+ *
+ * Technical showcase:
+ * ─ Reanimated 3 shared values + worklets for 60fps swipe/press
+ * ─ Gesture Handler v2 composable gestures (Pan + Tap + LongPress)
+ * ─ Physics-based springs (SPRING_SNAPPY / SPRING_CRITICAL)
+ * ─ Haptic feedback on swipe thresholds and completion
+ * ─ AnimatedCheckbox with morphing + path interpolation
+ * ─ Layout animations via Reanimated entering/exiting
+ *
+ * Gesture semantics:
+ *   Swipe right → START (unstarted) or DEFER (other)
+ *   Swipe left  → DONE / REVIVE / COMPLETE (timed)
+ *   Tap         → Navigate to detail
+ *   Long-press  → Context menu
+ */
+
+import React, { memo, useCallback, useMemo } from 'react';
 import {
   View,
   Text,
-  Pressable,
   StyleSheet,
-  Animated,
-  I18nManager,
   Alert,
-  Platform,
 } from 'react-native';
-import { RectButton } from 'react-native-gesture-handler';
-import Swipeable from 'react-native-gesture-handler/Swipeable';
+import Animated, {
+  useSharedValue,
+  useAnimatedStyle,
+  withSpring,
+  withTiming,
+  runOnJS,
+  interpolate,
+  Extrapolation,
+  FadeIn,
+  FadeOut,
+  LinearTransition,
+} from 'react-native-reanimated';
+import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { Task, Priority } from '../types';
 import { Colors, Spacing, Typography } from '../utils/colors';
 import { formatDeadline, formatCompletedDate, daysFromNow } from '../utils/dateUtils';
 import { getTaskOpacity, formatOverdueGently } from '../utils/decay';
 import { formatMinutes, getElapsedMinutes, isUnreasonableDuration } from '../utils/timeTracking';
 import { recordSwipeAction } from '../utils/swipeMemory';
+import { AnimatedCheckbox } from './ui/AnimatedCheckbox';
+import {
+  SPRING_SNAPPY,
+  SPRING_CRITICAL,
+  TIMING_FADE,
+  SWIPE_THRESHOLD,
+  FLING_VELOCITY,
+  PRESS_SCALE,
+} from '../utils/animations';
+import { haptic } from '../utils/haptics';
+
+// ── Props ───────────────────────────────────────────────────────────────────
 
 interface TaskItemProps {
   task: Task;
@@ -33,12 +70,16 @@ interface TaskItemProps {
   childHighlight?: boolean;
 }
 
+// ── Constants ───────────────────────────────────────────────────────────────
+
 const PRIORITY_COLORS: Record<Priority, string> = {
   high: Colors.black,
   medium: Colors.gray500,
   low: Colors.gray200,
   none: 'transparent',
 };
+
+// ── Component ───────────────────────────────────────────────────────────────
 
 export const TaskItem = memo(function TaskItem({
   task,
@@ -54,44 +95,18 @@ export const TaskItem = memo(function TaskItem({
   onAddSubtask,
   childHighlight = false,
 }: TaskItemProps) {
-  const swipeableRef = useRef<Swipeable>(null);
+  // ── Shared values ─────────────────────────────────────────────────────
+  const translateX = useSharedValue(0);
+  const pressScale = useSharedValue(1);
+  const hasPassedThreshold = useSharedValue(false);
 
-  // Shake animation for locked tasks
-  const shakeAnim = useRef(new Animated.Value(0)).current;
-  // Highlight animation for child pulse
-  const highlightAnim = useRef(new Animated.Value(1)).current;
-
-  // Pulse animation for tasks in progress
-  const pulseAnim = useRef(new Animated.Value(1)).current;
-  const isInProgress = !!task.startedAt && !task.isCompleted;
-
-  useEffect(() => {
-    if (isInProgress) {
-      const pulse = Animated.loop(
-        Animated.sequence([
-          Animated.timing(pulseAnim, {
-            toValue: 0.95,
-            duration: 1000,
-            useNativeDriver: true,
-          }),
-          Animated.timing(pulseAnim, {
-            toValue: 1,
-            duration: 1000,
-            useNativeDriver: true,
-          }),
-        ]),
-      );
-      pulse.start();
-      return () => pulse.stop();
-    } else {
-      pulseAnim.setValue(1);
-    }
-  }, [isInProgress, pulseAnim]);
-
-  // Compute opacity based on overdue decay
+  // ── Computed ──────────────────────────────────────────────────────────
   const opacity = useMemo(() => getTaskOpacity(task), [task]);
   const overdueLabel = useMemo(() => formatOverdueGently(task), [task]);
   const isOverdue = task.deadline ? daysFromNow(task.deadline) < 0 : false;
+  const isInProgress = !!task.startedAt && !task.isCompleted;
+  const indentation = (task.depth || 0) * 16;
+  const hasChildren = task.childIds && task.childIds.length > 0;
 
   const energyStyle = useMemo(() => {
     switch (task.energyLevel) {
@@ -102,300 +117,346 @@ export const TaskItem = memo(function TaskItem({
       case 'low':
         return { fontWeight: '300' as const, fontSize: 14 };
       default:
-        // Default to medium if undefined (migration case)
         return { fontWeight: '400' as const };
     }
   }, [task.energyLevel]);
+
+  // ── JS callbacks (run on JS thread via runOnJS) ───────────────────────
 
   const handlePress = useCallback(() => {
     onPress(task);
   }, [task, onPress]);
 
-  const triggerShake = useCallback(() => {
-    Animated.sequence([
-      Animated.timing(shakeAnim, { toValue: 5, duration: 33, useNativeDriver: true }),
-      Animated.timing(shakeAnim, { toValue: -5, duration: 33, useNativeDriver: true }),
-      Animated.timing(shakeAnim, { toValue: 5, duration: 33, useNativeDriver: true }),
-      Animated.timing(shakeAnim, { toValue: -5, duration: 33, useNativeDriver: true }),
-      Animated.timing(shakeAnim, { toValue: 5, duration: 33, useNativeDriver: true }),
-      Animated.timing(shakeAnim, { toValue: 0, duration: 35, useNativeDriver: true }),
-    ]).start();
-  }, [shakeAnim]);
-
-  // Child highlight pulse effect
-  useEffect(() => {
-    if (childHighlight) {
-      Animated.sequence([
-        Animated.timing(highlightAnim, { toValue: 0.6, duration: 100, useNativeDriver: true }),
-        Animated.timing(highlightAnim, { toValue: 1, duration: 100, useNativeDriver: true }),
-      ]).start();
-    }
-  }, [childHighlight, highlightAnim]);
-
-  const handleCheckboxPress = useCallback(() => {
-    if (isLocked) {
-      triggerShake();
-      return;
-    }
-    onComplete(task.id);
-  }, [task.id, onComplete, isLocked, triggerShake]);
-
-  const handleLongPress = useCallback(() => {
-    if (onLongPress) {
-      onLongPress(task);
-    }
+  const handleLongPressAction = useCallback(() => {
+    haptic('medium');
+    onLongPress?.(task);
   }, [task, onLongPress]);
 
-  const renderRightActions = useCallback(
-    (_progress: Animated.AnimatedInterpolation<number>, dragX: Animated.AnimatedInterpolation<number>) => {
-      const scale = dragX.interpolate({
-        inputRange: [-80, 0],
-        outputRange: [1, 0.5],
-        extrapolate: 'clamp',
-      });
+  const handleSwipeRight = useCallback(() => {
+    if (!task.startedAt && !task.isCompleted && onStart) {
+      recordSwipeAction('start');
+      haptic('medium');
+      onStart(task.id);
+    } else {
+      recordSwipeAction('defer');
+      haptic('medium');
+      onDefer(task.id);
+    }
+  }, [task, onStart, onDefer]);
 
-      const label = isOverdue && onRevive ? 'REVIVE' : isInProgress ? 'COMPLETE' : 'DONE';
+  const handleSwipeLeft = useCallback(() => {
+    if (isOverdue && onRevive) {
+      recordSwipeAction('revive');
+      haptic('success');
+      onRevive(task.id);
+    } else if (isInProgress && onCompleteTimed) {
+      const elapsed = getElapsedMinutes(task.startedAt!);
+      if (isUnreasonableDuration(elapsed)) {
+        haptic('warning');
+        Alert.alert(
+          'Long duration',
+          `This task has been running for ${formatMinutes(elapsed)}. Did you work on it continuously?`,
+          [
+            { text: 'Use actual time', onPress: () => onCompleteTimed(task.id) },
+            {
+              text: 'Adjust',
+              onPress: () => {
+                Alert.prompt(
+                  'Actual time (minutes)',
+                  'How many minutes did you actually work?',
+                  (text) => {
+                    const mins = parseInt(text, 10);
+                    if (!isNaN(mins) && mins > 0) {
+                      onCompleteTimed(task.id, mins);
+                    } else {
+                      onCompleteTimed(task.id);
+                    }
+                  },
+                  'plain-text',
+                  '',
+                  'number-pad',
+                );
+              },
+            },
+          ],
+        );
+      } else {
+        recordSwipeAction('complete');
+        haptic('success');
+        onComplete(task.id);
+      }
+    } else {
+      recordSwipeAction('complete');
+      haptic('success');
+      onComplete(task.id);
+    }
+  }, [task, isOverdue, isInProgress, onRevive, onCompleteTimed, onComplete]);
 
-      return (
-        <View style={styles.swipeRightContainer}>
-          <RectButton style={[styles.swipeActionRight, { backgroundColor: Colors.black }]} onPress={() => { }}>
-            <Animated.Text style={[styles.swipeActionText, { transform: [{ scale }] }]}>
-              {label}
-            </Animated.Text>
-          </RectButton>
-        </View>
-      );
-    },
-    [isOverdue, onRevive, isInProgress, task.isCompleted],
-  );
+  const handleCheckboxToggle = useCallback(() => {
+    if (isLocked) return; // AnimatedCheckbox handles the shake + haptic
+    haptic('success');
+    onComplete(task.id);
+  }, [task.id, onComplete, isLocked]);
 
-  const renderLeftActions = useCallback(
-    (_progress: Animated.AnimatedInterpolation<number>, dragX: Animated.AnimatedInterpolation<number>) => {
-      const scale = dragX.interpolate({
-        inputRange: [0, 80],
-        outputRange: [0.5, 1],
-        extrapolate: 'clamp',
-      });
+  const fireThresholdHaptic = useCallback(() => {
+    haptic('light');
+  }, []);
 
-      // Show START for unstarted tasks, DEFER for others
-      const label = !task.startedAt && !task.isCompleted && onStart ? 'START' : 'DEFER';
+  // ── Gestures ──────────────────────────────────────────────────────────
 
-      return (
-        <RectButton style={[styles.swipeActionLeft, { backgroundColor: Colors.gray800 }]} onPress={() => { }}>
-          <Animated.Text style={[styles.swipeActionText, { transform: [{ scale }] }]}>
-            {label}
-          </Animated.Text>
-        </RectButton>
-      );
-    },
-    [task.startedAt, task.isCompleted, onStart],
-  );
+  const panGesture = Gesture.Pan()
+    .enabled(!task.isCompleted)
+    .activeOffsetX([-15, 15])
+    .failOffsetY([-10, 10])
+    .onUpdate((e) => {
+      'worklet';
+      translateX.value = e.translationX;
 
-  const handleSwipeOpen = useCallback(
-    (direction: 'left' | 'right') => {
-      if (direction === 'left') {
-        // Left actions opened = user swiped right
-        if (!task.startedAt && !task.isCompleted && onStart) {
-          recordSwipeAction('start');
-          onStart(task.id);
+      const crossedRight = e.translationX > SWIPE_THRESHOLD;
+      const crossedLeft = e.translationX < -SWIPE_THRESHOLD;
+      if ((crossedRight || crossedLeft) && !hasPassedThreshold.value) {
+        hasPassedThreshold.value = true;
+        runOnJS(fireThresholdHaptic)();
+      } else if (!crossedRight && !crossedLeft) {
+        hasPassedThreshold.value = false;
+      }
+    })
+    .onEnd((e) => {
+      'worklet';
+      const shouldActivate =
+        Math.abs(e.translationX) > SWIPE_THRESHOLD ||
+        Math.abs(e.velocityX) > FLING_VELOCITY;
+
+      if (shouldActivate) {
+        if (e.translationX > 0) {
+          translateX.value = withSpring(0, SPRING_CRITICAL);
+          runOnJS(handleSwipeRight)();
         } else {
-          recordSwipeAction('defer');
-          onDefer(task.id);
+          translateX.value = withSpring(0, SPRING_CRITICAL);
+          runOnJS(handleSwipeLeft)();
         }
       } else {
-        // Right actions opened = user swiped left
-        if (isOverdue && onRevive) {
-          recordSwipeAction('revive');
-          onRevive(task.id);
-        } else if (isInProgress && onCompleteTimed) {
-          // Complete a timed task
-          const elapsed = getElapsedMinutes(task.startedAt!);
-          if (isUnreasonableDuration(elapsed)) {
-            Alert.alert(
-              'Long duration',
-              `This task has been running for ${formatMinutes(elapsed)}. Did you work on it continuously?`,
-              [
-                { text: 'Use actual time', onPress: () => onCompleteTimed(task.id) },
-                {
-                  text: 'Adjust',
-                  onPress: () => {
-                    Alert.prompt(
-                      'Actual time (minutes)',
-                      'How many minutes did you actually work?',
-                      (text) => {
-                        const mins = parseInt(text, 10);
-                        if (!isNaN(mins) && mins > 0) {
-                          onCompleteTimed(task.id, mins);
-                        } else {
-                          onCompleteTimed(task.id);
-                        }
-                      },
-                      'plain-text',
-                      '',
-                      'number-pad',
-                    );
-                  },
-                },
-              ],
-            );
-          } else {
-            recordSwipeAction('complete');
-            onComplete(task.id);
-          }
-        } else {
-          recordSwipeAction('complete');
-          onComplete(task.id);
-        }
+        translateX.value = withSpring(0, SPRING_SNAPPY);
       }
-      setTimeout(() => swipeableRef.current?.close(), 100);
-    },
-    [task.id, task.startedAt, task.isCompleted, onComplete, onDefer, onRevive, onStart, onCompleteTimed, isOverdue, isInProgress],
+      hasPassedThreshold.value = false;
+    });
+
+  const tapGesture = Gesture.Tap()
+    .onBegin(() => {
+      'worklet';
+      pressScale.value = withSpring(PRESS_SCALE, SPRING_SNAPPY);
+    })
+    .onFinalize((_e, success) => {
+      'worklet';
+      pressScale.value = withSpring(1, SPRING_SNAPPY);
+      if (success) {
+        runOnJS(handlePress)();
+      }
+    });
+
+  const longPressGesture = Gesture.LongPress()
+    .enabled(!!onLongPress)
+    .minDuration(350)
+    .onStart(() => {
+      'worklet';
+      runOnJS(handleLongPressAction)();
+    })
+    .onFinalize(() => {
+      'worklet';
+      pressScale.value = withSpring(1, SPRING_SNAPPY);
+    });
+
+  const composed = Gesture.Simultaneous(
+    panGesture,
+    Gesture.Exclusive(longPressGesture, tapGesture),
   );
 
-  const indentation = (task.depth || 0) * 16;
-  const hasChildren = task.childIds && task.childIds.length > 0;
+  // ── Animated styles ───────────────────────────────────────────────────
+
+  const rowAnimatedStyle = useAnimatedStyle(() => ({
+    transform: [
+      { translateX: translateX.value },
+      { scale: pressScale.value },
+    ],
+  }));
+
+  const leftActionStyle = useAnimatedStyle(() => {
+    const o = interpolate(
+      translateX.value,
+      [0, SWIPE_THRESHOLD],
+      [0, 1],
+      Extrapolation.CLAMP,
+    );
+    const s = interpolate(
+      translateX.value,
+      [0, SWIPE_THRESHOLD],
+      [0.5, 1],
+      Extrapolation.CLAMP,
+    );
+    return { opacity: o, transform: [{ scale: s }] };
+  });
+
+  const rightActionStyle = useAnimatedStyle(() => {
+    const o = interpolate(
+      translateX.value,
+      [-SWIPE_THRESHOLD, 0],
+      [1, 0],
+      Extrapolation.CLAMP,
+    );
+    const s = interpolate(
+      translateX.value,
+      [-SWIPE_THRESHOLD, 0],
+      [1, 0.5],
+      Extrapolation.CLAMP,
+    );
+    return { opacity: o, transform: [{ scale: s }] };
+  });
+
+  // ── Labels ────────────────────────────────────────────────────────────
+  const leftLabel = !task.startedAt && !task.isCompleted && onStart ? 'START' : 'DEFER';
+  const rightLabel = isOverdue && onRevive ? 'REVIVE' : isInProgress ? 'COMPLETE' : 'DONE';
+
+  // ── Render ────────────────────────────────────────────────────────────
 
   return (
-    <Swipeable
-      ref={swipeableRef}
-      renderLeftActions={renderLeftActions}
-      renderRightActions={renderRightActions}
-      onSwipeableOpen={handleSwipeOpen}
-      friction={2}
-      leftThreshold={80}
-      rightThreshold={80}
-      overshootLeft={false}
-      overshootRight={false}
-      enabled={!task.isCompleted}>
-      <Pressable
-        style={[styles.container, { opacity }]}
-        onPress={handlePress}
-        onLongPress={handleLongPress}
-        delayLongPress={350}
-        android_ripple={{ color: Colors.gray100 }}>
-        <Animated.View
-          style={[
-            styles.innerContainer,
-            {
-              opacity: childHighlight ? highlightAnim : isInProgress ? pulseAnim : 1,
-              transform: [{ translateX: shakeAnim }],
-              paddingLeft: indentation,
-            },
-          ]}>
-          {/* Connector lines for subtasks */}
-          {task.depth > 0 && (
+    <Animated.View
+      entering={FadeIn.duration(250)}
+      exiting={FadeOut.duration(200)}
+      layout={LinearTransition.duration(250)}
+      style={[styles.outerContainer, { opacity }]}
+    >
+      {/* Left action background (revealed on swipe right) */}
+      <View style={styles.leftActionBg}>
+        <Animated.Text style={[styles.swipeActionText, leftActionStyle]}>
+          {leftLabel}
+        </Animated.Text>
+      </View>
+
+      {/* Right action background (revealed on swipe left) */}
+      <View style={styles.rightActionBg}>
+        <Animated.Text style={[styles.swipeActionText, rightActionStyle]}>
+          {rightLabel}
+        </Animated.Text>
+      </View>
+
+      {/* Main row */}
+      <GestureDetector gesture={composed}>
+        <Animated.View style={[styles.container, rowAnimatedStyle]}>
+          <View style={[styles.innerContainer, { paddingLeft: indentation }]}>
+            {/* Connector lines for subtasks */}
+            {task.depth > 0 && (
+              <View
+                style={[
+                  styles.connectorVertical,
+                  {
+                    left: indentation - 8,
+                    height: isLastChild ? '50%' : '100%',
+                    top: 0,
+                  },
+                ]}
+              />
+            )}
+            {task.depth > 0 && (
+              <View
+                style={[styles.connectorHorizontal, { left: indentation - 8 }]}
+              />
+            )}
+
+            {/* Priority indicator bar */}
             <View
               style={[
-                styles.connectorVertical,
-                {
-                  left: indentation - 8,
-                  height: isLastChild ? '50%' : '100%',
-                  top: 0,
-                },
+                styles.priorityBar,
+                { backgroundColor: PRIORITY_COLORS[task.priority] },
               ]}
             />
-          )}
-          {task.depth > 0 && (
-            <View
-              style={[
-                styles.connectorHorizontal,
-                { left: indentation - 8 },
-              ]}
-            />
-          )}
 
-          {/* Priority indicator bar */}
-          <View
-            style={[
-              styles.priorityBar,
-              { backgroundColor: PRIORITY_COLORS[task.priority] },
-            ]}
-          />
+            {/* Lock icon */}
+            {isLocked && (
+              <View style={styles.lockIcon}>
+                <Text style={styles.lockIconText}>🔒</Text>
+              </View>
+            )}
 
-          {/* Lock icon for locked parents */}
-          {isLocked && (
-            <View style={styles.lockIcon}>
-              <Text style={styles.lockIconText}>🔒</Text>
+            {/* Animated Checkbox */}
+            <View style={styles.checkboxContainer}>
+              <AnimatedCheckbox
+                checked={task.isCompleted}
+                locked={isLocked}
+                onToggle={handleCheckboxToggle}
+                size={18}
+              />
             </View>
-          )}
 
-          {/* Checkbox */}
-          <Pressable
-            style={[
-              styles.checkbox,
-              task.isCompleted && styles.checkboxCompleted,
-              isLocked && styles.checkboxLocked,
-            ]}
-            onPress={handleCheckboxPress}
-            hitSlop={12}>
-            {task.isCompleted && <View style={styles.checkboxInner} />}
-          </Pressable>
-
-          {/* Content */}
-          <View style={styles.content}>
-            <Text
-              style={[
-                styles.title,
-                energyStyle,
-                task.isCompleted && styles.titleCompleted,
-                hasChildren && styles.titleParent,
-              ]}
-              numberOfLines={1}>
-              {task.title}
-            </Text>
-            {task.description ? (
-              <Text style={styles.description} numberOfLines={1}>
-                {task.description}
+            {/* Content */}
+            <View style={styles.content}>
+              <Text
+                style={[
+                  styles.title,
+                  energyStyle,
+                  task.isCompleted && styles.titleCompleted,
+                  hasChildren && styles.titleParent,
+                ]}
+                numberOfLines={1}
+              >
+                {task.title}
               </Text>
+              {task.description ? (
+                <Text style={styles.description} numberOfLines={1}>
+                  {task.description}
+                </Text>
+              ) : null}
+              {isInProgress && task.startedAt ? (
+                <Text style={styles.timingText}>
+                  ● Started {formatMinutes(getElapsedMinutes(task.startedAt))} ago
+                  {task.estimatedMinutes ? ` · est. ${formatMinutes(task.estimatedMinutes)}` : ''}
+                </Text>
+              ) : task.isCompleted && task.actualMinutes != null && task.actualMinutes > 0 ? (
+                <Text style={styles.timingText}>
+                  Took {formatMinutes(task.actualMinutes)}
+                  {task.estimatedMinutes ? ` · est. ${formatMinutes(task.estimatedMinutes)}` : ''}
+                </Text>
+              ) : task.estimatedMinutes ? (
+                <Text style={styles.timingText}>
+                  est. {formatMinutes(task.estimatedMinutes)}
+                </Text>
+              ) : null}
+            </View>
+
+            {/* Deadline / Status */}
+            {task.isCompleted && task.completedAt ? (
+              <Text style={styles.completedTag}>
+                {formatCompletedDate(task.completedAt)}
+              </Text>
+            ) : isOverdue && overdueLabel ? (
+              <Text style={styles.overdueTagGentle}>{overdueLabel}</Text>
+            ) : task.deadline ? (
+              <Text style={styles.deadlineTag}>{formatDeadline(task.deadline)}</Text>
             ) : null}
-            {/* Timing info */}
-            {isInProgress && task.startedAt ? (
-              <Text style={styles.timingText}>
-                ● Started {formatMinutes(getElapsedMinutes(task.startedAt))} ago
-                {task.estimatedMinutes ? ` · est. ${formatMinutes(task.estimatedMinutes)}` : ''}
-              </Text>
-            ) : task.isCompleted && task.actualMinutes != null && task.actualMinutes > 0 ? (
-              <Text style={styles.timingText}>
-                Took {formatMinutes(task.actualMinutes)}
-                {task.estimatedMinutes ? ` · est. ${formatMinutes(task.estimatedMinutes)}` : ''}
-              </Text>
-            ) : task.estimatedMinutes ? (
-              <Text style={styles.timingText}>
-                est. {formatMinutes(task.estimatedMinutes)}
-              </Text>
+
+            {/* Defer count */}
+            {task.deferCount > 0 && !task.isCompleted ? (
+              <Text style={styles.deferBadge}>{task.deferCount}×</Text>
             ) : null}
           </View>
-
-          {/* Deadline/Status tag */}
-          {task.isCompleted && task.completedAt ? (
-            <Text style={styles.completedTag}>
-              {formatCompletedDate(task.completedAt)}
-            </Text>
-          ) : isOverdue && overdueLabel ? (
-            <Text style={styles.overdueTagGentle}>
-              {overdueLabel}
-            </Text>
-          ) : task.deadline ? (
-            <Text style={styles.deadlineTag}>
-              {formatDeadline(task.deadline)}
-            </Text>
-          ) : null}
-
-          {/* Defer count indicator */}
-          {task.deferCount > 0 && !task.isCompleted ? (
-            <Text style={styles.deferBadge}>{task.deferCount}×</Text>
-          ) : null}
         </Animated.View>
-      </Pressable>
-    </Swipeable>
+      </GestureDetector>
+    </Animated.View>
   );
 });
 
+// ── Styles ──────────────────────────────────────────────────────────────────
+
 const styles = StyleSheet.create({
-  container: {
+  outerContainer: {
+    position: 'relative',
+    overflow: 'hidden',
     backgroundColor: Colors.white,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: Colors.borderLight,
+  },
+  container: {
+    backgroundColor: Colors.white,
+    zIndex: 2,
   },
   innerContainer: {
     flexDirection: 'row',
@@ -405,31 +466,36 @@ const styles = StyleSheet.create({
     paddingLeft: 0,
     minHeight: 52,
   },
+  leftActionBg: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: Colors.gray800,
+    justifyContent: 'center',
+    alignItems: 'flex-start',
+    paddingLeft: 24,
+    zIndex: 1,
+  },
+  rightActionBg: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: Colors.black,
+    justifyContent: 'center',
+    alignItems: 'flex-end',
+    paddingRight: 24,
+    zIndex: 1,
+  },
+  swipeActionText: {
+    color: Colors.white,
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 1.5,
+  },
   priorityBar: {
     width: 3,
     alignSelf: 'stretch',
     marginRight: Spacing.md,
     borderRadius: 0,
   },
-  checkbox: {
-    width: 18,
-    height: 18,
-    borderWidth: 1.5,
-    borderColor: Colors.gray400,
-    borderRadius: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
+  checkboxContainer: {
     marginRight: Spacing.md,
-  },
-  checkboxCompleted: {
-    borderColor: Colors.black,
-    backgroundColor: Colors.black,
-  },
-  checkboxInner: {
-    width: 8,
-    height: 8,
-    backgroundColor: Colors.white,
-    borderRadius: 0,
   },
   content: {
     flex: 1,
@@ -442,6 +508,9 @@ const styles = StyleSheet.create({
   titleCompleted: {
     textDecorationLine: 'line-through',
     color: Colors.gray500,
+  },
+  titleParent: {
+    fontWeight: '500',
   },
   description: {
     ...Typography.caption,
@@ -470,37 +539,6 @@ const styles = StyleSheet.create({
     color: Colors.gray400,
     marginLeft: Spacing.xs,
   },
-  swipeActionLeft: {
-    backgroundColor: Colors.black,
-    justifyContent: 'center',
-    alignItems: 'flex-end',
-    paddingHorizontal: Spacing.xxl,
-    width: 100,
-  },
-  swipeActionSubtask: {
-    backgroundColor: Colors.gray600,
-    justifyContent: 'center',
-    alignItems: 'flex-end',
-    paddingHorizontal: Spacing.xxl,
-    width: 100,
-  },
-  swipeActionRight: {
-    backgroundColor: Colors.gray800,
-    justifyContent: 'center',
-    alignItems: 'flex-start',
-    paddingHorizontal: Spacing.xxl,
-    width: 100,
-  },
-  swipeRightContainer: {
-    flexDirection: 'row',
-  },
-  swipeActionText: {
-    color: Colors.white,
-    fontSize: 11,
-    fontWeight: '700',
-    letterSpacing: 1.5,
-  },
-  // Dependency chains styles
   connectorVertical: {
     position: 'absolute',
     width: 1,
@@ -523,11 +561,5 @@ const styles = StyleSheet.create({
   lockIconText: {
     fontSize: 10,
     lineHeight: 12,
-  },
-  checkboxLocked: {
-    borderColor: Colors.gray200,
-  },
-  titleParent: {
-    fontWeight: '500',
   },
 });

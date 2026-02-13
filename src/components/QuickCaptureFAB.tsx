@@ -1,4 +1,4 @@
-import React, { memo, useState, useCallback, useRef, useEffect } from 'react';
+import React, { memo, useState, useCallback, useRef } from 'react';
 import {
   View,
   TextInput,
@@ -6,12 +6,24 @@ import {
   Text,
   Modal,
   StyleSheet,
-  Animated,
   Keyboard,
 } from 'react-native';
+import Animated, {
+  useSharedValue,
+  useAnimatedStyle,
+  withSpring,
+  withSequence,
+  withTiming,
+  runOnJS,
+  FadeIn,
+  FadeOut,
+} from 'react-native-reanimated';
+import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useInbox } from '../context/InboxContext';
 import { Colors, Spacing } from '../utils/colors';
+import { haptic } from '../utils/haptics';
+import { SPRING_SNAPPY, PRESS_SCALE } from '../utils/animations';
 
 export const QuickCaptureFAB = memo(function QuickCaptureFAB() {
   const insets = useSafeAreaInsets();
@@ -19,41 +31,64 @@ export const QuickCaptureFAB = memo(function QuickCaptureFAB() {
   const [visible, setVisible] = useState(false);
   const [value, setValue] = useState('');
   const inputRef = useRef<TextInput>(null);
-  const fadeAnim = useRef(new Animated.Value(0)).current;
-  const shakeAnim = useRef(new Animated.Value(0)).current;
 
-  const openModal = useCallback(() => {
-    setVisible(true);
-    Animated.timing(fadeAnim, {
-      toValue: 1,
-      duration: 120,
-      useNativeDriver: true,
-    }).start(() => {
-      inputRef.current?.focus();
+  // ── FAB spring animation ──────────────────────────────────────────────
+  const fabScale = useSharedValue(1);
+  const fabRotation = useSharedValue(0);
+
+  const fabTap = Gesture.Tap()
+    .onBegin(() => {
+      'worklet';
+      fabScale.value = withSpring(PRESS_SCALE, SPRING_SNAPPY);
+    })
+    .onFinalize((_e, success) => {
+      'worklet';
+      fabScale.value = withSpring(1, SPRING_SNAPPY);
+      if (success) {
+        fabRotation.value = withSpring(0.125, SPRING_SNAPPY, () => {
+          fabRotation.value = withSpring(0, SPRING_SNAPPY);
+        });
+        runOnJS(openModal)();
+      }
     });
-  }, [fadeAnim]);
+
+  const fabStyle = useAnimatedStyle(() => ({
+    transform: [
+      { scale: fabScale.value },
+      { rotate: `${fabRotation.value * 360}deg` },
+    ],
+  }));
+
+  // ── Modal shake for empty input ───────────────────────────────────────
+  const shakeX = useSharedValue(0);
+
+  const shakeInputStyle = useAnimatedStyle(() => ({
+    transform: [{ translateX: shakeX.value }],
+  }));
+
+  const shakeInput = useCallback(() => {
+    haptic('warning');
+    shakeX.value = withSequence(
+      withTiming(10, { duration: 50 }),
+      withTiming(-10, { duration: 50 }),
+      withTiming(6, { duration: 50 }),
+      withTiming(-6, { duration: 50 }),
+      withTiming(0, { duration: 50 }),
+    );
+  }, [shakeX]);
+
+  // ── Handlers ──────────────────────────────────────────────────────────
+  function openModal() {
+    haptic('light');
+    setVisible(true);
+    setTimeout(() => inputRef.current?.focus(), 100);
+  }
 
   const closeModal = useCallback(() => {
     Keyboard.dismiss();
-    Animated.timing(fadeAnim, {
-      toValue: 0,
-      duration: 120,
-      useNativeDriver: true,
-    }).start(() => {
-      setVisible(false);
-      setValue('');
-    });
-  }, [fadeAnim]);
-
-  const shakeInput = useCallback(() => {
-    Animated.sequence([
-      Animated.timing(shakeAnim, { toValue: 10, duration: 50, useNativeDriver: true }),
-      Animated.timing(shakeAnim, { toValue: -10, duration: 50, useNativeDriver: true }),
-      Animated.timing(shakeAnim, { toValue: 6, duration: 50, useNativeDriver: true }),
-      Animated.timing(shakeAnim, { toValue: -6, duration: 50, useNativeDriver: true }),
-      Animated.timing(shakeAnim, { toValue: 0, duration: 50, useNativeDriver: true }),
-    ]).start();
-  }, [shakeAnim]);
+    setVisible(false);
+    setValue('');
+  }, []);
 
   const handleSubmit = useCallback(() => {
     const trimmed = value.trim();
@@ -61,22 +96,24 @@ export const QuickCaptureFAB = memo(function QuickCaptureFAB() {
       shakeInput();
       return;
     }
+    haptic('success');
     captureTask(trimmed);
     closeModal();
   }, [value, captureTask, closeModal, shakeInput]);
 
   return (
     <>
-      {/* FAB */}
-      <Pressable
-        style={[
-          styles.fab,
-          { bottom: insets.bottom + 24, right: 24 },
-        ]}
-        onPress={openModal}
-        hitSlop={8}>
-        <Text style={styles.fabIcon}>+</Text>
-      </Pressable>
+      {/* FAB – spring-animated tap */}
+      <GestureDetector gesture={fabTap}>
+        <Animated.View
+          style={[
+            styles.fab,
+            { bottom: insets.bottom + 24, right: 24 },
+            fabStyle,
+          ]}>
+          <Text style={styles.fabIcon}>+</Text>
+        </Animated.View>
+      </GestureDetector>
 
       {/* Capture Modal */}
       <Modal
@@ -84,36 +121,46 @@ export const QuickCaptureFAB = memo(function QuickCaptureFAB() {
         transparent
         animationType="none"
         onRequestClose={closeModal}>
-        <Animated.View style={[styles.overlay, { opacity: fadeAnim }]}>
+        <Animated.View
+          entering={FadeIn.duration(120)}
+          exiting={FadeOut.duration(100)}
+          style={styles.overlay}>
           <Pressable style={styles.overlayTouch} onPress={closeModal} />
           <Animated.View
+            entering={FadeIn.duration(150)}
             style={[
               styles.modalContent,
-              {
-                opacity: fadeAnim,
-                transform: [{ translateX: shakeAnim }],
-                paddingBottom: insets.bottom + Spacing.lg,
-              },
+              { paddingBottom: insets.bottom + Spacing.lg },
             ]}>
-            <TextInput
-              ref={inputRef}
-              style={styles.input}
-              placeholder="What's on your mind?"
-              placeholderTextColor={Colors.gray400}
-              value={value}
-              onChangeText={setValue}
-              onSubmitEditing={handleSubmit}
-              returnKeyType="done"
-              autoCorrect={false}
-              autoCapitalize="sentences"
-              multiline={false}
-            />
+            <Animated.View style={shakeInputStyle}>
+              <TextInput
+                ref={inputRef}
+                style={styles.input}
+                placeholder="What's on your mind?"
+                placeholderTextColor={Colors.gray400}
+                value={value}
+                onChangeText={setValue}
+                onSubmitEditing={handleSubmit}
+                returnKeyType="done"
+                autoCorrect={false}
+                autoCapitalize="sentences"
+                multiline={false}
+              />
+            </Animated.View>
             <View style={styles.modalActions}>
-              <Pressable onPress={closeModal} hitSlop={8} style={styles.modalButton}>
+              <Pressable
+                onPress={closeModal}
+                hitSlop={8}
+                style={styles.modalButton}>
                 <Text style={styles.modalButtonText}>Cancel</Text>
               </Pressable>
-              <Pressable onPress={handleSubmit} hitSlop={8} style={styles.modalButton}>
-                <Text style={[styles.modalButtonText, styles.modalSubmitText]}>Capture</Text>
+              <Pressable
+                onPress={handleSubmit}
+                hitSlop={8}
+                style={styles.modalButton}>
+                <Text style={[styles.modalButtonText, styles.modalSubmitText]}>
+                  Capture
+                </Text>
               </Pressable>
             </View>
           </Animated.View>

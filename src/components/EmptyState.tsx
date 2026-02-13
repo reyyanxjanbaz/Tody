@@ -1,7 +1,9 @@
 import React, { memo } from 'react';
-import { View, Text, Pressable, StyleSheet } from 'react-native';
+import { View, Text, StyleSheet } from 'react-native';
+import Animated, { FadeIn, FadeInDown } from 'react-native-reanimated';
 import Icon from 'react-native-vector-icons/Ionicons';
 import { Colors, Spacing, Typography } from '../utils/colors';
+import { AnimatedPressable } from './ui';
 
 interface EmptyStateProps {
   title: string;
@@ -28,20 +30,39 @@ export const EmptyState = memo(function EmptyState({
   onAction,
 }: EmptyStateProps) {
   return (
-    <View style={styles.container}>
+    <Animated.View
+      entering={FadeIn.duration(350)}
+      style={styles.container}>
       {icon && (
-        <View style={styles.iconContainer}>
+        <Animated.View
+          entering={FadeInDown.delay(80).duration(300)}
+          style={styles.iconContainer}>
           <Icon name={icon} size={48} color={iconColor || Colors.gray400} />
-        </View>
+        </Animated.View>
       )}
-      <Text style={styles.title}>{title}</Text>
-      {subtitle ? <Text style={styles.subtitle}>{subtitle}</Text> : null}
-      {actionLabel && onAction ? (
-        <Pressable style={styles.actionButton} onPress={onAction}>
-          <Text style={styles.actionText}>{actionLabel}</Text>
-        </Pressable>
+      <Animated.Text
+        entering={FadeInDown.delay(140).duration(300)}
+        style={styles.title}>
+        {title}
+      </Animated.Text>
+      {subtitle ? (
+        <Animated.Text
+          entering={FadeInDown.delay(200).duration(300)}
+          style={styles.subtitle}>
+          {subtitle}
+        </Animated.Text>
       ) : null}
-    </View>
+      {actionLabel && onAction ? (
+        <Animated.View
+          entering={FadeInDown.delay(260).duration(300)}>
+          <AnimatedPressable onPress={onAction} hapticStyle="light">
+            <View style={styles.actionButton}>
+              <Text style={styles.actionText}>{actionLabel}</Text>
+            </View>
+          </AnimatedPressable>
+        </Animated.View>
+      ) : null}
+    </Animated.View>
   );
 });
 

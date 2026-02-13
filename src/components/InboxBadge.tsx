@@ -1,6 +1,7 @@
 import React, { memo } from 'react';
 import { View, Text, Pressable, StyleSheet } from 'react-native';
-import { Colors } from '../utils/colors';
+import Icon from 'react-native-vector-icons/Ionicons';
+import { Colors, Spacing, Typography } from '../utils/colors';
 import { useInbox } from '../context/InboxContext';
 
 interface InboxBadgeProps {
@@ -14,40 +15,56 @@ export const InboxBadge = memo(function InboxBadge({ onPress }: InboxBadgeProps)
 
   return (
     <Pressable onPress={onPress} hitSlop={8} style={styles.container}>
-      <Text style={styles.label}>Inbox</Text>
-      <View style={styles.badge}>
-        <Text style={styles.badgeText}>
-          {inboxCount > 99 ? '99+' : inboxCount}
-        </Text>
+      <View style={styles.iconContainer}>
+        <Icon name="document-text-outline" size={24} color={Colors.textTertiary} />
+        {inboxCount > 0 && (
+          <View style={styles.badge}>
+            <Text style={styles.badgeText}>
+              {inboxCount > 99 ? '99+' : inboxCount}
+            </Text>
+          </View>
+        )}
       </View>
+      <Text style={styles.label}>Memos</Text>
     </Pressable>
   );
 });
 
 const styles = StyleSheet.create({
   container: {
-    flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 4,
-    gap: 6,
+    paddingVertical: Spacing.xs,
+    gap: 2,
+  },
+  iconContainer: {
+    position: 'relative',
+    height: 20,
+    width: 26,
+    alignItems: 'center',
   },
   label: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: Colors.textSecondary,
+    ...Typography.small,
+    fontWeight: '600',
+    color: Colors.textTertiary,
   },
   badge: {
-    width: 20,
-    height: 20,
-    borderRadius: 10,
-    backgroundColor: Colors.black,
+    position: 'absolute',
+    top: -5,
+    right: -4,
+    minWidth: 16,
+    height: 16,
+    borderRadius: 8,
+    backgroundColor: Colors.text,
     justifyContent: 'center',
     alignItems: 'center',
+    paddingHorizontal: 3,
+    borderWidth: 1.5,
+    borderColor: Colors.background,
   },
   badgeText: {
     color: Colors.white,
-    fontSize: 12,
-    fontWeight: '500',
-    lineHeight: 14,
+    fontSize: 9,
+    fontWeight: '700',
+    lineHeight: 12,
   },
 });

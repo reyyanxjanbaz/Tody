@@ -1,6 +1,7 @@
-import React from 'react';
+import React, { memo } from 'react';
 import { View, Text, Pressable, StyleSheet } from 'react-native';
-import { Colors, Spacing } from '../utils/colors';
+import Animated, { Layout, LinearTransition, ZoomIn } from 'react-native-reanimated';
+import { Colors, Spacing, Typography } from '../utils/colors';
 import { EnergyLevel } from '../types';
 
 interface EnergyFilterProps {
@@ -9,84 +10,94 @@ interface EnergyFilterProps {
   taskCount: number;
 }
 
-export function EnergyFilter({ activeFilter, onFilterChange, taskCount }: EnergyFilterProps) {
-  const filters: (EnergyLevel | 'all')[] = ['all', 'high', 'medium', 'low'];
-  
-  const getLabel = (f: EnergyLevel | 'all') => {
-    switch (f) {
-      case 'all': return 'All';
-      case 'high': return 'High';
-      case 'medium': return 'Medium';
-      case 'low': return 'Low';
-    }
-  };
+const FILTERS = [
+  { key: 'all' as const, label: 'Overview' },
+  { key: 'high' as const, label: 'Priority' },
+  { key: 'medium' as const, label: 'Standard' },
+  { key: 'low' as const, label: 'Backlog' },
+];
 
+export const EnergyFilter = memo(function EnergyFilter({
+  activeFilter,
+  onFilterChange,
+  taskCount,
+}: EnergyFilterProps) {
   return (
     <View style={styles.container}>
-      <View style={styles.row}>
-        {filters.map((filter, index) => {
-          const isActive = activeFilter === filter;
+      <View style={styles.tabsContainer}>
+        {FILTERS.map((filter) => {
+          const isActive = activeFilter === filter.key;
           return (
             <Pressable
-              key={filter}
-              style={[
-                styles.button, 
-                isActive && styles.buttonActive,
-                index < filters.length - 1 && { marginRight: 8 }
-              ]}
-              onPress={() => onFilterChange(filter)}
+              key={filter.key}
+              onPress={() => onFilterChange(filter.key)}
+              style={styles.tab}
+              hitSlop={8}
             >
-              <Text style={[styles.text, isActive && styles.textActive]}>
-                {getLabel(filter)}
-              </Text>
+              <View style={styles.tabContent}>
+                <Text style={[styles.tabLabel, isActive && styles.tabLabelActive]}>
+                  {filter.label}
+                </Text>
+                {isActive && (
+                  <Animated.View
+                    layout={LinearTransition.springify().damping(20).stiffness(300)}
+                    entering={ZoomIn.duration(200)}
+                    style={styles.activeIndicator}
+                  />
+                )}
+              </View>
             </Pressable>
           );
         })}
       </View>
-      <Text style={styles.count}>
-        {taskCount} {taskCount === 1 ? 'task' : 'tasks'}
-      </Text>
+      <View style={styles.countContainer}>
+        {/* Count moved here or hidden if cleaner */}
+      </View>
     </View>
   );
-}
+});
 
 const styles = StyleSheet.create({
   container: {
-    paddingVertical: Spacing.md,
-    alignItems: 'center',
-    backgroundColor: Colors.white,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: Colors.gray200,
+    backgroundColor: Colors.background,
+    paddingTop: Spacing.sm,
+    // paddingBottom: Spacing.xs, // Reduced padding
   },
-  row: {
+  tabsContainer: {
     flexDirection: 'row',
+    paddingHorizontal: Spacing.lg,
+    gap: Spacing.xl, // Wider gap for tab feel
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.gray100,
   },
-  button: {
-    width: 60,
-    height: 32,
-    justifyContent: 'center',
+  tab: {
+    paddingBottom: Spacing.md,
+  },
+  tabContent: {
     alignItems: 'center',
-    backgroundColor: Colors.white,
-    borderWidth: 1,
-    borderColor: Colors.black,
-    borderRadius: 0,
+    justifyContent: 'center',
+    // position: 'relative',
   },
-  buttonActive: {
+  tabLabel: {
+    fontSize: 16,
+    fontWeight: '500',
+    color: Colors.gray400,
+    letterSpacing: -0.3,
+  },
+  tabLabelActive: {
+    color: Colors.text,
+    fontWeight: '700',
+  },
+  activeIndicator: {
+    position: 'absolute',
+    bottom: -Spacing.md - 2, // Align with parent padding bottom
+    left: 0,
+    right: 0,
+    height: 3,
     backgroundColor: Colors.black,
-    borderWidth: 0,
+    borderRadius: 1.5,
   },
-  text: {
-    fontSize: 12,
-    color: Colors.black,
-    fontWeight: '400',
+  countContainer: {
+    height: 1, // Minimize
   },
-  textActive: {
-    color: Colors.white,
-    fontWeight: '600',
-  },
-  count: {
-    marginTop: Spacing.sm,
-    fontSize: 11,
-    color: Colors.gray500,
-  }
 });

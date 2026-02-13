@@ -1,19 +1,28 @@
-import React, { memo, useState, useCallback, useRef, useEffect } from 'react';
-import {
-  View,
-  Text,
-  Pressable,
-  StyleSheet,
-  Animated,
-  Dimensions,
-  PanResponder,
-} from 'react-native';
+import React, { memo, useState, useCallback, useEffect } from 'react';
+import { View, Text, StyleSheet, Dimensions } from 'react-native';
+import Animated, {
+  useSharedValue,
+  useAnimatedStyle,
+  withTiming,
+  withSpring,
+  withSequence,
+  FadeIn,
+  FadeInDown,
+  FadeOut,
+  SlideInRight,
+  SlideOutLeft,
+  SlideInLeft,
+  SlideOutRight,
+} from 'react-native-reanimated';
 import Icon from 'react-native-vector-icons/Ionicons';
 import { Task, Priority } from '../types';
 import { Colors, Spacing, Typography } from '../utils/colors';
 import { formatDeadline } from '../utils/dateUtils';
+import { AnimatedPressable } from './ui';
+import { haptic } from '../utils/haptics';
+import { SPRING_SNAPPY } from '../utils/animations';
 
-const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
+const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 interface FocusModeProps {
   visible: boolean;
@@ -30,11 +39,10 @@ const PRIORITY_COLORS: Record<Priority, string> = {
 };
 
 /**
- * Feature 9: Pull-to-Focus Mode
- * 
- * Full-screen view of next 3 tasks, one at a time, swipe to advance.
- * Black text on white background, maximum whitespace, only essential info.
- * 200ms fade transition, 48pt time at top.
+ * Feature 9: Pull-to-Focus Mode (Reanimated 3)
+ *
+ * Full-screen view of next 3 tasks, one at a time.
+ * Spring-based slide transitions, haptic on complete.
  */
 export const FocusMode = memo(function FocusMode({
   visible,
@@ -43,134 +51,119 @@ export const FocusMode = memo(function FocusMode({
   onExit,
 }: FocusModeProps) {
   const [currentIndex, setCurrentIndex] = useState(0);
-  const fadeAnim = useRef(new Animated.Value(0)).current;
-  const slideAnim = useRef(new Animated.Value(0)).current;
+  // Direction: 'next' | 'prev' for card transition
+  const [direction, setDirection] = useState<'next' | 'prev'>('next');
+  // Key to force re-mount of card for entering/exiting animations
+  const [cardKey, setCardKey] = useState(0);
 
   const focusTasks = tasks.slice(0, 3);
   const currentTask = focusTasks[currentIndex];
 
+  // Animated dot width for active indicator
+  const activeDot = useSharedValue(currentIndex);
+  useEffect(() => {
+    activeDot.value = withSpring(currentIndex, SPRING_SNAPPY);
+  }, [currentIndex, activeDot]);
+
   // Reset index when tasks change
   useEffect(() => {
     setCurrentIndex(0);
+    setCardKey(k => k + 1);
   }, [tasks.length]);
 
-  // Fade in/out
-  useEffect(() => {
-    Animated.timing(fadeAnim, {
-      toValue: visible ? 1 : 0,
-      duration: 200,
-      useNativeDriver: true,
-    }).start();
-  }, [visible, fadeAnim]);
+  const advanceCard = useCallback(
+    (dir: 'next' | 'prev', nextIndex: number) => {
+      setDirection(dir);
+      setCardKey(k => k + 1);
+      setCurrentIndex(nextIndex);
+    },
+    [],
+  );
 
   const handleComplete = useCallback(() => {
     if (!currentTask) return;
+    haptic('success');
     onComplete(currentTask.id);
-    // Auto-advance
     if (currentIndex < focusTasks.length - 1) {
-      // Slide animation
-      Animated.sequence([
-        Animated.timing(slideAnim, {
-          toValue: -SCREEN_WIDTH,
-          duration: 200,
-          useNativeDriver: true,
-        }),
-        Animated.timing(slideAnim, {
-          toValue: SCREEN_WIDTH,
-          duration: 0,
-          useNativeDriver: true,
-        }),
-        Animated.timing(slideAnim, {
-          toValue: 0,
-          duration: 200,
-          useNativeDriver: true,
-        }),
-      ]).start();
-      setCurrentIndex(prev => prev + 1);
+      advanceCard('next', currentIndex + 1);
     } else {
-      // All done
       onExit();
     }
-  }, [currentTask, currentIndex, focusTasks.length, onComplete, onExit, slideAnim]);
+  }, [currentTask, currentIndex, focusTasks.length, onComplete, onExit, advanceCard]);
 
   const handleNext = useCallback(() => {
     if (currentIndex < focusTasks.length - 1) {
-      Animated.sequence([
-        Animated.timing(slideAnim, {
-          toValue: -SCREEN_WIDTH,
-          duration: 200,
-          useNativeDriver: true,
-        }),
-        Animated.timing(slideAnim, {
-          toValue: SCREEN_WIDTH,
-          duration: 0,
-          useNativeDriver: true,
-        }),
-        Animated.timing(slideAnim, {
-          toValue: 0,
-          duration: 200,
-          useNativeDriver: true,
-        }),
-      ]).start();
-      setCurrentIndex(prev => prev + 1);
+      haptic('light');
+      advanceCard('next', currentIndex + 1);
     }
-  }, [currentIndex, focusTasks.length, slideAnim]);
+  }, [currentIndex, focusTasks.length, advanceCard]);
 
   const handlePrev = useCallback(() => {
     if (currentIndex > 0) {
-      Animated.sequence([
-        Animated.timing(slideAnim, {
-          toValue: SCREEN_WIDTH,
-          duration: 200,
-          useNativeDriver: true,
-        }),
-        Animated.timing(slideAnim, {
-          toValue: -SCREEN_WIDTH,
-          duration: 0,
-          useNativeDriver: true,
-        }),
-        Animated.timing(slideAnim, {
-          toValue: 0,
-          duration: 200,
-          useNativeDriver: true,
-        }),
-      ]).start();
-      setCurrentIndex(prev => prev - 1);
+      haptic('light');
+      advanceCard('prev', currentIndex - 1);
     }
-  }, [currentIndex, slideAnim]);
+  }, [currentIndex, advanceCard]);
 
   if (!visible) return null;
 
   // Format current time
   const now = new Date();
-  const timeString = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  const timeString = now.toLocaleTimeString([], {
+    hour: '2-digit',
+    minute: '2-digit',
+  });
 
   if (focusTasks.length === 0) {
     return (
-      <Animated.View style={[styles.container, { opacity: fadeAnim }]}>
-        <View style={styles.emptyFocusContainer}>
+      <Animated.View
+        entering={FadeIn.duration(250)}
+        exiting={FadeOut.duration(200)}
+        style={styles.container}>
+        <Animated.View
+          entering={FadeInDown.delay(100).duration(300)}
+          style={styles.emptyFocusContainer}>
           <Icon name="checkmark-done-circle" size={64} color="#22C55E" />
           <Text style={styles.emptyTitle}>All clear!</Text>
-          <Text style={styles.emptySubtitle}>No tasks need your attention right now.</Text>
-          <Pressable style={styles.exitButton} onPress={onExit}>
-            <Text style={styles.exitText}>Back to list</Text>
-          </Pressable>
-        </View>
+          <Text style={styles.emptySubtitle}>
+            No tasks need your attention right now.
+          </Text>
+          <AnimatedPressable onPress={onExit} hapticStyle="light">
+            <View style={styles.exitButton}>
+              <Text style={styles.exitText}>Back to list</Text>
+            </View>
+          </AnimatedPressable>
+        </Animated.View>
       </Animated.View>
     );
   }
 
+  // Choose entering/exiting based on direction
+  const entering =
+    direction === 'next'
+      ? SlideInRight.duration(300)
+      : SlideInLeft.duration(300);
+  const exiting =
+    direction === 'next'
+      ? SlideOutLeft.duration(250)
+      : SlideOutRight.duration(250);
+
   return (
-    <Animated.View style={[styles.container, { opacity: fadeAnim }]}>
+    <Animated.View
+      entering={FadeIn.duration(250)}
+      exiting={FadeOut.duration(200)}
+      style={styles.container}>
       {/* Time display */}
-      <View style={styles.timeContainer}>
+      <Animated.View
+        entering={FadeInDown.duration(350)}
+        style={styles.timeContainer}>
         <Text style={styles.timeText}>{timeString}</Text>
-      </View>
+      </Animated.View>
 
       {/* Progress dots */}
       <View style={styles.progressDots}>
         {focusTasks.map((_, i) => (
-          <View
+          <Animated.View
             key={i}
             style={[
               styles.dot,
@@ -181,24 +174,31 @@ export const FocusMode = memo(function FocusMode({
         ))}
       </View>
 
-      {/* Task card */}
+      {/* Task card – keyed to force re-mount with animation */}
       <Animated.View
-        style={[
-          styles.taskCardContainer,
-          { transform: [{ translateX: slideAnim }] },
-        ]}
-      >
+        key={cardKey}
+        entering={entering}
+        exiting={exiting}
+        style={styles.taskCardContainer}>
         {currentTask && (
           <View style={styles.taskCard}>
             {/* Priority indicator */}
             <View style={styles.priorityRow}>
               <Icon
-                name={currentTask.priority === 'high' ? 'flag' : 'flag-outline'}
+                name={
+                  currentTask.priority === 'high' ? 'flag' : 'flag-outline'
+                }
                 size={14}
                 color={PRIORITY_COLORS[currentTask.priority]}
               />
-              <Text style={[styles.priorityLabel, { color: PRIORITY_COLORS[currentTask.priority] }]}>
-                {currentTask.priority.charAt(0).toUpperCase() + currentTask.priority.slice(1)} priority
+              <Text
+                style={[
+                  styles.priorityLabel,
+                  { color: PRIORITY_COLORS[currentTask.priority] },
+                ]}>
+                {currentTask.priority.charAt(0).toUpperCase() +
+                  currentTask.priority.slice(1)}{' '}
+                priority
               </Text>
             </View>
 
@@ -207,7 +207,9 @@ export const FocusMode = memo(function FocusMode({
 
             {/* Description */}
             {currentTask.description ? (
-              <Text style={styles.taskDescription}>{currentTask.description}</Text>
+              <Text style={styles.taskDescription}>
+                {currentTask.description}
+              </Text>
             ) : null}
 
             {/* Deadline */}
@@ -223,7 +225,11 @@ export const FocusMode = memo(function FocusMode({
             {/* Estimate */}
             {currentTask.estimatedMinutes && (
               <View style={styles.deadlineRow}>
-                <Icon name="hourglass-outline" size={16} color={Colors.gray500} />
+                <Icon
+                  name="hourglass-outline"
+                  size={16}
+                  color={Colors.gray500}
+                />
                 <Text style={styles.deadlineText}>
                   ~{currentTask.estimatedMinutes} min
                 </Text>
@@ -231,42 +237,76 @@ export const FocusMode = memo(function FocusMode({
             )}
 
             {/* Complete button */}
-            <Pressable style={styles.completeButton} onPress={handleComplete}>
-              <Icon name="checkmark-circle-outline" size={20} color={Colors.white} />
-              <Text style={styles.completeText}>Mark Complete</Text>
-            </Pressable>
+            <AnimatedPressable
+              onPress={handleComplete}
+              hapticStyle="success"
+              pressScale={0.97}>
+              <View style={styles.completeButton}>
+                <Icon
+                  name="checkmark-circle-outline"
+                  size={20}
+                  color={Colors.white}
+                />
+                <Text style={styles.completeText}>Mark Complete</Text>
+              </View>
+            </AnimatedPressable>
           </View>
         )}
       </Animated.View>
 
       {/* Navigation */}
       <View style={styles.navigationRow}>
-        <Pressable
-          style={[styles.navButton, currentIndex === 0 && styles.navButtonDisabled]}
+        <AnimatedPressable
           onPress={handlePrev}
           disabled={currentIndex === 0}
-        >
-          <Icon name="chevron-back" size={20} color={currentIndex === 0 ? Colors.gray200 : Colors.gray600} />
-        </Pressable>
+          hapticStyle="selection">
+          <View
+            style={[
+              styles.navButton,
+              currentIndex === 0 && styles.navButtonDisabled,
+            ]}>
+            <Icon
+              name="chevron-back"
+              size={20}
+              color={currentIndex === 0 ? Colors.gray200 : Colors.gray600}
+            />
+          </View>
+        </AnimatedPressable>
 
         <Text style={styles.positionText}>
           {currentIndex + 1} of {focusTasks.length}
         </Text>
 
-        <Pressable
-          style={[styles.navButton, currentIndex >= focusTasks.length - 1 && styles.navButtonDisabled]}
+        <AnimatedPressable
           onPress={handleNext}
           disabled={currentIndex >= focusTasks.length - 1}
-        >
-          <Icon name="chevron-forward" size={20} color={currentIndex >= focusTasks.length - 1 ? Colors.gray200 : Colors.gray600} />
-        </Pressable>
+          hapticStyle="selection">
+          <View
+            style={[
+              styles.navButton,
+              currentIndex >= focusTasks.length - 1 &&
+                styles.navButtonDisabled,
+            ]}>
+            <Icon
+              name="chevron-forward"
+              size={20}
+              color={
+                currentIndex >= focusTasks.length - 1
+                  ? Colors.gray200
+                  : Colors.gray600
+              }
+            />
+          </View>
+        </AnimatedPressable>
       </View>
 
       {/* Exit */}
-      <Pressable style={styles.exitButton} onPress={onExit}>
-        <Icon name="close-outline" size={16} color={Colors.gray500} />
-        <Text style={styles.exitText}>Exit Focus Mode</Text>
-      </Pressable>
+      <AnimatedPressable onPress={onExit} hapticStyle="light">
+        <View style={styles.exitButton}>
+          <Icon name="close-outline" size={16} color={Colors.gray500} />
+          <Text style={styles.exitText}>Exit Focus Mode</Text>
+        </View>
+      </AnimatedPressable>
     </Animated.View>
   );
 });
