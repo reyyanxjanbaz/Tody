@@ -4,6 +4,7 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { AuthProvider } from './src/context/AuthContext';
 import { TaskProvider } from './src/context/TaskContext';
+import { InboxProvider } from './src/context/InboxContext';
 import { RootNavigator } from './src/navigation/RootNavigator';
 
 function App(): React.JSX.Element {
@@ -13,7 +14,9 @@ function App(): React.JSX.Element {
         <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
         <AuthProvider>
           <TaskProvider>
-            <RootNavigator />
+            <InboxProvider>
+              <RootNavigator />
+            </InboxProvider>
           </TaskProvider>
         </AuthProvider>
       </SafeAreaProvider>

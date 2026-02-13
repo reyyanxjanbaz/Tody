@@ -8,6 +8,7 @@ import { RegisterScreen } from '../screens/RegisterScreen';
 import { HomeScreen } from '../screens/HomeScreen';
 import { ArchiveScreen } from '../screens/ArchiveScreen';
 import { TaskDetailScreen } from '../screens/TaskDetailScreen';
+import { ProcessInboxScreen } from '../screens/ProcessInboxScreen';
 import { RootStackParamList } from '../types';
 import { Colors } from '../utils/colors';
 
@@ -34,6 +35,7 @@ export function RootNavigator() {
             <Stack.Screen name="Home" component={HomeScreen} />
             <Stack.Screen name="Archive" component={ArchiveScreen} />
             <Stack.Screen name="TaskDetail" component={TaskDetailScreen} />
+            <Stack.Screen name="ProcessInbox" component={ProcessInboxScreen} />
           </>
         ) : (
           <>

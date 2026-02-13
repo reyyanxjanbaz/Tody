@@ -16,6 +16,8 @@ import { TaskInput } from '../components/TaskInput';
 import { TaskItem } from '../components/TaskItem';
 import { SectionHeader } from '../components/SectionHeader';
 import { EmptyState } from '../components/EmptyState';
+import { QuickCaptureFAB } from '../components/QuickCaptureFAB';
+import { InboxBadge } from '../components/InboxBadge';
 import { organizeTasks, searchTasks } from '../utils/taskIntelligence';
 import { Colors, Spacing, Typography } from '../utils/colors';
 import { Task, RootStackParamList } from '../types';
@@ -72,6 +74,10 @@ export function HomeScreen({ navigation }: Props) {
     navigation.navigate('Archive');
   }, [navigation]);
 
+  const handleOpenInbox = useCallback(() => {
+    navigation.navigate('ProcessInbox');
+  }, [navigation]);
+
   // ── Render helpers ───────────────────────────────────────────────────────
   const renderTaskItem = useCallback(
     ({ item }: { item: Task }) => (
@@ -125,6 +131,7 @@ export function HomeScreen({ navigation }: Props) {
             )}
           </View>
           <View style={styles.headerActions}>
+            <InboxBadge onPress={handleOpenInbox} />
             <Pressable onPress={handleOpenSearch} hitSlop={8} style={styles.headerButton}>
               <Text style={styles.headerButtonText}>Search</Text>
             </Pressable>
@@ -170,6 +177,9 @@ export function HomeScreen({ navigation }: Props) {
           subtitle='Type above to add your first task'
         />
       )}
+
+      {/* Quick Capture FAB */}
+      {!isSearching && <QuickCaptureFAB />}
     </View>
   );
 }

@@ -44,10 +44,29 @@ export interface ParsedTaskInput {
   priority: Priority;
 }
 
+export type EnergyLevel = 'high' | 'medium' | 'low';
+
+export interface InboxTask {
+  id: string;
+  rawText: string;
+  capturedAt: number;
+  isProcessing?: boolean;
+}
+
+export interface ProcessedTask extends InboxTask {
+  title: string;
+  description?: string;
+  deadline?: number | null;
+  priority: Priority;
+  energyLevel: EnergyLevel;
+  processedAt: number;
+}
+
 export type RootStackParamList = {
   Login: undefined;
   Register: undefined;
   Home: undefined;
   Archive: undefined;
   TaskDetail: { taskId: string };
+  ProcessInbox: undefined;
 };

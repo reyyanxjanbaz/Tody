@@ -4,6 +4,7 @@ const KEYS = {
   USER: '@tody_user',
   TASKS: '@tody_tasks',
   SEARCH_HISTORY: '@tody_searches',
+  INBOX_TASKS: '@tody_inbox_tasks',
 } as const;
 
 export async function saveUser(user: object): Promise<void> {
@@ -39,4 +40,13 @@ export async function getSearchHistory(): Promise<string[]> {
 
 export async function clearAll(): Promise<void> {
   await AsyncStorage.multiRemove(Object.values(KEYS));
+}
+
+export async function saveInboxTasks(tasks: object[]): Promise<void> {
+  await AsyncStorage.setItem(KEYS.INBOX_TASKS, JSON.stringify(tasks));
+}
+
+export async function getInboxTasks<T>(): Promise<T[]> {
+  const data = await AsyncStorage.getItem(KEYS.INBOX_TASKS);
+  return data ? JSON.parse(data) : [];
 }
