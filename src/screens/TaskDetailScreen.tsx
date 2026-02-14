@@ -1,3 +1,17 @@
+/**
+ * TaskDetailScreen — Tap-to-cycle property editing.
+ *
+ * Replaced the old form-heavy layout with:
+ *   • Title + description (editable inline)
+ *   • A row of parameter pills (energy, priority, estimate, deadline)
+ *     that cycle on tap — identical interaction to TaskInput
+ *   • Expandable TimeQuickPick and DeadlineSnapper below the pills
+ *   • Compact action buttons at the bottom
+ *   • Subtask list with inline add
+ *
+ * No labels, no heavy sections. The value IS the control.
+ */
+
 import React, { useState, useCallback, useEffect, useMemo } from 'react';
 import {
   View,
@@ -9,64 +23,66 @@ import {
   Platform,
   Alert,
 } from 'react-native';
+import Animated, { FadeIn, FadeOut } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RouteProp } from '@react-navigation/native';
 import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
+import Icon from 'react-native-vector-icons/Ionicons';
 import { useTasks } from '../context/TaskContext';
-import { Colors, Spacing, Typography, Shadows, BorderRadius } from '../utils/colors';
-import { formatDeadline } from '../utils/dateUtils';
-import { formatMinutes, parseEstimateInput, getElapsedMinutes } from '../utils/timeTracking';
+import { Colors, Spacing, Typography } from '../utils/colors';
+import { formatMinutes, getElapsedMinutes } from '../utils/timeTracking';
 import { isTaskLocked, getChildren, countDescendants } from '../utils/dependencyChains';
 import { Priority, RootStackParamList, EnergyLevel } from '../types';
-import { EnergySelector } from '../components/EnergySelector';
 import { DeadlineSnapper } from '../components/DeadlineSnapper';
-import { LayoutAnimation, UIManager } from 'react-native';
+import { haptic } from '../utils/haptics';
+import {
+  PriorityPill,
+  EnergyPill,
+  EstimatePill,
+  DeadlinePill,
+  TimeQuickPick,
+} from '../components/ParameterPills';
+
 
 type Props = {
   navigation: NativeStackNavigationProp<RootStackParamList, 'TaskDetail'>;
   route: RouteProp<RootStackParamList, 'TaskDetail'>;
 };
 
-const PRIORITIES: Array<{ value: Priority; label: string }> = [
-  { value: 'high', label: 'High' },
-  { value: 'medium', label: 'Medium' },
-  { value: 'low', label: 'Low' },
-  { value: 'none', label: 'None' },
-];
-
 export function TaskDetailScreen({ navigation, route }: Props) {
   const insets = useSafeAreaInsets();
-  const { tasks, getTask, updateTask, deleteTask, deleteTaskWithCascade, completeTask, uncompleteTask, startTask, completeTimedTask, addSubtask } = useTasks();
+  const {
+    tasks, getTask, updateTask, deleteTask, deleteTaskWithCascade,
+    completeTask, uncompleteTask, startTask, completeTimedTask, addSubtask,
+  } = useTasks();
   const task = getTask(route.params.taskId);
 
-  // ── Local editable state ─────────────────────────────────────────────────
+  // ── Local state ──────────────────────────────────────────────────────────
   const [title, setTitle] = useState(task?.title ?? '');
   const [description, setDescription] = useState(task?.description ?? '');
   const [priority, setPriority] = useState<Priority>(task?.priority ?? 'none');
-  const [energyLevel, setEnergyLevel] = useState<EnergyLevel>(task?.energyLevel ?? 'medium');
+  const [energy, setEnergy] = useState<EnergyLevel>(task?.energyLevel ?? 'medium');
   const [deadline, setDeadline] = useState<number | null>(task?.deadline ?? null);
-  const [estimateText, setEstimateText] = useState(
-    task?.estimatedMinutes ? String(task.estimatedMinutes) : '',
-  );
-
-  // ── Date picker state ────────────────────────────────────────────────────
-  const [showDatePicker, setShowDatePicker] = useState(false);
-  const [pickerMode, setPickerMode] = useState<'date' | 'time'>('date');
+  const [estimate, setEstimate] = useState<number | null>(task?.estimatedMinutes ?? null);
+  const [showTimePicker, setShowTimePicker] = useState(false);
+  const [showDeadlinePicker, setShowDeadlinePicker] = useState(false);
+  const [showCustomDatePicker, setShowCustomDatePicker] = useState(false);
   const [tempDate, setTempDate] = useState(new Date());
 
-  // Keep local state in sync if task changes externally
+  // Sync external changes
   useEffect(() => {
     if (task) {
       setTitle(task.title);
       setDescription(task.description);
       setPriority(task.priority);
-      setEnergyLevel(task.energyLevel);
+      setEnergy(task.energyLevel);
       setDeadline(task.deadline);
+      setEstimate(task.estimatedMinutes ?? null);
     }
   }, [task]);
 
-  // Guard: task may have been deleted
+  // ── Guard ────────────────────────────────────────────────────────────────
   if (!task) {
     return (
       <View style={[styles.container, { paddingTop: insets.top }]}>
@@ -81,6 +97,11 @@ export function TaskDetailScreen({ navigation, route }: Props) {
       </View>
     );
   }
+
+  // ── Derived ──────────────────────────────────────────────────────────────
+  const children = useMemo(() => getChildren(task, tasks), [task, tasks]);
+  const locked = useMemo(() => isTaskLocked(task, tasks), [task, tasks]);
+  const isInProgress = !!task.startedAt && !task.isCompleted;
 
   // ── Auto-save handlers ───────────────────────────────────────────────────
   const handleTitleBlur = () => {
@@ -100,49 +121,59 @@ export function TaskDetailScreen({ navigation, route }: Props) {
     updateTask(task.id, { priority: p });
   };
 
-  const handleEnergyChange = (level: EnergyLevel) => {
-    setEnergyLevel(level);
-    updateTask(task.id, { energyLevel: level });
+  const handleEnergyChange = (e: EnergyLevel) => {
+    setEnergy(e);
+    updateTask(task.id, { energyLevel: e });
   };
 
-  // ── Deadline picker ──────────────────────────────────────────────────────
-  const handleOpenDatePicker = () => {
-    setTempDate(deadline ? new Date(deadline) : new Date());
-    setPickerMode('date');
-    setShowDatePicker(true);
+  const handleEstimatePress = () => {
+    setShowTimePicker(prev => !prev);
+    setShowDeadlinePicker(false);
+    setShowCustomDatePicker(false);
   };
 
-  const handleDateChange = (event: DateTimePickerEvent, selectedDate?: Date) => {
-    if (Platform.OS === 'android') {
-      setShowDatePicker(false);
-      if (event.type === 'set' && selectedDate) {
-        if (pickerMode === 'date') {
-          setTempDate(selectedDate);
-          setPickerMode('time');
-          // Small delay to let Android dismiss current picker
-          setTimeout(() => setShowDatePicker(true), 200);
-        } else {
-          // Time selected — save
-          const newDeadline = selectedDate.getTime();
-          setDeadline(newDeadline);
-          updateTask(task.id, { deadline: newDeadline });
-        }
-      }
-    } else {
-      // iOS: picker stays visible, update live
-      if (selectedDate) {
-        setTempDate(selectedDate);
-        const newDeadline = selectedDate.getTime();
-        setDeadline(newDeadline);
-        updateTask(task.id, { deadline: newDeadline });
-      }
-    }
+  const handleEstimateChange = (mins: number | null) => {
+    setEstimate(mins);
+    updateTask(task.id, { estimatedMinutes: mins });
+  };
+
+  const handleDeadlinePress = () => {
+    setShowDeadlinePicker(prev => !prev);
+    setShowTimePicker(false);
+    setShowCustomDatePicker(false);
+  };
+
+  const handleDeadlineSelect = (ts: number) => {
+    setDeadline(ts);
+    updateTask(task.id, { deadline: ts });
   };
 
   const handleClearDeadline = () => {
     setDeadline(null);
-    setShowDatePicker(false);
+    setShowDeadlinePicker(false);
+    setShowCustomDatePicker(false);
     updateTask(task.id, { deadline: null });
+  };
+
+  const handleOpenCustomDate = () => {
+    setTempDate(deadline ? new Date(deadline) : new Date());
+    setShowCustomDatePicker(prev => !prev);
+  };
+
+  const handleDateChange = (event: DateTimePickerEvent, selectedDate?: Date) => {
+    if (Platform.OS === 'android') {
+      setShowCustomDatePicker(false);
+      if (event.type === 'set' && selectedDate) {
+        const ts = selectedDate.getTime();
+        setDeadline(ts);
+        updateTask(task.id, { deadline: ts });
+      }
+    } else if (selectedDate) {
+      setTempDate(selectedDate);
+      const ts = selectedDate.getTime();
+      setDeadline(ts);
+      updateTask(task.id, { deadline: ts });
+    }
   };
 
   // ── Actions ──────────────────────────────────────────────────────────────
@@ -150,46 +181,31 @@ export function TaskDetailScreen({ navigation, route }: Props) {
     if (task.isCompleted) {
       uncompleteTask(task.id);
     } else {
-      const locked = isTaskLocked(task, tasks);
       if (locked) {
         Alert.alert('Locked', 'Complete all subtasks first.');
         return;
       }
+      haptic('success');
       completeTask(task.id);
     }
   };
 
   const handleDelete = () => {
-    const descendantCount = countDescendants(task.id, tasks);
-    if (descendantCount > 0) {
-      Alert.alert(
-        'Delete task',
-        `Delete task and ${descendantCount} subtask${descendantCount !== 1 ? 's' : ''}?`,
-        [
-          { text: 'Cancel', style: 'cancel' },
-          {
-            text: 'Delete',
-            style: 'destructive',
-            onPress: () => {
-              deleteTaskWithCascade(task.id);
-              navigation.goBack();
-            },
-          },
-        ],
-      );
-    } else {
-      Alert.alert('Delete task', 'This cannot be undone.', [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: () => {
-            deleteTask(task.id);
-            navigation.goBack();
-          },
+    const desc = countDescendants(task.id, tasks);
+    const msg = desc > 0
+      ? `Delete task and ${desc} subtask${desc !== 1 ? 's' : ''}?`
+      : 'This cannot be undone.';
+    Alert.alert('Delete task', msg, [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Delete',
+        style: 'destructive',
+        onPress: () => {
+          desc > 0 ? deleteTaskWithCascade(task.id) : deleteTask(task.id);
+          navigation.goBack();
         },
-      ]);
-    }
+      },
+    ]);
   };
 
   const handleAddSubtask = () => {
@@ -209,11 +225,7 @@ export function TaskDetailScreen({ navigation, route }: Props) {
     );
   };
 
-  const children = useMemo(() => getChildren(task, tasks), [task, tasks]);
-  const locked = useMemo(() => isTaskLocked(task, tasks), [task, tasks]);
-
   const handleBack = () => {
-    // Ensure latest changes are saved
     if (title.trim() && title !== task.title) {
       updateTask(task.id, { title: title.trim() });
     }
@@ -223,6 +235,7 @@ export function TaskDetailScreen({ navigation, route }: Props) {
     navigation.goBack();
   };
 
+  // ── Render ───────────────────────────────────────────────────────────────
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
       {/* Header */}
@@ -240,7 +253,7 @@ export function TaskDetailScreen({ navigation, route }: Props) {
         contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 40 }]}
         keyboardShouldPersistTaps="handled">
 
-        {/* Title */}
+        {/* ── Title ─────────────────────────────────────────────── */}
         <TextInput
           style={styles.titleInput}
           value={title}
@@ -252,7 +265,7 @@ export function TaskDetailScreen({ navigation, route }: Props) {
           autoFocus={!task.title}
         />
 
-        {/* Description */}
+        {/* ── Description ───────────────────────────────────────── */}
         <TextInput
           style={styles.descriptionInput}
           value={description}
@@ -264,208 +277,181 @@ export function TaskDetailScreen({ navigation, route }: Props) {
           textAlignVertical="top"
         />
 
-        {/* Divider */}
-        <View style={styles.divider} />
+        {/* ── Parameter Pills ───────────────────────────────────── */}
+        <View style={styles.pillSection}>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.pillRow}
+            keyboardShouldPersistTaps="always">
+            <EnergyPill value={energy} onChange={handleEnergyChange} />
+            <PriorityPill value={priority} onChange={handlePriorityChange} />
+            <EstimatePill value={estimate} onPress={handleEstimatePress} />
+            <DeadlinePill value={deadline} onPress={handleDeadlinePress} />
+          </ScrollView>
 
-        {/* Priority */}
-        <Text style={styles.fieldLabel}>PRIORITY</Text>
-        <View style={styles.priorityRow}>
-          {PRIORITIES.map(p => (
-            <Pressable
-              key={p.value}
-              style={[
-                styles.priorityOption,
-                priority === p.value && styles.priorityOptionActive,
-              ]}
-              onPress={() => handlePriorityChange(p.value)}>
-              <Text
-                style={[
-                  styles.priorityText,
-                  priority === p.value && styles.priorityTextActive,
-                ]}>
-                {p.label}
-              </Text>
-            </Pressable>
-          ))}
-        </View>
+          {/* Time Quick Pick (expanded) */}
+          {showTimePicker && (
+            <TimeQuickPick value={estimate} onChange={handleEstimateChange} />
+          )}
 
-        {/* Energy Level */}
-        <Text style={[styles.fieldLabel, { marginTop: Spacing.xxl }]}>ENERGY LEVEL</Text>
-        <View style={{ marginTop: Spacing.sm }}>
-          <EnergySelector value={energyLevel} onChange={handleEnergyChange} />
-        </View>
+          {/* Deadline Snapper (expanded) */}
+          {showDeadlinePicker && (
+            <Animated.View entering={FadeIn.duration(200)} exiting={FadeOut.duration(150)}>
+              <DeadlineSnapper
+                onSelectDeadline={handleDeadlineSelect}
+                currentDeadline={deadline}
+              />
+              <View style={styles.deadlineActions}>
+                <Pressable
+                  style={[styles.deadlinePlusBtn, showCustomDatePicker && styles.deadlinePlusBtnActive]}
+                  onPress={handleOpenCustomDate}>
+                  <Icon
+                    name={showCustomDatePicker ? 'close' : 'add'}
+                    size={16}
+                    color={showCustomDatePicker ? Colors.white : Colors.gray500}
+                  />
+                </Pressable>
+                {deadline != null && (
+                  <Pressable style={styles.deadlineClearBtn} onPress={handleClearDeadline}>
+                    <Icon name="close-circle" size={20} color={Colors.gray400} />
+                  </Pressable>
+                )}
+              </View>
 
-        {/* Deadline */}
-        <Text style={[styles.fieldLabel, { marginTop: Spacing.xxl }]}>DEADLINE</Text>
-        <DeadlineSnapper
-          onSelectDeadline={(ts) => {
-            setDeadline(ts);
-            updateTask(task.id, { deadline: ts });
-          }}
-          currentDeadline={deadline}
-        />
-        <View style={styles.deadlineRow}>
-          <Pressable style={styles.deadlineButton} onPress={handleOpenDatePicker}>
-            <Text style={styles.deadlineValue}>
-              {deadline ? formatDeadline(deadline) : 'Pick custom time...'}
-            </Text>
-          </Pressable>
-          {deadline && (
-            <Pressable onPress={handleClearDeadline} hitSlop={8}>
-              <Text style={styles.clearText}>Clear</Text>
-            </Pressable>
+              {/* Custom date picker (iOS inline) */}
+              {showCustomDatePicker && Platform.OS === 'ios' && (
+                <View style={styles.pickerContainer}>
+                  <DateTimePicker
+                    value={tempDate}
+                    mode="datetime"
+                    display="spinner"
+                    onChange={handleDateChange}
+                    minimumDate={new Date()}
+                    textColor={Colors.text}
+                  />
+                  <Pressable onPress={() => setShowCustomDatePicker(false)}>
+                    <Text style={styles.donePickerText}>Done</Text>
+                  </Pressable>
+                </View>
+              )}
+              {showCustomDatePicker && Platform.OS === 'android' && (
+                <DateTimePicker
+                  value={tempDate}
+                  mode="datetime"
+                  display="default"
+                  onChange={handleDateChange}
+                  minimumDate={new Date()}
+                />
+              )}
+            </Animated.View>
           )}
         </View>
 
-        {/* iOS inline picker */}
-        {showDatePicker && Platform.OS === 'ios' && (
-          <View style={styles.pickerContainer}>
-            <DateTimePicker
-              value={tempDate}
-              mode="datetime"
-              display="spinner"
-              onChange={handleDateChange}
-              minimumDate={new Date()}
-              textColor={Colors.text}
-            />
-            <Pressable onPress={() => setShowDatePicker(false)}>
-              <Text style={styles.donePickerText}>Done</Text>
-            </Pressable>
+        {/* ── Timing Info ───────────────────────────────────────── */}
+        {isInProgress && task.startedAt ? (
+          <View style={styles.infoRow}>
+            <Icon name="play-circle" size={16} color="#22C55E" />
+            <Text style={styles.infoText}>
+              In progress — {formatMinutes(getElapsedMinutes(task.startedAt))} elapsed
+              {task.estimatedMinutes ? ` · est. ${formatMinutes(task.estimatedMinutes)}` : ''}
+            </Text>
+          </View>
+        ) : task.isCompleted && task.actualMinutes != null && task.actualMinutes > 0 ? (
+          <View style={styles.infoRow}>
+            <Icon name="checkmark-circle" size={16} color={Colors.gray500} />
+            <Text style={styles.infoText}>
+              Took {formatMinutes(task.actualMinutes)}
+              {task.estimatedMinutes ? ` · est. ${formatMinutes(task.estimatedMinutes)}` : ''}
+            </Text>
+          </View>
+        ) : null}
+
+        {task.deferCount > 0 && (
+          <View style={styles.infoRow}>
+            <Icon name="arrow-redo-outline" size={14} color={Colors.gray400} />
+            <Text style={styles.infoText}>
+              Deferred {task.deferCount} time{task.deferCount > 1 ? 's' : ''}
+            </Text>
           </View>
         )}
 
-        {/* Android dialog picker */}
-        {showDatePicker && Platform.OS === 'android' && (
-          <DateTimePicker
-            value={tempDate}
-            mode={pickerMode}
-            display="default"
-            onChange={handleDateChange}
-            minimumDate={pickerMode === 'date' ? new Date() : undefined}
-          />
-        )}
-
-        {/* Divider */}
-        <View style={[styles.divider, { marginTop: Spacing.xxl }]} />
-
-        {/* Estimate */}
-        <Text style={styles.fieldLabel}>ESTIMATE</Text>
-        <View style={styles.deadlineRow}>
-          <TextInput
-            style={[styles.deadlineValue, { flex: 1, padding: 0 }]}
-            value={estimateText}
-            onChangeText={setEstimateText}
-            onBlur={() => {
-              const mins = parseEstimateInput(estimateText);
-              if (mins && mins !== task.estimatedMinutes) {
-                updateTask(task.id, { estimatedMinutes: mins });
-                setEstimateText(String(mins));
-              } else if (!estimateText.trim()) {
-                updateTask(task.id, { estimatedMinutes: null });
-              }
-            }}
-            placeholder="30 minutes"
-            placeholderTextColor={Colors.gray400}
-            keyboardType="default"
-          />
-          {estimateText ? (
-            <Text style={styles.clearText}>
-              {parseEstimateInput(estimateText)
-                ? formatMinutes(parseEstimateInput(estimateText)!)
-                : ''}
-            </Text>
-          ) : null}
-        </View>
-
-        {/* Timing info */}
-        {task.startedAt && !task.isCompleted ? (
-          <Text style={[styles.metaText, { marginTop: Spacing.md }]}>
-            ● In progress — {formatMinutes(getElapsedMinutes(task.startedAt))} elapsed
-          </Text>
-        ) : task.actualMinutes != null && task.actualMinutes > 0 ? (
-          <Text style={[styles.metaText, { marginTop: Spacing.md }]}>
-            Actual time: {formatMinutes(task.actualMinutes)}
-          </Text>
-        ) : null}
-
-        {/* Divider */}
-        <View style={[styles.divider, { marginTop: Spacing.xxl }]} />
-
-        {/* Subtasks section */}
+        {/* ── Subtasks ──────────────────────────────────────────── */}
         {(children.length > 0 || task.depth < 3) && (
-          <>
-            <Text style={styles.fieldLabel}>SUBTASKS</Text>
+          <View style={styles.subtaskSection}>
+            <Text style={styles.sectionLabel}>Subtasks</Text>
             {children.map(child => (
               <Pressable
                 key={child.id}
                 style={styles.subtaskRow}
                 onPress={() => navigation.push('TaskDetail', { taskId: child.id })}>
-                <View style={[styles.subtaskCheckbox, child.isCompleted && styles.subtaskCheckboxDone]}>
-                  {child.isCompleted && <View style={styles.subtaskCheckboxInner} />}
-                </View>
+                <View style={[styles.subtaskDot, child.isCompleted && styles.subtaskDotDone]} />
                 <Text
                   style={[styles.subtaskTitle, child.isCompleted && styles.subtaskTitleDone]}
                   numberOfLines={1}>
                   {child.title}
                 </Text>
+                <Icon name="chevron-forward" size={14} color={Colors.gray400} />
               </Pressable>
             ))}
             {task.depth < 3 && (
-              <Pressable style={styles.actionRow} onPress={handleAddSubtask}>
-                <Text style={styles.addSubtaskText}>+ Add subtask</Text>
+              <Pressable style={styles.subtaskAdd} onPress={handleAddSubtask}>
+                <Icon name="add-circle-outline" size={16} color={Colors.gray400} />
+                <Text style={styles.subtaskAddText}>Add subtask</Text>
               </Pressable>
             )}
             {locked && (
               <Text style={styles.lockedHint}>
-                🔒 Complete all subtasks to unlock this task
+                🔒 Complete all subtasks to unlock
               </Text>
             )}
-            <View style={[styles.divider, { marginTop: Spacing.md }]} />
-          </>
+          </View>
         )}
 
-        {/* Start/Complete Time Tracking */}
-        {!task.isCompleted && !task.startedAt && (
-          <Pressable
-            style={styles.actionRow}
-            onPress={() => startTask(task.id)}>
-            <Text style={styles.actionText}>Start timer</Text>
+        {/* ── Actions ───────────────────────────────────────────── */}
+        <View style={styles.actionsSection}>
+          {!task.isCompleted && !task.startedAt && (
+            <Pressable
+              style={styles.actionBtn}
+              onPress={() => { haptic('medium'); startTask(task.id); }}>
+              <Icon name="play-outline" size={18} color={Colors.text} />
+              <Text style={styles.actionText}>Start timer</Text>
+            </Pressable>
+          )}
+          {!task.isCompleted && task.startedAt && (
+            <Pressable
+              style={styles.actionBtn}
+              onPress={() => { haptic('success'); completeTimedTask(task.id); }}>
+              <Icon name="stop-outline" size={18} color={Colors.text} />
+              <Text style={styles.actionText}>Complete (stop timer)</Text>
+            </Pressable>
+          )}
+          <Pressable style={styles.actionBtn} onPress={handleToggleComplete}>
+            <Icon
+              name={task.isCompleted ? 'arrow-undo-outline' : 'checkmark-done-outline'}
+              size={18}
+              color={Colors.text}
+            />
+            <Text style={styles.actionText}>
+              {task.isCompleted ? 'Restore task' : locked ? 'Mark as done (locked)' : 'Mark as done'}
+            </Text>
           </Pressable>
-        )}
-        {!task.isCompleted && task.startedAt && (
-          <Pressable
-            style={styles.actionRow}
-            onPress={() => completeTimedTask(task.id)}>
-            <Text style={styles.actionText}>Complete (stop timer)</Text>
-          </Pressable>
-        )}
 
-        {/* Complete / Restore */}
-        <Pressable style={styles.actionRow} onPress={handleToggleComplete}>
-          <Text style={styles.actionText}>
-            {task.isCompleted ? 'Restore task' : locked ? 'Mark as done (locked)' : 'Mark as done'}
-          </Text>
-        </Pressable>
-
-        {/* Parent info */}
-        {task.parentId && (
-          <Pressable
-            style={styles.actionRow}
-            onPress={() => navigation.push('TaskDetail', { taskId: task.parentId! })}>
-            <Text style={[styles.metaText, { marginTop: 0 }]}>↑ Go to parent task</Text>
-          </Pressable>
-        )}
-
-        {/* Meta info */}
-        {task.deferCount > 0 && (
-          <Text style={styles.metaText}>
-            Deferred {task.deferCount} time{task.deferCount > 1 ? 's' : ''}
-          </Text>
-        )}
+          {task.parentId && (
+            <Pressable
+              style={styles.actionBtn}
+              onPress={() => navigation.push('TaskDetail', { taskId: task.parentId! })}>
+              <Icon name="arrow-up-outline" size={18} color={Colors.gray500} />
+              <Text style={[styles.actionText, { color: Colors.gray500 }]}>Go to parent task</Text>
+            </Pressable>
+          )}
+        </View>
       </ScrollView>
     </View>
   );
 }
+
+// ── Styles ──────────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
   container: {
@@ -492,98 +478,7 @@ const styles = StyleSheet.create({
   },
   content: {
     paddingHorizontal: Spacing.xxl,
-    paddingTop: Spacing.lg,
-  },
-  titleInput: {
-    fontSize: 24,
-    fontWeight: '700',
-    letterSpacing: -0.4,
-    color: Colors.text,
-    minHeight: 36,
-    padding: 0,
-    marginBottom: Spacing.md,
-  },
-  descriptionInput: {
-    ...Typography.body,
-    color: Colors.textSecondary,
-    minHeight: 60,
-    padding: 0,
-  },
-  divider: {
-    height: 0,
-    backgroundColor: 'transparent',
-    marginTop: Spacing.xxl,
-    marginBottom: Spacing.xxl,
-  },
-  fieldLabel: {
-    ...Typography.sectionHeader,
-    marginBottom: Spacing.md,
-  },
-  priorityRow: {
-    flexDirection: 'row',
-    gap: Spacing.sm,
-  },
-  priorityOption: {
-    paddingHorizontal: Spacing.lg,
-    paddingVertical: Spacing.sm,
-    borderWidth: 1.5,
-    borderColor: Colors.border,
-    borderRadius: BorderRadius.pill,
-  },
-  priorityOptionActive: {
-    backgroundColor: Colors.surfaceDark,
-    borderColor: Colors.surfaceDark,
-  },
-  priorityText: {
-    ...Typography.caption,
-    color: Colors.textTertiary,
-  },
-  priorityTextActive: {
-    color: Colors.white,
-    fontWeight: '600',
-  },
-  deadlineRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.lg,
-  },
-  deadlineButton: {
-    paddingVertical: Spacing.sm,
-    paddingHorizontal: Spacing.lg,
-    borderWidth: 1.5,
-    borderColor: Colors.border,
-    borderRadius: BorderRadius.pill,
-  },
-  deadlineValue: {
-    ...Typography.body,
-    color: Colors.text,
-  },
-  clearText: {
-    ...Typography.caption,
-    color: Colors.gray500,
-  },
-  pickerContainer: {
-    marginTop: Spacing.md,
-    alignItems: 'center',
-  },
-  donePickerText: {
-    ...Typography.link,
-    color: Colors.text,
-    fontWeight: '600',
-    marginTop: Spacing.sm,
-    paddingVertical: Spacing.sm,
-  },
-  actionRow: {
-    paddingVertical: Spacing.md,
-  },
-  actionText: {
-    ...Typography.bodyMedium,
-    color: Colors.text,
-  },
-  metaText: {
-    ...Typography.small,
-    color: Colors.gray400,
-    marginTop: Spacing.sm,
+    paddingTop: Spacing.sm,
   },
   emptyContainer: {
     flex: 1,
@@ -594,32 +489,116 @@ const styles = StyleSheet.create({
     ...Typography.body,
     color: Colors.gray500,
   },
-  // Subtask styles
+
+  // Title & Description
+  titleInput: {
+    fontSize: 24,
+    fontWeight: '700',
+    letterSpacing: -0.4,
+    color: Colors.text,
+    minHeight: 36,
+    padding: 0,
+    marginBottom: Spacing.sm,
+  },
+  descriptionInput: {
+    ...Typography.body,
+    color: Colors.textSecondary,
+    minHeight: 44,
+    padding: 0,
+    marginBottom: Spacing.lg,
+  },
+
+  // Parameter pills
+  pillSection: {
+    marginBottom: Spacing.lg,
+    paddingTop: Spacing.sm,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: 'rgba(0,0,0,0.06)',
+  },
+  pillRow: {
+    flexDirection: 'row',
+    gap: 8,
+    paddingBottom: Spacing.sm,
+  },
+  deadlineActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingTop: Spacing.sm,
+    paddingBottom: Spacing.sm,
+  },
+  deadlinePlusBtn: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    borderWidth: 1,
+    borderColor: Colors.gray200,
+    backgroundColor: Colors.gray50,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  deadlinePlusBtnActive: {
+    backgroundColor: Colors.surfaceDark,
+    borderColor: Colors.surfaceDark,
+  },
+  deadlineClearBtn: {
+    padding: 4,
+  },
+  pickerContainer: {
+    alignItems: 'center',
+    paddingTop: Spacing.sm,
+  },
+  donePickerText: {
+    ...Typography.link,
+    color: Colors.text,
+    fontWeight: '600',
+    paddingVertical: Spacing.sm,
+  },
+
+  // Info rows
+  infoRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingVertical: 6,
+  },
+  infoText: {
+    fontSize: 13,
+    color: Colors.gray500,
+  },
+
+  // Subtasks
+  subtaskSection: {
+    marginTop: Spacing.lg,
+    paddingTop: Spacing.md,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: 'rgba(0,0,0,0.06)',
+  },
+  sectionLabel: {
+    fontSize: 13,
+    fontWeight: '600',
+    letterSpacing: 0.5,
+    color: Colors.gray500,
+    textTransform: 'uppercase',
+    marginBottom: Spacing.sm,
+  },
   subtaskRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: Spacing.sm,
-    paddingLeft: Spacing.sm,
+    paddingVertical: 10,
+    paddingLeft: 4,
   },
-  subtaskCheckbox: {
-    width: 18,
-    height: 18,
-    borderWidth: 1.5,
-    borderColor: Colors.gray400,
-    borderRadius: 9,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: Spacing.md,
-  },
-  subtaskCheckboxDone: {
-    borderColor: Colors.surfaceDark,
-    backgroundColor: Colors.surfaceDark,
-  },
-  subtaskCheckboxInner: {
+  subtaskDot: {
     width: 8,
     height: 8,
     borderRadius: 4,
-    backgroundColor: Colors.white,
+    borderWidth: 1.5,
+    borderColor: Colors.gray400,
+    marginRight: Spacing.md,
+  },
+  subtaskDotDone: {
+    borderColor: Colors.surfaceDark,
+    backgroundColor: Colors.surfaceDark,
   },
   subtaskTitle: {
     ...Typography.body,
@@ -630,13 +609,38 @@ const styles = StyleSheet.create({
     textDecorationLine: 'line-through',
     color: Colors.gray500,
   },
-  addSubtaskText: {
-    ...Typography.body,
-    color: Colors.gray500,
+  subtaskAdd: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingVertical: 10,
+  },
+  subtaskAddText: {
+    fontSize: 15,
+    color: Colors.gray400,
   },
   lockedHint: {
-    ...Typography.small,
+    fontSize: 12,
     color: Colors.gray400,
-    marginTop: Spacing.sm,
+    marginTop: 4,
+  },
+
+  // Actions
+  actionsSection: {
+    marginTop: Spacing.xl,
+    paddingTop: Spacing.md,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: 'rgba(0,0,0,0.06)',
+  },
+  actionBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingVertical: 14,
+  },
+  actionText: {
+    fontSize: 16,
+    fontWeight: '500',
+    color: Colors.text,
   },
 });

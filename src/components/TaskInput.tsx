@@ -1,110 +1,243 @@
-import React, { memo, useState, useCallback, useRef, useEffect } from 'react';
+/**
+ * TaskInput — Conversational task entry with smart parameter pills.
+ *
+ * Flow:
+ *   1. User types a task title
+ *   2. Pills appear below with inferred parameters (energy, priority)
+ *   3. Tap any pill to cycle its value — no typing needed
+ *   4. Tap the estimate pill → time quick-pick row slides in
+ *   5. Tap the deadline pill → deadline snapper slides in
+ *   6. Hit enter or tap ↑ to submit
+ *
+ * The text parser still extracts deadline/priority from keywords
+ * (e.g. "urgent" → high priority, "tomorrow" → deadline).
+ * Pills reflect the parsed result so the user sees what was inferred
+ * and can override with a single tap.
+ */
+
+import React, { memo, useState, useCallback, useRef } from 'react';
 import {
   View,
-  TextInput,
-  StyleSheet,
   Text,
+  TextInput,
+  Pressable,
+  StyleSheet,
+  ScrollView,
+  Platform,
+  Keyboard,
 } from 'react-native';
 import Animated, {
   FadeInDown,
   FadeOutUp,
   LinearTransition,
-  useSharedValue,
-  useAnimatedStyle,
-  withSpring,
-  withTiming,
 } from 'react-native-reanimated';
-import { Colors, Spacing, Typography, Shadows, BorderRadius } from '../utils/colors';
-import { parseEstimateInput, formatMinutes } from '../utils/timeTracking';
-import { EstimateSuggestion } from './EstimateSuggestion';
-import { EnergyLevel } from '../types';
-import { EnergySelector } from './EnergySelector';
-import { SmartKeyboardToolbar } from './SmartKeyboardToolbar';
-import { AnimatedPressable } from './ui';
+import Icon from 'react-native-vector-icons/Ionicons';
+import { Colors, Spacing, Typography, BorderRadius } from '../utils/colors';
+import { Priority, EnergyLevel } from '../types';
 import { haptic } from '../utils/haptics';
-import { SPRING_SNAPPY } from '../utils/animations';
+import { AnimatedPressable } from './ui';
+import { DeadlineSnapper } from './DeadlineSnapper';
+import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
+import {
+  PriorityPill,
+  EnergyPill,
+  EstimatePill,
+  DeadlinePill,
+  TimeQuickPick,
+} from './ParameterPills';
 
-interface TaskInputProps {
-  onSubmit: (text: string, estimatedMinutes?: number, energyLevel?: EnergyLevel) => void;
-  placeholder?: string;
-  autoFocus?: boolean;
+// ── Props ───────────────────────────────────────────────────────────────────
+
+export interface TaskInputParams {
+  estimatedMinutes?: number;
+  energyLevel?: EnergyLevel;
+  priority?: Priority;
+  deadline?: number | null;
 }
 
-export const TaskInput = memo(function TaskInput({ onSubmit, placeholder, autoFocus }: TaskInputProps) {
+interface TaskInputProps {
+  onSubmit: (text: string, params?: TaskInputParams) => void;
+  placeholder?: string;
+  autoFocus?: boolean;
+  /** Compact mode hides deadline picker for subtask entry */
+  compact?: boolean;
+}
+
+// ── Smart Inference ─────────────────────────────────────────────────────────
+
+function inferEnergy(text: string): EnergyLevel | null {
+  const lower = text.toLowerCase();
+  if (/write|design|plan|strategy|research|draft|architect|think/.test(lower)) return 'high';
+  if (/call|email|review|check|meet|discuss|schedule/.test(lower)) return 'medium';
+  if (/respond|forward|pay|buy|send|pick up|drop off/.test(lower)) return 'low';
+  return null;
+}
+
+function inferPriority(text: string): Priority | null {
+  const lower = text.toLowerCase();
+  if (/urgent|asap|critical|important|emergency/.test(lower)) return 'high';
+  if (/whenever|eventually|no rush|someday|maybe/.test(lower)) return 'low';
+  return null;
+}
+
+function inferEstimate(text: string): number | null {
+  const lower = text.toLowerCase();
+  if (/call|email|respond|forward|send|pay/.test(lower)) return 15;
+  if (/review|check|read|glance/.test(lower)) return 30;
+  if (/write|draft|design|plan/.test(lower)) return 60;
+  if (/research|deep dive|strategy|build/.test(lower)) return 120;
+  return null;
+}
+
+// ── Component ───────────────────────────────────────────────────────────────
+
+export const TaskInput = memo(function TaskInput({
+  onSubmit,
+  placeholder,
+  autoFocus,
+  compact = false,
+}: TaskInputProps) {
   const [value, setValue] = useState('');
-  const [estimateText, setEstimateText] = useState('');
-  const [showEstimate, setShowEstimate] = useState(false);
-  const [energyLevel, setEnergyLevel] = useState<EnergyLevel>('medium');
-  const [hasManuallySetEnergy, setHasManuallySetEnergy] = useState(false);
-  const [activeField, setActiveField] = useState<'title' | 'estimate' | null>(null);
+  const [energy, setEnergy] = useState<EnergyLevel>('medium');
+  const [priority, setPriority] = useState<Priority>('none');
+  const [estimate, setEstimate] = useState<number | null>(null);
+  const [deadline, setDeadline] = useState<number | null>(null);
+  const [showTimePicker, setShowTimePicker] = useState(false);
+  const [showDeadlinePicker, setShowDeadlinePicker] = useState(false);
+  const [showCustomDatePicker, setShowCustomDatePicker] = useState(false);
+  const [tempDate, setTempDate] = useState(new Date());
+  const [hasManualEnergy, setHasManualEnergy] = useState(false);
+  const [hasManualPriority, setHasManualPriority] = useState(false);
+  const [hasManualEstimate, setHasManualEstimate] = useState(false);
 
   const inputRef = useRef<TextInput>(null);
-  const estimateInputRef = useRef<TextInput>(null);
+  const showPills = value.trim().length > 0;
 
-  const parsedEstimate = estimateText ? parseEstimateInput(estimateText) : null;
+  // ── Handlers ──────────────────────────────────────────────────────────
 
-  const suggestEnergy = useCallback((text: string) => {
-    const lower = text.toLowerCase();
-    if (lower.match(/write|design|plan|strategy/)) return 'high';
-    if (lower.match(/call|email|review|check/)) return 'medium';
-    if (lower.match(/respond|forward|pay|buy/)) return 'low';
-    return null;
-  }, []);
+  const handleTextChange = useCallback((text: string) => {
+    setValue(text);
+
+    // Auto-infer from text (only if user hasn't manually overridden)
+    if (!hasManualEnergy) {
+      const e = inferEnergy(text);
+      if (e) setEnergy(e);
+    }
+    if (!hasManualPriority) {
+      const p = inferPriority(text);
+      if (p) setPriority(p);
+    }
+    if (!hasManualEstimate) {
+      const est = inferEstimate(text);
+      if (est) setEstimate(est);
+    }
+  }, [hasManualEnergy, hasManualPriority, hasManualEstimate]);
 
   const handleSubmit = useCallback(() => {
     const trimmed = value.trim();
-    if (!trimmed) { return; }
-    const minutes = estimateText ? parseEstimateInput(estimateText) : undefined;
-    onSubmit(trimmed, minutes ?? undefined, energyLevel);
+    if (!trimmed) return;
+
+    onSubmit(trimmed, {
+      energyLevel: energy,
+      priority: priority !== 'none' ? priority : undefined,
+      estimatedMinutes: estimate ?? undefined,
+      deadline: deadline,
+    });
+
+    // Reset
     setValue('');
-    setEstimateText('');
-    setEnergyLevel('medium');
-    setHasManuallySetEnergy(false);
-    setShowEstimate(false);
-  }, [value, estimateText, onSubmit, energyLevel]);
+    setEnergy('medium');
+    setPriority('none');
+    setEstimate(null);
+    setDeadline(null);
+    setShowTimePicker(false);
+    setShowDeadlinePicker(false);
+    setShowCustomDatePicker(false);
+    setHasManualEnergy(false);
+    setHasManualPriority(false);
+    setHasManualEstimate(false);
+  }, [value, energy, priority, estimate, deadline, onSubmit]);
 
-  const handleTitleChange = useCallback((text: string) => {
-    setValue(text);
-    if (text.trim().length > 0 && !showEstimate) {
-      setShowEstimate(true);
-    } else if (text.trim().length === 0) {
-      setShowEstimate(false);
-      setEstimateText('');
-    }
-
-    if (!hasManuallySetEnergy) {
-      const suggestion = suggestEnergy(text);
-      if (suggestion) {
-        setEnergyLevel(suggestion);
-      }
-    }
-  }, [showEstimate, hasManuallySetEnergy, suggestEnergy]);
-
-  const handleEnergyChange = useCallback((level: EnergyLevel) => {
-    setEnergyLevel(level);
-    setHasManuallySetEnergy(true);
+  const handleEnergyChange = useCallback((e: EnergyLevel) => {
+    setEnergy(e);
+    setHasManualEnergy(true);
   }, []);
 
+  const handlePriorityChange = useCallback((p: Priority) => {
+    setPriority(p);
+    setHasManualPriority(true);
+  }, []);
+
+  const handleEstimatePress = useCallback(() => {
+    setShowTimePicker(prev => !prev);
+    setShowDeadlinePicker(false);
+    setShowCustomDatePicker(false);
+  }, []);
+
+  const handleEstimateChange = useCallback((mins: number | null) => {
+    setEstimate(mins);
+    setHasManualEstimate(true);
+  }, []);
+
+  const handleDeadlinePress = useCallback(() => {
+    setShowDeadlinePicker(prev => !prev);
+    setShowTimePicker(false);
+    setShowCustomDatePicker(false);
+  }, []);
+
+  const handleDeadlineSelect = useCallback((ts: number) => {
+    setDeadline(ts);
+    setShowDeadlinePicker(false);
+    setShowCustomDatePicker(false);
+  }, []);
+
+  const handleCustomDateChange = useCallback((event: DateTimePickerEvent, date?: Date) => {
+    if (Platform.OS === 'android') {
+      setShowCustomDatePicker(false);
+      if (event.type === 'set' && date) {
+        setDeadline(date.getTime());
+      }
+    } else if (date) {
+      setTempDate(date);
+      setDeadline(date.getTime());
+    }
+  }, []);
+
+  const handleOpenCustomDate = useCallback(() => {
+    haptic('selection');
+    Keyboard.dismiss();
+    setTempDate(deadline ? new Date(deadline) : new Date());
+    setShowCustomDatePicker(prev => !prev);
+  }, [deadline]);
+
+  // ── Render ────────────────────────────────────────────────────────────
+
   return (
-    <Animated.View layout={LinearTransition.duration(250)}>
-      <View style={styles.container}>
+    <Animated.View layout={LinearTransition.duration(200)} style={[showPills && styles.drawer]}>
+      {/* Drawer handle */}
+      {showPills && (
+        <View style={styles.drawerHandleRow}>
+          <View style={styles.drawerHandle} />
+        </View>
+      )}
+
+      {/* Text input row */}
+      <View style={styles.inputRow}>
+        <Icon
+          name="create-outline"
+          size={20}
+          color={value.trim() ? Colors.text : Colors.gray400}
+          style={styles.leadingIcon}
+        />
         <TextInput
           ref={inputRef}
           style={styles.input}
-          placeholder={placeholder || 'Add a task... try "buy milk tomorrow"'}
+          placeholder={placeholder || 'What needs doing?'}
           placeholderTextColor={Colors.gray400}
           value={value}
-          onChangeText={handleTitleChange}
-          onFocus={() => setActiveField('title')}
-          onBlur={() => setActiveField(null)}
-          onSubmitEditing={() => {
-            if (showEstimate && !estimateText) {
-              estimateInputRef.current?.focus();
-            } else {
-              handleSubmit();
-            }
-          }}
-          returnKeyType={showEstimate && !estimateText ? 'next' : 'done'}
+          onChangeText={handleTextChange}
+          onSubmitEditing={handleSubmit}
+          returnKeyType="done"
           blurOnSubmit={false}
           autoCorrect={false}
           autoCapitalize="sentences"
@@ -115,116 +248,120 @@ export const TaskInput = memo(function TaskInput({ onSubmit, placeholder, autoFo
             onPress={() => { haptic('light'); handleSubmit(); }}
             hapticStyle={null}
             pressScale={0.9}>
-            <View style={styles.addButton}>
-              <Text style={styles.addButtonText}>+</Text>
+            <View style={styles.submitButton}>
+              <Icon name="arrow-up" size={20} color={Colors.white} />
             </View>
           </AnimatedPressable>
         )}
       </View>
-      {showEstimate && (
+
+      {/* Parameter pills */}
+      {showPills && (
         <Animated.View
-          entering={FadeInDown.duration(250)}
-          exiting={FadeOutUp.duration(200)}>
-          <View style={styles.estimateRow}>
-            <TextInput
-              ref={estimateInputRef}
-              style={styles.estimateInput}
-              placeholder="30 minutes"
-              placeholderTextColor={Colors.gray400}
-              value={estimateText}
-              onChangeText={setEstimateText}
-              onFocus={() => setActiveField('estimate')}
-              onBlur={() => setActiveField(null)}
-              onSubmitEditing={handleSubmit}
-              returnKeyType="done"
-              blurOnSubmit={false}
-              keyboardType="default"
-              autoCorrect={false}
-            />
-            {parsedEstimate != null && (
-              <Text style={styles.estimateParsed}>
-                {formatMinutes(parsedEstimate)}
-              </Text>
+          entering={FadeInDown.duration(200)}
+          exiting={FadeOutUp.duration(150)}>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.pillStrip}
+            keyboardShouldPersistTaps="always">
+            <EnergyPill value={energy} onChange={handleEnergyChange} />
+            <PriorityPill value={priority} onChange={handlePriorityChange} />
+            <EstimatePill value={estimate} onPress={handleEstimatePress} />
+            {!compact && (
+              <DeadlinePill value={deadline} onPress={handleDeadlinePress} />
             )}
-          </View>
-          <View style={styles.energySelectorWrapper}>
-            <EnergySelector value={energyLevel} onChange={handleEnergyChange} />
-          </View>
+          </ScrollView>
+
+          {/* Expanded time picker */}
+          {showTimePicker && (
+            <TimeQuickPick value={estimate} onChange={handleEstimateChange} />
+          )}
+
+          {/* Expanded deadline snapper */}
+          {showDeadlinePicker && !compact && (
+            <Animated.View
+              entering={FadeInDown.duration(200)}
+              exiting={FadeOutUp.duration(150)}
+              style={styles.deadlinePickerWrap}>
+              <DeadlineSnapper
+                onSelectDeadline={handleDeadlineSelect}
+                currentDeadline={deadline}
+              />
+              <View style={styles.deadlineActionsRow}>
+                <Pressable
+                  style={[styles.deadlinePlusBtn, showCustomDatePicker && styles.deadlinePlusBtnActive]}
+                  onPress={handleOpenCustomDate}>
+                  <Icon
+                    name={showCustomDatePicker ? 'close' : 'add'}
+                    size={16}
+                    color={showCustomDatePicker ? Colors.white : Colors.gray500}
+                  />
+                </Pressable>
+                {deadline != null && (
+                  <Pressable
+                    style={styles.deadlineClearBtn}
+                    onPress={() => {
+                      setDeadline(null);
+                      setShowDeadlinePicker(false);
+                      setShowCustomDatePicker(false);
+                    }}>
+                    <Icon name="close-circle" size={20} color={Colors.gray400} />
+                  </Pressable>
+                )}
+              </View>
+              {showCustomDatePicker && Platform.OS === 'ios' && (
+                <Animated.View entering={FadeInDown.duration(200)} style={styles.datePickerContainer}>
+                  <DateTimePicker
+                    value={tempDate}
+                    mode="datetime"
+                    display="spinner"
+                    onChange={handleCustomDateChange}
+                    minimumDate={new Date()}
+                    textColor={Colors.text}
+                    style={styles.datePicker}
+                  />
+                  <Pressable
+                    style={styles.datePickerDoneBtn}
+                    onPress={() => setShowCustomDatePicker(false)}>
+                    <Text style={styles.datePickerDoneText}>Done</Text>
+                  </Pressable>
+                </Animated.View>
+              )}
+              {showCustomDatePicker && Platform.OS === 'android' && (
+                <DateTimePicker
+                  value={tempDate}
+                  mode="datetime"
+                  display="default"
+                  onChange={handleCustomDateChange}
+                  minimumDate={new Date()}
+                />
+              )}
+            </Animated.View>
+          )}
         </Animated.View>
       )}
-      <EstimateSuggestion
-        taskTitle={value}
-        userEstimateMinutes={parsedEstimate}
-      />
-      {/* Feature 5: Smart Keyboard Toolbar */}
-      <SmartKeyboardToolbar
-        mode={activeField === 'estimate' ? 'estimate' : 'title'}
-        visible={!!activeField && value.trim().length > 0}
-        onInsertPriority={() => { }}
-        onInsertEnergy={(energy) => {
-          setEnergyLevel(energy);
-          setHasManuallySetEnergy(true);
-        }}
-        onAddTime={(minutes) => {
-          setEstimateText(String(minutes));
-        }}
-      />
     </Animated.View>
   );
 });
 
-const selectorStyles = StyleSheet.create({
-  container: {
-    paddingHorizontal: Spacing.lg,
-    paddingVertical: Spacing.sm,
-    backgroundColor: 'transparent',
-  },
-  label: {
-    ...Typography.caption,
-    color: Colors.gray600,
-    marginBottom: Spacing.xs,
-  },
-  buttons: {
-    flexDirection: 'row',
-    borderRadius: BorderRadius.pill,
-    overflow: 'hidden',
-    borderWidth: 1.5,
-    borderColor: Colors.surfaceDark,
-  },
-  button: {
-    flex: 1,
-    paddingVertical: 8,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: Colors.white,
-    borderRightWidth: 1,
-    borderRightColor: Colors.surfaceDark,
-  },
-  buttonSelected: {
-    backgroundColor: Colors.surfaceDark,
-  },
-  buttonText: {
-    ...Typography.caption,
-    color: Colors.surfaceDark,
-    fontWeight: '400',
-  },
-  buttonTextSelected: {
-    color: Colors.white,
-    fontWeight: '600',
-  },
-});
-
+// ── Styles ──────────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
-  container: {
+  inputRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#F2F2F7',
+    backgroundColor: Colors.white,
     borderRadius: BorderRadius.input,
     marginHorizontal: Spacing.lg,
     marginVertical: Spacing.sm,
-    paddingHorizontal: Spacing.lg,
-    height: 56,
+    paddingHorizontal: Spacing.md,
+    height: 52,
+    borderWidth: 1,
+    borderColor: Colors.gray200,
+  },
+  leadingIcon: {
+    marginRight: Spacing.sm,
   },
   input: {
     flex: 1,
@@ -233,45 +370,85 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: Colors.text,
   },
-  addButton: {
-    width: 38,
-    height: 38,
+  submitButton: {
+    width: 34,
+    height: 34,
     justifyContent: 'center',
     alignItems: 'center',
     backgroundColor: Colors.surfaceDark,
-    borderRadius: 10,
+    borderRadius: 17,
     marginLeft: Spacing.sm,
   },
-  addButtonText: {
-    color: Colors.white,
-    fontSize: 22,
-    fontWeight: '300',
-    lineHeight: 24,
-    marginTop: -2,
-  },
-  estimateRow: {
+  pillStrip: {
     flexDirection: 'row',
-    alignItems: 'center',
+    gap: 8,
     paddingHorizontal: Spacing.lg,
-    marginHorizontal: Spacing.lg,
-    backgroundColor: '#F2F2F7',
-    borderRadius: BorderRadius.button,
-    marginTop: Spacing.xs,
-    paddingVertical: Spacing.xs,
+    paddingTop: 4,
+    paddingBottom: Spacing.sm,
   },
-  estimateInput: {
-    flex: 1,
-    height: 36,
-    fontSize: 13,
-    color: Colors.textSecondary,
-  },
-  estimateParsed: {
-    fontSize: 11,
-    color: Colors.gray500,
-    marginLeft: Spacing.sm,
-  },
-  energySelectorWrapper: {
+  deadlinePickerWrap: {
     paddingHorizontal: Spacing.lg,
     paddingBottom: Spacing.sm,
+  },
+  deadlineActionsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingTop: Spacing.sm,
+  },
+  deadlinePlusBtn: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    borderWidth: 1,
+    borderColor: Colors.gray200,
+    backgroundColor: Colors.gray50,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  deadlinePlusBtnActive: {
+    backgroundColor: Colors.surfaceDark,
+    borderColor: Colors.surfaceDark,
+  },
+  deadlineClearBtn: {
+    padding: 4,
+  },
+  datePickerContainer: {
+    alignItems: 'center',
+    paddingTop: Spacing.sm,
+    paddingBottom: Spacing.sm,
+  },
+  datePicker: {
+    height: 180,
+  },
+  datePickerDoneBtn: {
+    paddingVertical: Spacing.sm,
+    paddingHorizontal: Spacing.xl,
+  },
+  datePickerDoneText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: Colors.surfaceDark,
+  },
+  drawer: {
+    backgroundColor: Colors.backgroundOffWhite,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    paddingTop: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -3 },
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
+    elevation: 8,
+  },
+  drawerHandleRow: {
+    alignItems: 'center',
+    paddingBottom: 4,
+  },
+  drawerHandle: {
+    width: 36,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: Colors.gray200,
   },
 });

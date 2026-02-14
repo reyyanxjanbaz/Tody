@@ -661,16 +661,6 @@ export function ProcessInboxScreen({ navigation }: Props) {
                 />
                 <Text style={styles.actionLabel}>Delete</Text>
               </Pressable>
-
-              {viewMode === 'swipe' && currentIndex < totalCount - 1 && (
-                <Pressable
-                  style={styles.actionBtn}
-                  onPress={handleNext}
-                  hitSlop={4}>
-                  <Icon name="chevron-forward-outline" size={22} color={Colors.textSecondary} />
-                  <Text style={styles.actionLabel}>Next</Text>
-                </Pressable>
-              )}
             </>
           ) : (
             <>

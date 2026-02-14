@@ -237,10 +237,10 @@ export const FocusMode = memo(function FocusMode({
                         )}
 
                         {/* Complete button */}
-                <AnimatedPressable
-                    onPress={handleComplete}
-                    hapticStyle="success"
-                    pressScale={0.95}>
+                        <AnimatedPressable
+                            onPress={handleComplete}
+                            hapticStyle="success"
+                            pressScale={0.95}>
                             <View style={styles.completeButton}>
                                 <Icon
                                     name="checkmark-circle-outline"

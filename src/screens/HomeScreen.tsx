@@ -18,7 +18,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/Ionicons';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useTasks } from '../context/TaskContext';
-import { TaskInput } from '../components/TaskInput';
+import { TaskInput, TaskInputParams } from '../components/TaskInput';
 import { TaskItem } from '../components/TaskItem';
 import { EnergyFilter } from '../components/EnergyFilter';
 import { SectionHeader } from '../components/SectionHeader';
@@ -26,7 +26,7 @@ import { EmptyState } from '../components/EmptyState';
 import { QuickCaptureFAB } from '../components/QuickCaptureFAB';
 import { InboxBadge } from '../components/InboxBadge';
 import { TaskPreviewOverlay } from '../components/TaskPreviewOverlay';
-import { BatchModeBar, BatchCheckbox } from '../components/BatchMode';
+import { BatchModeBar } from '../components/BatchMode';
 import { ZeroStateOnboarding } from '../components/ZeroStateOnboarding';
 import { FocusMode } from '../components/FocusMode';
 import { TodayLine } from '../components/TodayLine';
@@ -222,10 +222,12 @@ export function HomeScreen({ navigation }: Props) {
 
     // ── Handlers ───────────────────────────────────────────────────────────────
     const handleAddTask = useCallback(
-        (text: string, estimatedMinutes?: number, energyLevel?: EnergyLevel) => {
+        (text: string, params?: TaskInputParams) => {
             addTask(text, {
-                ...(estimatedMinutes ? { estimatedMinutes } : {}),
-                energyLevel: energyLevel ?? 'medium',
+                energyLevel: params?.energyLevel ?? 'medium',
+                ...(params?.priority ? { priority: params.priority } : {}),
+                ...(params?.estimatedMinutes ? { estimatedMinutes: params.estimatedMinutes } : {}),
+                ...(params?.deadline != null ? { deadline: params.deadline } : {}),
             });
         },
         [addTask],
@@ -368,12 +370,12 @@ export function HomeScreen({ navigation }: Props) {
     ]);
 
     const handleSubtaskSubmit = useCallback(
-        (text: string, estimatedMinutes?: number) => {
+        (text: string, params?: TaskInputParams) => {
             if (!subtaskParentId) return;
             addSubtask(
                 subtaskParentId,
                 text,
-                estimatedMinutes ? { estimatedMinutes } : undefined,
+                params?.estimatedMinutes ? { estimatedMinutes: params.estimatedMinutes } : undefined,
             );
             setShowSubtaskInput(false);
             setSubtaskParentId(null);
@@ -441,12 +443,6 @@ export function HomeScreen({ navigation }: Props) {
 
             return (
                 <View style={styles.taskRow}>
-                    {isBatchMode && (
-                        <BatchCheckbox
-                            selected={selectedTaskIds.has(task.id)}
-                            onToggle={() => toggleBatchSelection(task.id)}
-                        />
-                    )}
                     <View style={styles.flex1}>
                         <TaskItem
                             task={task}
@@ -455,16 +451,21 @@ export function HomeScreen({ navigation }: Props) {
                                     ? () => toggleBatchSelection(task.id)
                                     : handleTaskPress
                             }
-                            onComplete={handleCompleteWithLockCheck}
+                            onComplete={
+                                isBatchMode
+                                    ? () => toggleBatchSelection(task.id)
+                                    : handleCompleteWithLockCheck
+                            }
                             onDefer={deferTask}
                             onRevive={handleRevive}
                             onStart={handleStartTask}
                             onCompleteTimed={handleCompleteTimedTask}
-                            isLocked={locked}
+                            isLocked={isBatchMode ? false : locked}
                             isLastChild={isLastChild}
                             onLongPress={isBatchMode ? undefined : handleLongPress}
                             onAddSubtask={handleAddSubtaskViaSwipe}
                             childHighlight={shouldHighlight}
+                            checkedOverride={isBatchMode ? selectedTaskIds.has(task.id) : undefined}
                         />
                     </View>
                 </View>
@@ -870,6 +871,7 @@ export function HomeScreen({ navigation }: Props) {
                             onSubmit={handleSubtaskSubmit}
                             placeholder="Subtask title..."
                             autoFocus
+                            compact
                         />
                         <Pressable
                             style={styles.modalCancelButton}

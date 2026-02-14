@@ -22,6 +22,7 @@ import {
   Text,
   StyleSheet,
   Alert,
+  Dimensions,
 } from 'react-native';
 import Animated, {
   useSharedValue,
@@ -68,6 +69,7 @@ interface TaskItemProps {
   onLongPress?: (task: Task) => void;
   onAddSubtask?: (task: Task) => void;
   childHighlight?: boolean;
+  checkedOverride?: boolean;
 }
 
 // ── Constants ───────────────────────────────────────────────────────────────
@@ -78,6 +80,25 @@ const PRIORITY_COLORS: Record<Priority, string> = {
   low: Colors.gray200,
   none: 'transparent',
 };
+
+// ── Dashed Line ─────────────────────────────────────────────────────────────
+
+const DASH_WIDTH = 4;
+const DASH_GAP = 3;
+const DASH_HEIGHT = 1;
+const SCREEN_WIDTH = Dimensions.get('window').width;
+const SEPARATOR_INSET = 24;
+const DASH_COUNT = Math.ceil((SCREEN_WIDTH - SEPARATOR_INSET * 2) / (DASH_WIDTH + DASH_GAP));
+
+const DashedSeparator = memo(function DashedSeparator() {
+  return (
+    <View style={styles.dashedSeparator}>
+      {Array.from({ length: DASH_COUNT }, (_, i) => (
+        <View key={i} style={styles.dash} />
+      ))}
+    </View>
+  );
+});
 
 // ── Component ───────────────────────────────────────────────────────────────
 
@@ -94,6 +115,7 @@ export const TaskItem = memo(function TaskItem({
   onLongPress,
   onAddSubtask,
   childHighlight = false,
+  checkedOverride,
 }: TaskItemProps) {
   // ── Shared values ─────────────────────────────────────────────────────
   const translateX = useSharedValue(0);
@@ -283,14 +305,14 @@ export const TaskItem = memo(function TaskItem({
   const leftActionStyle = useAnimatedStyle(() => {
     const o = interpolate(
       translateX.value,
-      [0, SWIPE_THRESHOLD],
+      [0, SWIPE_THRESHOLD * 0.6],
       [0, 1],
       Extrapolation.CLAMP,
     );
     const s = interpolate(
       translateX.value,
       [0, SWIPE_THRESHOLD],
-      [0.5, 1],
+      [0.8, 1],
       Extrapolation.CLAMP,
     );
     return { opacity: o, transform: [{ scale: s }] };
@@ -312,6 +334,16 @@ export const TaskItem = memo(function TaskItem({
     return { opacity: o, transform: [{ scale: s }] };
   });
 
+  const leftActionBgAnimatedStyle = useAnimatedStyle(() => ({
+    opacity: translateX.value > 0 ? 1 : 0,
+    zIndex: translateX.value > 0 ? 1 : 0,
+  }));
+
+  const rightActionBgAnimatedStyle = useAnimatedStyle(() => ({
+    opacity: translateX.value < 0 ? 1 : 0,
+    zIndex: translateX.value < 0 ? 1 : 0,
+  }));
+
   // ── Labels ────────────────────────────────────────────────────────────
   const leftLabel = !task.startedAt && !task.isCompleted && onStart ? 'START' : 'DEFER';
   const rightLabel = isOverdue && onRevive ? 'REVIVE' : isInProgress ? 'COMPLETE' : 'DONE';
@@ -323,123 +355,127 @@ export const TaskItem = memo(function TaskItem({
       entering={FadeIn.duration(250)}
       exiting={FadeOut.duration(200)}
       layout={LinearTransition.duration(250)}
-      style={[styles.outerContainer, { opacity }]}
+      style={styles.outerContainer}
     >
-      {/* Left action background (revealed on swipe right) */}
-      <View style={styles.leftActionBg}>
-        <Animated.Text style={[styles.swipeActionText, leftActionStyle]}>
-          {leftLabel}
-        </Animated.Text>
-      </View>
-
-      {/* Right action background (revealed on swipe left) */}
-      <View style={styles.rightActionBg}>
-        <Animated.Text style={[styles.swipeActionText, rightActionStyle]}>
-          {rightLabel}
-        </Animated.Text>
-      </View>
-
-      {/* Main row */}
-      <GestureDetector gesture={composed}>
-        <Animated.View style={[styles.container, rowAnimatedStyle]}>
-          <View style={[styles.innerContainer, { paddingLeft: indentation }]}>
-            {/* Connector lines for subtasks */}
-            {task.depth > 0 && (
-              <View
-                style={[
-                  styles.connectorVertical,
-                  {
-                    left: indentation - 8,
-                    height: isLastChild ? '50%' : '100%',
-                    top: 0,
-                  },
-                ]}
-              />
-            )}
-            {task.depth > 0 && (
-              <View
-                style={[styles.connectorHorizontal, { left: indentation - 8 }]}
-              />
-            )}
-
-            {/* Priority indicator bar */}
-            <View
-              style={[
-                styles.priorityBar,
-                { backgroundColor: PRIORITY_COLORS[task.priority] },
-              ]}
-            />
-
-            {/* Lock icon */}
-            {isLocked && (
-              <View style={styles.lockIcon}>
-                <Text style={styles.lockIconText}>🔒</Text>
-              </View>
-            )}
-
-            {/* Animated Checkbox */}
-            <View style={styles.checkboxContainer}>
-              <AnimatedCheckbox
-                checked={task.isCompleted}
-                locked={isLocked}
-                onToggle={handleCheckboxToggle}
-                size={18}
-              />
-            </View>
-
-            {/* Content */}
-            <View style={styles.content}>
-              <Text
-                style={[
-                  styles.title,
-                  energyStyle,
-                  task.isCompleted && styles.titleCompleted,
-                  hasChildren && styles.titleParent,
-                ]}
-                numberOfLines={1}
-              >
-                {task.title}
-              </Text>
-              {task.description ? (
-                <Text style={styles.description} numberOfLines={1}>
-                  {task.description}
-                </Text>
-              ) : null}
-              {isInProgress && task.startedAt ? (
-                <Text style={styles.timingText}>
-                  ● Started {formatMinutes(getElapsedMinutes(task.startedAt))} ago
-                  {task.estimatedMinutes ? ` · est. ${formatMinutes(task.estimatedMinutes)}` : ''}
-                </Text>
-              ) : task.isCompleted && task.actualMinutes != null && task.actualMinutes > 0 ? (
-                <Text style={styles.timingText}>
-                  Took {formatMinutes(task.actualMinutes)}
-                  {task.estimatedMinutes ? ` · est. ${formatMinutes(task.estimatedMinutes)}` : ''}
-                </Text>
-              ) : task.estimatedMinutes ? (
-                <Text style={styles.timingText}>
-                  est. {formatMinutes(task.estimatedMinutes)}
-                </Text>
-              ) : null}
-            </View>
-
-            {/* Deadline / Status */}
-            {task.isCompleted && task.completedAt ? (
-              <Text style={styles.completedTag}>
-                {formatCompletedDate(task.completedAt)}
-              </Text>
-            ) : isOverdue && overdueLabel ? (
-              <Text style={styles.overdueTagGentle}>{overdueLabel}</Text>
-            ) : task.deadline ? (
-              <Text style={styles.deadlineTag}>{formatDeadline(task.deadline)}</Text>
-            ) : null}
-
-            {/* Defer count */}
-            {task.deferCount > 0 && !task.isCompleted ? (
-              <Text style={styles.deferBadge}>{task.deferCount}×</Text>
-            ) : null}
-          </View>
+      <View style={{ opacity }}>
+        {/* Left action background (revealed on swipe right) */}
+        <Animated.View style={[styles.leftActionBg, leftActionBgAnimatedStyle]}>
+          <Animated.Text style={[styles.swipeActionText, leftActionStyle]}>
+            {leftLabel}
+          </Animated.Text>
         </Animated.View>
-      </GestureDetector>
+
+        {/* Right action background (revealed on swipe left) */}
+        <Animated.View style={[styles.rightActionBg, rightActionBgAnimatedStyle]}>
+          <Animated.Text style={[styles.swipeActionText, rightActionStyle]}>
+            {rightLabel}
+          </Animated.Text>
+        </Animated.View>
+
+        {/* Main row */}
+        <GestureDetector gesture={composed}>
+          <Animated.View style={[styles.container, rowAnimatedStyle]}>
+            <View style={[styles.innerContainer, { paddingLeft: indentation }]}>
+              {/* Connector lines for subtasks */}
+              {task.depth > 0 && (
+                <View
+                  style={[
+                    styles.connectorVertical,
+                    {
+                      left: indentation - 8,
+                      height: isLastChild ? '50%' : '100%',
+                      top: 0,
+                    },
+                  ]}
+                />
+              )}
+              {task.depth > 0 && (
+                <View
+                  style={[styles.connectorHorizontal, { left: indentation - 8 }]}
+                />
+              )}
+
+              {/* Priority indicator bar */}
+              <View
+                style={[
+                  styles.priorityBar,
+                  { backgroundColor: PRIORITY_COLORS[task.priority] },
+                ]}
+              />
+
+              {/* Lock icon */}
+              {isLocked && (
+                <View style={styles.lockIcon}>
+                  <Text style={styles.lockIconText}>🔒</Text>
+                </View>
+              )}
+
+              {/* Animated Checkbox */}
+              <View style={styles.checkboxContainer}>
+                <AnimatedCheckbox
+                  checked={checkedOverride !== undefined ? checkedOverride : task.isCompleted}
+                  locked={isLocked}
+                  onToggle={handleCheckboxToggle}
+                  size={18}
+                />
+              </View>
+
+              {/* Content */}
+              <View style={styles.content}>
+                <Text
+                  style={[
+                    styles.title,
+                    energyStyle,
+                    task.isCompleted && styles.titleCompleted,
+                    hasChildren && styles.titleParent,
+                  ]}
+                  numberOfLines={1}
+                >
+                  {task.title}
+                </Text>
+                {task.description ? (
+                  <Text style={styles.description} numberOfLines={1}>
+                    {task.description}
+                  </Text>
+                ) : null}
+                {isInProgress && task.startedAt ? (
+                  <Text style={styles.timingText}>
+                    ● Started {formatMinutes(getElapsedMinutes(task.startedAt))} ago
+                    {task.estimatedMinutes ? ` · est. ${formatMinutes(task.estimatedMinutes)}` : ''}
+                  </Text>
+                ) : task.isCompleted && task.actualMinutes != null && task.actualMinutes > 0 ? (
+                  <Text style={styles.timingText}>
+                    Took {formatMinutes(task.actualMinutes)}
+                    {task.estimatedMinutes ? ` · est. ${formatMinutes(task.estimatedMinutes)}` : ''}
+                  </Text>
+                ) : task.estimatedMinutes ? (
+                  <Text style={styles.timingText}>
+                    est. {formatMinutes(task.estimatedMinutes)}
+                  </Text>
+                ) : null}
+              </View>
+
+              {/* Deadline / Status */}
+              {task.isCompleted && task.completedAt ? (
+                <Text style={styles.completedTag}>
+                  {formatCompletedDate(task.completedAt)}
+                </Text>
+              ) : isOverdue && overdueLabel ? (
+                <Text style={styles.overdueTagGentle}>{overdueLabel}</Text>
+              ) : task.deadline ? (
+                <Text style={styles.deadlineTag}>{formatDeadline(task.deadline)}</Text>
+              ) : null}
+
+              {/* Defer count */}
+              {task.deferCount > 0 && !task.isCompleted ? (
+                <Text style={styles.deferBadge}>{task.deferCount}×</Text>
+              ) : null}
+            </View>
+          </Animated.View>
+        </GestureDetector>
+
+        <DashedSeparator />
+      </View>
     </Animated.View>
   );
 });
@@ -451,13 +487,24 @@ const styles = StyleSheet.create({
     position: 'relative',
     overflow: 'visible',
     backgroundColor: Colors.white,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: 'rgba(0,0,0,0.06)',
+  },
+  dashedSeparator: {
+    flexDirection: 'row',
+    marginHorizontal: SEPARATOR_INSET,
+    height: DASH_HEIGHT,
+    alignItems: 'center',
+    overflow: 'hidden',
+  },
+  dash: {
+    width: DASH_WIDTH,
+    height: DASH_HEIGHT,
+    backgroundColor: 'rgba(0,0,0,0.12)',
+    marginRight: DASH_GAP,
+    borderRadius: 0.5,
   },
   container: {
     backgroundColor: Colors.white,
-    zIndex: 2,
-    overflow: 'hidden',
+    zIndex: 1,
   },
   innerContainer: {
     flexDirection: 'row',
@@ -473,7 +520,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'flex-start',
     paddingLeft: 24,
-    zIndex: 1,
+    zIndex: 0,
   },
   rightActionBg: {
     ...StyleSheet.absoluteFillObject,
@@ -481,7 +528,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'flex-end',
     paddingRight: 24,
-    zIndex: 1,
+    zIndex: 0,
   },
   swipeActionText: {
     color: Colors.white,
@@ -549,14 +596,14 @@ const styles = StyleSheet.create({
   connectorVertical: {
     position: 'absolute',
     width: 1,
-    backgroundColor: '#E0E0E0',
+    backgroundColor: '#D0D0D0',
   },
   connectorHorizontal: {
     position: 'absolute',
     width: 8,
     height: 1,
-    backgroundColor: '#E0E0E0',
-    top: '50%',
+    backgroundColor: '#D0D0D0',
+    opacity: 0.5,
   },
   lockIcon: {
     width: 12,
