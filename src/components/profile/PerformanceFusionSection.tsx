@@ -155,7 +155,7 @@ export const PerformanceFusionSection = memo(function PerformanceFusionSection({
               <Text style={styles.barValue}>{formatMinutes(realityStats.totalEstimatedMinutes)}</Text>
             </View>
             <View style={styles.barTrack}>
-              <View style={[styles.barFillEstimated, { width: estimatedWidth }]} />
+              <View style={[styles.barFillEstimated, { width: estimatedWidth as any }]} />
             </View>
           </View>
 
@@ -165,7 +165,7 @@ export const PerformanceFusionSection = memo(function PerformanceFusionSection({
               <Text style={styles.barValue}>{formatMinutes(realityStats.totalActualMinutes)}</Text>
             </View>
             <View style={styles.barTrack}>
-              <View style={[styles.barFillActual, { width: actualWidth }]} />
+              <View style={[styles.barFillActual, { width: actualWidth as any }]} />
             </View>
           </View>
 

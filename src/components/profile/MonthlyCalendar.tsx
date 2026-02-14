@@ -20,7 +20,6 @@ import { Task } from '../../types';
 import { Spacing, Typography, BorderRadius, FontFamily, type ThemeColors } from '../../utils/colors';
 import { useTheme } from '../../context/ThemeContext';
 import { haptic } from '../../utils/haptics';
-import { useTheme } from '../../context/ThemeContext';
 
 const MONTH_NAMES = [
   'January', 'February', 'March', 'April', 'May', 'June',
@@ -80,8 +79,6 @@ export const MonthlyCalendar = memo(function MonthlyCalendar({
     setMonth(today.getMonth());
   }, [today]);
 
-  const { colors, isDark } = useTheme();
-
   // Build grid cells: offset blanks + day statuses
   const cells: (DayTaskStatus | null)[] = useMemo(() => {
     const blanks: null[] = Array(firstDayOffset).fill(null);
@@ -102,7 +99,7 @@ export const MonthlyCalendar = memo(function MonthlyCalendar({
   return (
     <Animated.View
       entering={FadeInDown.delay(280).duration(350)}
-      style={[styles.container, { backgroundColor: colors.card }]}>
+      style={[styles.container, { backgroundColor: colors.surface }]}>
       {/* Month Navigation */}
       <View style={styles.navRow}>
         <Pressable onPress={handlePrev} hitSlop={12} style={styles.navArrow}>
@@ -113,8 +110,8 @@ export const MonthlyCalendar = memo(function MonthlyCalendar({
             {MONTH_NAMES[month]} {year}
           </Text>
           {!isCurrentMonth && (
-            <Pressable onPress={handleToday} style={[styles.todayPill, { backgroundColor: isDark ? '#F5F5F7' : Colors.surfaceDark }]}>
-              <Text style={[styles.todayPillText, { color: isDark ? '#000' : Colors.white }]}>Today</Text>
+            <Pressable onPress={handleToday} style={[styles.todayPill, { backgroundColor: isDark ? '#F5F5F7' : colors.surfaceDark }]}>
+              <Text style={[styles.todayPillText, { color: isDark ? '#000' : colors.white }]}>Today</Text>
             </Pressable>
           )}
         </View>

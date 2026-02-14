@@ -24,10 +24,10 @@ export const TaskContextMenu = memo(function TaskContextMenu({
   onDelete,
   canAddSubtask,
 }: TaskContextMenuProps) {
-  const handleAddSubtask = useCallback(() => {
   const { colors, shadows, isDark } = useTheme();
   const styles = React.useMemo(() => createStyles(colors), [colors]);
 
+  const handleAddSubtask = useCallback(() => {
     onClose();
     onAddSubtask();
   }, [onClose, onAddSubtask]);

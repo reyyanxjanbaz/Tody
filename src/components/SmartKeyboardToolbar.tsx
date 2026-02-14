@@ -51,13 +51,13 @@ export const SmartKeyboardToolbar = memo(function SmartKeyboardToolbar({
   onInsertNumberedList,
   onInsertLineBreak,
 }: SmartKeyboardToolbarProps) {
+  const { colors, shadows, isDark } = useTheme();
+  const styles = React.useMemo(() => createStyles(colors), [colors]);
+
   const buttons = useMemo((): ToolbarButton[] => {
     switch (mode) {
       case 'title':
         return [
-  const { colors, shadows, isDark } = useTheme();
-  const styles = React.useMemo(() => createStyles(colors), [colors]);
-
           { label: '!!! High', icon: 'flag', iconColor: '#EF4444', onPress: () => onInsertPriority?.('high') },
           { label: '!! Med', icon: 'flag-outline', iconColor: '#F59E0B', onPress: () => onInsertPriority?.('medium') },
           { label: '! Low', icon: 'flag-outline', iconColor: '#22C55E', onPress: () => onInsertPriority?.('low') },

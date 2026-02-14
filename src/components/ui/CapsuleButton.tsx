@@ -37,6 +37,8 @@ export const CapsuleButton = memo(function CapsuleButton({
     const scale = useSharedValue(1);
   const { colors, shadows, isDark } = useTheme();
   const styles = React.useMemo(() => createStyles(colors), [colors]);
+  const variantStyles = React.useMemo(() => getVariantStyles(colors), [colors]);
+  const variantLabelStyles = React.useMemo(() => getVariantLabelStyles(colors), [colors]);
 
 
     const handlePress = useCallback(() => {
@@ -143,7 +145,8 @@ const sizeLabelStyles = StyleSheet.create({
     },
 });
 
-const variantStyles = StyleSheet.create({
+function getVariantStyles(c: ThemeColors) {
+  return StyleSheet.create({
     primary: {
         backgroundColor: c.surfaceDark,
     },
@@ -157,9 +160,11 @@ const variantStyles = StyleSheet.create({
         shadowOpacity: 0,
         elevation: 0,
     },
-});
+  });
+}
 
-const variantLabelStyles = StyleSheet.create({
+function getVariantLabelStyles(c: ThemeColors) {
+  return StyleSheet.create({
     primary: {
         color: c.white,
     },
@@ -169,4 +174,5 @@ const variantLabelStyles = StyleSheet.create({
     ghost: {
         color: c.white,
     },
-});
+  });
+}

@@ -25,10 +25,10 @@ interface StatCardData {
 }
 
 export const StatsSection = memo(function StatsSection({ stats }: StatsSectionProps) {
-  const cards: StatCardData[] = [
   const { colors, shadows, isDark } = useTheme();
   const styles = React.useMemo(() => createStyles(colors), [colors]);
 
+  const cards: StatCardData[] = [
     {
       label: 'Completed',
       value: `${stats.totalCompleted}`,

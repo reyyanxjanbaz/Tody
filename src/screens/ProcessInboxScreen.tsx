@@ -754,13 +754,12 @@ const createStyles = (c: ThemeColors) => StyleSheet.create({
   },
   memoBox: {
     width: '100%',
-    borderWidth: 0,
-    borderColor: 'transparent',
     borderRadius: 14,
     paddingVertical: Spacing.xxl,
     paddingHorizontal: Spacing.xxl,
     backgroundColor: c.white,
-    borderWidth: StyleSheet.hairlineWidth, borderColor: c.border,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: c.border,
   },
   rawText: {
     fontSize: 20,
@@ -792,13 +791,12 @@ const createStyles = (c: ThemeColors) => StyleSheet.create({
     gap: GRID_GAP,
   },
   bentoCard: {
-    borderWidth: 0,
-    borderColor: 'transparent',
     borderRadius: BorderRadius.card,
     backgroundColor: c.white,
     padding: Spacing.lg,
     justifyContent: 'space-between',
-    borderWidth: StyleSheet.hairlineWidth, borderColor: c.border,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: c.border,
   },
   bentoCardSelected: {
     borderColor: c.surfaceDark,
