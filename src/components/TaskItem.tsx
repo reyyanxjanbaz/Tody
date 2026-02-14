@@ -404,32 +404,22 @@ export const TaskItem = memo(function TaskItem({
                       left: indentation - 8,
                       height: isLastChild ? '50%' : '100%',
                       top: 0,
-                      backgroundColor: isDark ? '#3A3A3C' : '#D0D0D0',
+                      backgroundColor: isDark ? '#48484A' : '#C7C7CC',
                     },
                   ]}
                 />
               )}
               {task.depth > 0 && (
                 <View
-                  style={[styles.connectorHorizontal, { left: indentation - 8, backgroundColor: isDark ? '#3A3A3C' : '#D0D0D0' }]}
+                  style={[
+                    styles.connectorHorizontal,
+                    {
+                      left: indentation - 8,
+                      backgroundColor: isDark ? '#48484A' : '#C7C7CC',
+                    },
+                  ]}
                 />
               )}
-
-              {/* Energy & Priority icons */}
-              <View style={styles.iconColumn}>
-                {PRIORITY_ICONS[task.priority] && (
-                  <Icon
-                    name={PRIORITY_ICONS[task.priority]!.name}
-                    size={12}
-                    color={isDark ? PRIORITY_ICONS[task.priority]!.darkColor : PRIORITY_ICONS[task.priority]!.color}
-                  />
-                )}
-                <Icon
-                  name={ENERGY_ICONS[task.energyLevel].name}
-                  size={12}
-                  color={isDark ? ENERGY_ICONS[task.energyLevel].darkColor : ENERGY_ICONS[task.energyLevel].color}
-                />
-              </View>
 
               {/* Priority indicator bar */}
               <View
@@ -510,6 +500,22 @@ export const TaskItem = memo(function TaskItem({
               {task.deferCount > 0 && !task.isCompleted ? (
                 <Text style={[styles.deferBadge, { color: colors.textTertiary }]}>{task.deferCount}×</Text>
               ) : null}
+
+              {/* Energy & Priority icons (right side) */}
+              <View style={styles.iconColumn}>
+                {PRIORITY_ICONS[task.priority] && (
+                  <Icon
+                    name={PRIORITY_ICONS[task.priority]!.name}
+                    size={12}
+                    color={isDark ? PRIORITY_ICONS[task.priority]!.darkColor : PRIORITY_ICONS[task.priority]!.color}
+                  />
+                )}
+                <Icon
+                  name={ENERGY_ICONS[task.energyLevel].name}
+                  size={12}
+                  color={isDark ? ENERGY_ICONS[task.energyLevel].darkColor : ENERGY_ICONS[task.energyLevel].color}
+                />
+              </View>
             </View>
           </Animated.View>
         </GestureDetector>
@@ -553,11 +559,11 @@ const styles = StyleSheet.create({
     minHeight: 56,
   },
   iconColumn: {
-    width: 18,
+    width: 22,
     alignItems: 'center',
     justifyContent: 'center',
     gap: 3,
-    marginRight: 6,
+    marginLeft: 8,
   },
   leftActionBg: {
     ...StyleSheet.absoluteFillObject,
@@ -640,13 +646,15 @@ const styles = StyleSheet.create({
   },
   connectorVertical: {
     position: 'absolute',
-    width: 1,
+    width: 1.5,
+    borderRadius: 0.75,
   },
   connectorHorizontal: {
     position: 'absolute',
-    width: 8,
-    height: 1,
-    opacity: 0.5,
+    width: 12,
+    height: 1.5,
+    borderRadius: 0.75,
+    top: '50%',
   },
   lockIcon: {
     width: 12,

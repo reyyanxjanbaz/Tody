@@ -174,6 +174,9 @@ export const FocusMode = memo(function FocusMode({
                 ))}
             </View>
 
+            {/* Spacer to push content down from top items */}
+            <View style={styles.topSpacer} />
+
             {/* Task card – keyed to force re-mount with animation */}
             <Animated.View
                 key={cardKey}
@@ -315,14 +318,15 @@ const styles = StyleSheet.create({
     container: {
         ...StyleSheet.absoluteFillObject,
         backgroundColor: Colors.surfaceDark,
-        justifyContent: 'center',
         alignItems: 'center',
         paddingHorizontal: 32,
         zIndex: 100,
     },
+    topSpacer: {
+        flex: 1,
+    },
     timeContainer: {
-        position: 'absolute',
-        top: 80,
+        marginTop: 80,
         alignSelf: 'center',
     },
     timeText: {
@@ -334,8 +338,7 @@ const styles = StyleSheet.create({
     progressDots: {
         flexDirection: 'row',
         gap: 8,
-        position: 'absolute',
-        top: 150,
+        marginTop: 16,
     },
     dot: {
         width: 8,
@@ -415,8 +418,7 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         alignItems: 'center',
         gap: 24,
-        position: 'absolute',
-        bottom: 120,
+        marginTop: 32,
     },
     navButton: {
         width: 44,
@@ -434,15 +436,17 @@ const styles = StyleSheet.create({
         color: 'rgba(255,255,255,0.5)',
     },
     exitButton: {
-        position: 'absolute',
-        bottom: 60,
         flexDirection: 'row',
         alignItems: 'center',
+        justifyContent: 'center',
         gap: 6,
         paddingVertical: 14,
         paddingHorizontal: 24,
         backgroundColor: 'rgba(255,255,255,0.08)',
         borderRadius: BorderRadius.pill,
+        marginTop: 20,
+        marginBottom: 60,
+        alignSelf: 'center',
     },
     exitText: {
         fontSize: 14,
