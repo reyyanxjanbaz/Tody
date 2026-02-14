@@ -785,7 +785,7 @@ export function HomeScreen({ navigation }: Props) {
                                 sortOption={activeSortOption}
                                 onSortPress={() => setShowSortDropdown(true)}
                             />
-                            <Text style={styles.focusHint}>swipe down focus mode</Text>
+                            <Text style={styles.focusHint}>Drag down for Focus Mode</Text>
                         </View>
                     }
                     ListEmptyComponent={ListEmpty}

@@ -35,6 +35,7 @@ interface ThemeContextValue {
   shadows: ThemeShadows;
   isDark: boolean;
   toggleTheme: () => void;
+  resetTheme: () => void;
   fontFamily: string;
 }
 
@@ -43,6 +44,7 @@ const ThemeContext = createContext<ThemeContextValue>({
   shadows: Shadows,
   isDark: false,
   toggleTheme: () => {},
+  resetTheme: () => {},
   fontFamily: FontFamily,
 });
 
@@ -52,12 +54,17 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const [isDark, setIsDark] = useState(false);
   const [loaded, setLoaded] = useState(false);
 
-  // Load persisted preference on mount
+  // Load persisted preference on mount; seed defaults for new users
   useEffect(() => {
     (async () => {
       const prefs = await getUserPreferences<UserPreferences>();
-      if (prefs?.darkMode) {
-        setIsDark(true);
+      if (prefs) {
+        if (prefs.darkMode) {
+          setIsDark(true);
+        }
+      } else {
+        // First launch – persist default preferences (light mode, etc.)
+        await saveUserPreferences(DEFAULT_PREFERENCES);
       }
       setLoaded(true);
     })();
@@ -71,15 +78,21 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     await saveUserPreferences({ ...(prefs ?? DEFAULT_PREFERENCES), darkMode: next });
   }, [isDark]);
 
+  // Reset to light mode defaults (called on logout so new users start fresh)
+  const resetTheme = useCallback(() => {
+    setIsDark(false);
+  }, []);
+
   const value = useMemo<ThemeContextValue>(
     () => ({
       colors: isDark ? DarkColors : LightColors,
       shadows: isDark ? DarkShadows : Shadows,
       isDark,
       toggleTheme,
+      resetTheme,
       fontFamily: FontFamily,
     }),
-    [isDark, toggleTheme],
+    [isDark, toggleTheme, resetTheme],
   );
 
   return (

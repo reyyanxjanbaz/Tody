@@ -5,9 +5,10 @@ import React, {
   useCallback,
   useEffect,
 } from 'react';
-import { AuthState, User } from '../types';
+import { AuthState, User, DEFAULT_PREFERENCES } from '../types';
 import { supabase } from '../lib/supabase';
-import { clearAll } from '../utils/storage';
+import { clearAll, saveUserPreferences } from '../utils/storage';
+import { useTheme } from './ThemeContext';
 
 // ── Actions ──────────────────────────────────────────────────────────────────
 
@@ -85,6 +86,7 @@ function toAppUser(supabaseUser: { id: string; email?: string }): User {
 // ── Provider ─────────────────────────────────────────────────────────────────
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
+  const { resetTheme } = useTheme();
   const [state, dispatch] = useReducer(authReducer, INITIAL);
 
   // Restore session on mount & listen for auth state changes
@@ -171,8 +173,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const logout = useCallback(async () => {
     await supabase.auth.signOut();
     await clearAll();
+    // Reset theme to light mode and seed defaults for next user
+    resetTheme();
+    await saveUserPreferences(DEFAULT_PREFERENCES);
     dispatch({ type: 'LOGOUT' });
-  }, []);
+  }, [resetTheme]);
 
   const clearErrorFn = useCallback(() => {
     dispatch({ type: 'CLEAR_ERROR' });
