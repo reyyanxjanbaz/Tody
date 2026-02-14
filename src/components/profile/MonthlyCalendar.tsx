@@ -17,7 +17,8 @@ import Icon from 'react-native-vector-icons/Ionicons';
 import { DayTaskStatus } from '../../types';
 import { getMonthCalendarData } from '../../utils/profileStats';
 import { Task } from '../../types';
-import { Colors, Spacing, Typography, BorderRadius, Shadows } from '../../utils/colors';
+import { Spacing, Typography, BorderRadius, FontFamily, type ThemeColors } from '../../utils/colors';
+import { useTheme } from '../../context/ThemeContext';
 import { haptic } from '../../utils/haptics';
 import { useTheme } from '../../context/ThemeContext';
 
@@ -36,6 +37,8 @@ export const MonthlyCalendar = memo(function MonthlyCalendar({
   tasks,
 }: MonthlyCalendarProps) {
   const today = new Date();
+  const { colors, shadows, isDark } = useTheme();
+  const styles = React.useMemo(() => createStyles(colors), [colors]);
   const [year, setYear] = useState(today.getFullYear());
   const [month, setMonth] = useState(today.getMonth());
 
@@ -188,14 +191,14 @@ export const MonthlyCalendar = memo(function MonthlyCalendar({
 
 const CELL_SIZE = 40;
 
-const styles = StyleSheet.create({
+const createStyles = (c: ThemeColors) => StyleSheet.create({
   container: {
     marginHorizontal: Spacing.xxl,
     marginBottom: Spacing.xl,
-    backgroundColor: Colors.surface,
+    backgroundColor: c.surface,
     borderRadius: BorderRadius.card,
     padding: Spacing.lg,
-    ...Shadows.subtle,
+    borderWidth: StyleSheet.hairlineWidth, borderColor: c.borderLight,
   },
   navRow: {
     flexDirection: 'row',
@@ -214,10 +217,11 @@ const styles = StyleSheet.create({
   monthTitle: {
     fontSize: 16,
     fontWeight: '600',
-    color: Colors.text,
+    color: c.text,
+    fontFamily: FontFamily,
   },
   todayPill: {
-    backgroundColor: Colors.surfaceDark,
+    backgroundColor: c.surfaceDark,
     paddingHorizontal: Spacing.sm,
     paddingVertical: 2,
     borderRadius: BorderRadius.pill,
@@ -225,7 +229,8 @@ const styles = StyleSheet.create({
   todayPillText: {
     fontSize: 11,
     fontWeight: '600',
-    color: Colors.white,
+    color: c.white,
+    fontFamily: FontFamily,
   },
   dowRow: {
     flexDirection: 'row',
@@ -239,7 +244,7 @@ const styles = StyleSheet.create({
   dowText: {
     ...Typography.small,
     fontWeight: '600',
-    color: Colors.textTertiary,
+    color: c.textTertiary,
   },
   weekRow: {
     flexDirection: 'row',
@@ -259,22 +264,23 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   todayCircle: {
-    backgroundColor: Colors.surfaceDark,
+    backgroundColor: c.surfaceDark,
   },
   dayNumber: {
     fontSize: 14,
     fontWeight: '500',
-    color: Colors.text,
+    color: c.text,
+    fontFamily: FontFamily,
   },
   todayNumber: {
-    color: Colors.white,
+    color: c.white,
     fontWeight: '700',
   },
   dotFilled: {
     width: 5,
     height: 5,
     borderRadius: 2.5,
-    backgroundColor: Colors.surfaceDark,
+    backgroundColor: c.surfaceDark,
     marginTop: 2,
   },
   dotOutline: {
@@ -282,7 +288,7 @@ const styles = StyleSheet.create({
     height: 5,
     borderRadius: 2.5,
     borderWidth: 1,
-    borderColor: Colors.gray500,
+    borderColor: c.gray500,
     marginTop: 2,
   },
   legendRow: {
@@ -292,7 +298,7 @@ const styles = StyleSheet.create({
     marginTop: Spacing.md,
     paddingTop: Spacing.sm,
     borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: Colors.border,
+    borderTopColor: c.border,
   },
   legendItem: {
     flexDirection: 'row',
@@ -301,6 +307,6 @@ const styles = StyleSheet.create({
   },
   legendText: {
     ...Typography.small,
-    color: Colors.textTertiary,
+    color: c.textTertiary,
   },
 });

@@ -54,6 +54,9 @@ export const CapsuleButton = memo(function CapsuleButton({
         .onFinalize((_e, success) => {
             'worklet';
             scale.value = withSpring(1, SPRING_SNAPPY);
+            if (success) {
+                import('react-native-reanimated').then(({ runOnJS: rjs }) => { });
+            }
         });
 
     // We use a simpler approach: Pressable with animated style
@@ -61,22 +64,10 @@ export const CapsuleButton = memo(function CapsuleButton({
         transform: [{ scale: scale.value }],
     }));
 
-    const variantStyleMap = {
-        primary: styles.variantPrimary,
-        secondary: styles.variantSecondary,
-        ghost: styles.variantGhost,
-    };
-
-    const variantLabelMap = {
-        primary: styles.variantLabelPrimary,
-        secondary: styles.variantLabelSecondary,
-        ghost: styles.variantLabelGhost,
-    };
-
     const containerStyle = [
         styles.base,
         sizeStyles[size],
-        variantStyleMap[variant],
+        variantStyles[variant],
         disabled && styles.disabled,
         style,
     ];
@@ -84,7 +75,7 @@ export const CapsuleButton = memo(function CapsuleButton({
     const labelStyle = [
         styles.label,
         sizeLabelStyles[size],
-        variantLabelMap[variant],
+        variantLabelStyles[variant],
         disabled && styles.disabledLabel,
         textStyle,
     ];
@@ -120,30 +111,6 @@ const createStyles = (c: ThemeColors) => StyleSheet.create({
     disabledLabel: {
         opacity: 0.6,
     },
-    // variant styles (need theme colors)
-    variantPrimary: {
-        backgroundColor: c.surfaceDark,
-    },
-    variantSecondary: {
-        backgroundColor: c.white,
-        borderWidth: 1.5,
-        borderColor: c.surfaceDark,
-    },
-    variantGhost: {
-        backgroundColor: c.surfaceGlass,
-        shadowOpacity: 0,
-        elevation: 0,
-    },
-    // variant label styles (need theme colors)
-    variantLabelPrimary: {
-        color: c.white,
-    },
-    variantLabelSecondary: {
-        color: c.surfaceDark,
-    },
-    variantLabelGhost: {
-        color: c.white,
-    },
 });
 
 const sizeStyles = StyleSheet.create({
@@ -173,5 +140,33 @@ const sizeLabelStyles = StyleSheet.create({
     large: {
         fontSize: 17,
     fontFamily: FontFamily,
+    },
+});
+
+const variantStyles = StyleSheet.create({
+    primary: {
+        backgroundColor: c.surfaceDark,
+    },
+    secondary: {
+        backgroundColor: c.white,
+        borderWidth: 1.5,
+        borderColor: c.surfaceDark,
+    },
+    ghost: {
+        backgroundColor: c.surfaceGlass,
+        shadowOpacity: 0,
+        elevation: 0,
+    },
+});
+
+const variantLabelStyles = StyleSheet.create({
+    primary: {
+        color: c.white,
+    },
+    secondary: {
+        color: c.surfaceDark,
+    },
+    ghost: {
+        color: c.white,
     },
 });

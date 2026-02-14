@@ -6,7 +6,8 @@ import Animated, {
   withSpring,
 } from 'react-native-reanimated';
 import Icon from 'react-native-vector-icons/Ionicons';
-import { Colors, Spacing } from '../utils/colors';
+import { Spacing, FontFamily, type ThemeColors } from '../utils/colors';
+import { useTheme } from '../context/ThemeContext';
 import { Category } from '../types';
 import { haptic } from '../utils/haptics';
 import { SPRING_SNAPPY } from '../utils/animations';
@@ -22,6 +23,8 @@ export const CategoryPill = memo(function CategoryPill({
   categories,
   onChange,
 }: CategoryPillProps) {
+  const { colors, shadows, isDark } = useTheme();
+  const styles = React.useMemo(() => createStyles(colors), [colors]);
   const [showDropdown, setShowDropdown] = useState(false);
   const scale = useSharedValue(1);
   const animStyle = useAnimatedStyle(() => ({
@@ -29,7 +32,7 @@ export const CategoryPill = memo(function CategoryPill({
   }));
 
   const current = categories.find(c => c.id === value);
-  const color = current?.color ?? Colors.gray400;
+  const color = current?.color ?? colors.gray400;
   const label = current?.name ?? 'Category';
   const icon = current?.icon ?? 'folder-outline';
 
@@ -85,7 +88,7 @@ export const CategoryPill = memo(function CategoryPill({
                   onPress={() => handleSelect(cat.id)}
                 >
                   <View style={[styles.dropdownDot, { backgroundColor: cat.color }]} />
-                  <Icon name={cat.icon} size={16} color={isSelected ? cat.color : Colors.gray500} />
+                  <Icon name={cat.icon} size={16} color={isSelected ? cat.color : colors.gray500} />
                   <Text style={[
                     styles.dropdownLabel,
                     isSelected && { color: cat.color, fontWeight: '700' },
@@ -105,7 +108,7 @@ export const CategoryPill = memo(function CategoryPill({
   );
 });
 
-const styles = StyleSheet.create({
+const createStyles = (c: ThemeColors) => StyleSheet.create({
   pill: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -123,6 +126,7 @@ const styles = StyleSheet.create({
   pillText: {
     fontSize: 12,
     fontWeight: '500',
+    fontFamily: FontFamily,
   },
   overlay: {
     flex: 1,
@@ -132,7 +136,7 @@ const styles = StyleSheet.create({
   },
   dropdown: {
     width: '72%',
-    backgroundColor: Colors.white,
+    backgroundColor: c.white,
     borderRadius: 16,
     paddingVertical: Spacing.md,
     paddingHorizontal: Spacing.sm,
@@ -145,11 +149,12 @@ const styles = StyleSheet.create({
   dropdownTitle: {
     fontSize: 13,
     fontWeight: '700',
-    color: Colors.gray400,
+    color: c.gray400,
     letterSpacing: 0.6,
     textTransform: 'uppercase',
     paddingHorizontal: Spacing.md,
     paddingBottom: Spacing.sm,
+    fontFamily: FontFamily,
   },
   dropdownItem: {
     flexDirection: 'row',
@@ -160,7 +165,7 @@ const styles = StyleSheet.create({
     borderRadius: 10,
   },
   dropdownItemActive: {
-    backgroundColor: Colors.gray50,
+    backgroundColor: c.gray50,
   },
   dropdownDot: {
     width: 8,
@@ -170,8 +175,9 @@ const styles = StyleSheet.create({
   dropdownLabel: {
     fontSize: 15,
     fontWeight: '500',
-    color: Colors.text,
+    color: c.text,
     flex: 1,
+    fontFamily: FontFamily,
   },
   checkmark: {
     marginLeft: 'auto',

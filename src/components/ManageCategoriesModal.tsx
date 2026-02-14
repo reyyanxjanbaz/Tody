@@ -10,7 +10,8 @@ import {
 } from 'react-native';
 import Animated, { FadeIn } from 'react-native-reanimated';
 import Icon from 'react-native-vector-icons/Ionicons';
-import { Colors, Spacing, Typography, BorderRadius, Shadows } from '../utils/colors';
+import { Spacing, Typography, BorderRadius, FontFamily, type ThemeColors } from '../utils/colors';
+import { useTheme } from '../context/ThemeContext';
 import { Category } from '../types';
 import { haptic } from '../utils/haptics';
 
@@ -33,6 +34,9 @@ export const ManageCategoriesModal = memo(function ManageCategoriesModal({
 }: ManageCategoriesModalProps) {
   // Sort for display (by order)
   const sorted = [...categories].sort((a, b) => a.order - b.order);
+  const { colors, shadows, isDark } = useTheme();
+  const styles = React.useMemo(() => createStyles(colors), [colors]);
+
   // Movable = exclude overview
   const movable = sorted.filter(c => c.id !== 'overview');
 
@@ -102,7 +106,7 @@ export const ManageCategoriesModal = memo(function ManageCategoriesModal({
 
           {/* Overview (non-editable) */}
           <View style={styles.row}>
-            <Icon name="grid-outline" size={18} color={Colors.gray400} />
+            <Icon name="grid-outline" size={18} color={colors.gray400} />
             <Text style={styles.catName}>Overview</Text>
             <Text style={styles.lockedBadge}>Locked</Text>
           </View>
@@ -122,7 +126,7 @@ export const ManageCategoriesModal = memo(function ManageCategoriesModal({
                   style={[styles.smallBtn, idx === 0 && styles.btnDisabled]}
                   disabled={idx === 0}
                 >
-                  <Icon name="chevron-up" size={16} color={idx === 0 ? Colors.gray200 : Colors.gray500} />
+                  <Icon name="chevron-up" size={16} color={idx === 0 ? colors.gray200 : colors.gray500} />
                 </Pressable>
 
                 {/* Move down */}
@@ -132,12 +136,12 @@ export const ManageCategoriesModal = memo(function ManageCategoriesModal({
                   style={[styles.smallBtn, idx === movable.length - 1 && styles.btnDisabled]}
                   disabled={idx === movable.length - 1}
                 >
-                  <Icon name="chevron-down" size={16} color={idx === movable.length - 1 ? Colors.gray200 : Colors.gray500} />
+                  <Icon name="chevron-down" size={16} color={idx === movable.length - 1 ? colors.gray200 : colors.gray500} />
                 </Pressable>
 
                 {/* Rename */}
                 <Pressable onPress={() => handleRename(cat)} hitSlop={6} style={styles.smallBtn}>
-                  <Icon name="pencil-outline" size={15} color={Colors.gray500} />
+                  <Icon name="pencil-outline" size={15} color={colors.gray500} />
                 </Pressable>
 
                 {/* Delete */}
@@ -158,7 +162,7 @@ export const ManageCategoriesModal = memo(function ManageCategoriesModal({
   );
 });
 
-const styles = StyleSheet.create({
+const createStyles = (c: ThemeColors) => StyleSheet.create({
   overlay: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.4)',
@@ -167,13 +171,12 @@ const styles = StyleSheet.create({
   },
   card: {
     width: '88%',
-    backgroundColor: Colors.white,
+    backgroundColor: c.white,
     borderRadius: BorderRadius.card,
     paddingVertical: Spacing.xxl,
     paddingHorizontal: Spacing.xl,
-    ...Shadows.floating,
     borderWidth: 1,
-    borderColor: 'rgba(0,0,0,0.10)',
+    borderColor: c.border,
   },
   title: {
     ...Typography.heading,
@@ -185,7 +188,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: Spacing.md,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: Colors.gray100,
+    borderBottomColor: c.gray100,
     gap: 6,
   },
   colorDot: {
@@ -197,17 +200,19 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 15,
     fontWeight: '500',
-    color: Colors.text,
+    color: c.text,
+    fontFamily: FontFamily,
   },
   lockedBadge: {
     fontSize: 11,
     fontWeight: '600',
-    color: Colors.gray400,
-    backgroundColor: Colors.gray100,
+    color: c.gray400,
+    backgroundColor: c.gray100,
     paddingHorizontal: 8,
     paddingVertical: 2,
     borderRadius: 6,
     overflow: 'hidden',
+    fontFamily: FontFamily,
   },
   rowActions: {
     flexDirection: 'row',
@@ -226,13 +231,13 @@ const styles = StyleSheet.create({
   doneBtn: {
     marginTop: Spacing.xl,
     paddingVertical: Spacing.md,
-    backgroundColor: Colors.surfaceDark,
+    backgroundColor: c.surfaceDark,
     borderRadius: BorderRadius.button,
     alignItems: 'center',
   },
   doneText: {
     ...Typography.body,
-    color: Colors.white,
+    color: c.white,
     fontWeight: '600',
   },
 });

@@ -20,7 +20,7 @@ import Animated, {
   runOnJS,
 } from 'react-native-reanimated';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
-import { Colors, Spacing, Typography, BorderRadius } from '../utils/colors';
+import { Spacing, Typography, BorderRadius, FontFamily, type ThemeColors } from '../utils/colors';
 import { useTheme } from '../context/ThemeContext';
 import { SPRING_SNAPPY, TIMING_FADE, PRESS_SCALE } from '../utils/animations';
 import { haptic } from '../utils/haptics';
@@ -80,10 +80,12 @@ interface DayCellProps {
   day: CalendarDay;
   isSelected: boolean;
   onSelect: (ts: number) => void;
-  themeColors: ReturnType<typeof useTheme>['colors'];
 }
 
-const DayCell = memo(function DayCell({ day, isSelected, onSelect, themeColors }: DayCellProps) {
+const DayCell = memo(function DayCell({ day, isSelected, onSelect }: DayCellProps) {
+  const { colors } = useTheme();
+  const styles = React.useMemo(() => createStyles(colors), [colors]);
+
   const scale = useSharedValue(1);
   const opacity = useSharedValue(1);
 
@@ -117,16 +119,15 @@ const DayCell = memo(function DayCell({ day, isSelected, onSelect, themeColors }
       <Animated.View
         style={[
           styles.dayCell,
-          isSelected && [styles.dayCellSelected, { backgroundColor: themeColors.calendarSelected }],
+          isSelected && styles.dayCellSelected,
           animatedStyle,
         ]}
       >
         <Text
           style={[
             styles.dayLabel,
-            { color: themeColors.textTertiary },
-            isSelected && { color: themeColors.calendarSelectedText },
-            day.isToday && !isSelected && { color: themeColors.textSecondary },
+            isSelected && styles.dayLabelSelected,
+            day.isToday && !isSelected && styles.dayLabelToday,
           ]}
         >
           {day.dayLabel}
@@ -134,14 +135,13 @@ const DayCell = memo(function DayCell({ day, isSelected, onSelect, themeColors }
         <Text
           style={[
             styles.dateNum,
-            { color: themeColors.text },
-            isSelected && { color: themeColors.calendarSelectedText, fontWeight: '700' },
-            day.isToday && !isSelected && { fontWeight: '700' },
+            isSelected && styles.dateNumSelected,
+            day.isToday && !isSelected && styles.dateNumToday,
           ]}
         >
           {day.dateNum}
         </Text>
-        {day.isToday && !isSelected && <View style={[styles.todayDot, { backgroundColor: themeColors.todayDot }]} />}
+        {day.isToday && !isSelected && <View style={styles.todayDot} />}
       </Animated.View>
     </GestureDetector>
   );
@@ -153,10 +153,12 @@ export const CalendarStrip = memo(function CalendarStrip({
   selectedDate,
   onDateChange,
 }: CalendarStripProps) {
+  const { colors, shadows, isDark } = useTheme();
+  const styles = React.useMemo(() => createStyles(colors), [colors]);
+
   const scrollRef = useRef<ScrollView>(null);
   const days = useMemo(() => generateDays(), []);
   const itemFullWidth = ITEM_WIDTH + ITEM_MARGIN * 2;
-  const { colors } = useTheme();
 
   // Scroll to today on mount
   useEffect(() => {
@@ -175,7 +177,7 @@ export const CalendarStrip = memo(function CalendarStrip({
   );
 
   return (
-    <View style={[styles.container, { backgroundColor: colors.background }]}>
+    <View style={styles.container}>
       <ScrollView
         ref={scrollRef}
         horizontal
@@ -188,7 +190,6 @@ export const CalendarStrip = memo(function CalendarStrip({
             day={day}
             isSelected={day.timestamp === selectedDate}
             onSelect={handleSelect}
-            themeColors={colors}
           />
         ))}
       </ScrollView>
@@ -198,7 +199,7 @@ export const CalendarStrip = memo(function CalendarStrip({
 
 // ── Styles ──────────────────────────────────────────────────────────────────
 
-const styles = StyleSheet.create({
+const createStyles = (c: ThemeColors) => StyleSheet.create({
   container: {
     paddingVertical: Spacing.sm,
   },
@@ -215,22 +216,40 @@ const styles = StyleSheet.create({
     backgroundColor: 'transparent',
   },
   dayCellSelected: {
-    // backgroundColor applied inline via themeColors
+    backgroundColor: c.text,
   },
   dayLabel: {
     fontSize: 11,
     fontWeight: '600',
     letterSpacing: 0.3,
+    color: c.textTertiary,
     marginBottom: Spacing.xs,
+    fontFamily: FontFamily,
+  },
+  dayLabelSelected: {
+    color: c.white,
+  },
+  dayLabelToday: {
+    color: c.textSecondary,
   },
   dateNum: {
     fontSize: 18,
     fontWeight: '600',
+    color: c.text,
+    fontFamily: FontFamily,
+  },
+  dateNumSelected: {
+    color: c.white,
+    fontWeight: '700',
+  },
+  dateNumToday: {
+    fontWeight: '700',
   },
   todayDot: {
     width: 4,
     height: 4,
     borderRadius: 2,
+    backgroundColor: c.text,
     marginTop: Spacing.xs,
   },
 });

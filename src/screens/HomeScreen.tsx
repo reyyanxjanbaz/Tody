@@ -35,14 +35,14 @@ import { TodayLine } from '../components/TodayLine';
 import { CalendarStrip } from '../components/CalendarStrip';
 import { AnimatedPressable } from '../components/ui';
 import { useUndo } from '../components/UndoToast';
-import { organizeTasks, searchTasks, smartSortComparator } from '../utils/taskIntelligence';
+import { organizeTasks, searchTasks } from '../utils/taskIntelligence';
 import { isFullyDecayed } from '../utils/decay';
 import {
     isTaskLocked,
     countDescendants,
     flattenTasksHierarchically,
 } from '../utils/dependencyChains';
-import { Colors, Spacing, Typography, Shadows, BorderRadius, type ThemeColors } from '../utils/colors';
+import { Spacing, Typography, BorderRadius, FontFamily, type ThemeColors } from '../utils/colors';
 import { useTheme } from '../context/ThemeContext';
 import { Task, RootStackParamList, Category, SortOption, Priority } from '../types';
 import { haptic } from '../utils/haptics';
@@ -74,8 +74,9 @@ type Props = {
 };
 
 export function HomeScreen({ navigation }: Props) {
+  const { colors, shadows, isDark } = useTheme();
+  const styles = React.useMemo(() => createStyles(colors), [colors]);
     const insets = useSafeAreaInsets();
-    const { colors, isDark } = useTheme();
     const {
         tasks,
         addTask,
@@ -197,8 +198,6 @@ export function HomeScreen({ navigation }: Props) {
     const PRIORITY_ORDER: Record<Priority, number> = { high: 0, medium: 1, low: 2, none: 3 };
     const getSortComparator = useCallback((option: SortOption) => {
         switch (option) {
-            case 'smart':
-                return smartSortComparator;
             case 'deadline-asc':
                 return (a: Task, b: Task) => (a.deadline ?? Infinity) - (b.deadline ?? Infinity);
             case 'deadline-desc':
@@ -602,7 +601,7 @@ export function HomeScreen({ navigation }: Props) {
                         : 'Create one or switch tab'
                 }
                 icon={activeCategory === 'overview' ? undefined : (activeCat?.icon as string) ?? 'folder-outline'}
-                iconColor={activeCat?.color ?? Colors.textTertiary}
+                iconColor={activeCat?.color ?? colors.textTertiary}
             />
         );
     }, [activeCount, activeCategory, categories, addTask]);
@@ -626,7 +625,7 @@ export function HomeScreen({ navigation }: Props) {
     // ── JSX ────────────────────────────────────────────────────────────────────
 
     return (
-        <View style={[styles.container, { backgroundColor: colors.background, paddingTop: insets.top }]}>
+        <View style={[styles.container, { paddingTop: insets.top }]}>
             {/* ── Header ──────────────────────────────────────────────────────── */}
             {isSearching ? (
                 <Animated.View
@@ -635,9 +634,9 @@ export function HomeScreen({ navigation }: Props) {
                     style={styles.searchHeader}>
                     <TextInput
                         ref={searchInputRef}
-                        style={[styles.searchInput, { backgroundColor: colors.inputBackground, color: colors.text }]}
+                        style={styles.searchInput}
                         placeholder="Search tasks..."
-                        placeholderTextColor={colors.textTertiary}
+                        placeholderTextColor={colors.gray400}
                         value={searchQuery}
                         onChangeText={setSearchQuery}
                         autoCorrect={false}
@@ -645,7 +644,7 @@ export function HomeScreen({ navigation }: Props) {
                         returnKeyType="search"
                     />
                     <AnimatedPressable onPress={handleCloseSearch} hitSlop={8}>
-                        <Text style={[styles.cancelText, { color: colors.textSecondary }]}>Cancel</Text>
+                        <Text style={styles.cancelText}>Cancel</Text>
                     </AnimatedPressable>
                 </Animated.View>
             ) : (
@@ -653,9 +652,9 @@ export function HomeScreen({ navigation }: Props) {
                     entering={FadeIn.duration(200)}
                     style={styles.header}>
                     <View>
-                        <Text style={[styles.headerTitle, { color: colors.text }]}>Tody</Text>
+                        <Text style={styles.headerTitle}>Tody</Text>
                         {activeCount > 0 && (
-                            <Text style={[styles.headerCount, { color: colors.textTertiary }]}>
+                            <Text style={styles.headerCount}>
                                 {activeCount} task{activeCount !== 1 ? 's' : ''}
                             </Text>
                         )}
@@ -706,9 +705,9 @@ export function HomeScreen({ navigation }: Props) {
                         <RefreshControl
                             refreshing={false}
                             onRefresh={() => setIsFocusMode(true)}
-                            tintColor={colors.text}
+                            tintColor={colors.black}
                             title="Pull for Focus Mode"
-                            titleColor={colors.textTertiary}
+                            titleColor={colors.gray400}
                         />
                     }
                     ListHeaderComponent={
@@ -752,7 +751,7 @@ export function HomeScreen({ navigation }: Props) {
                     />
 
                     {/* Bottom Nav Bar */}
-                    <View style={[styles.bottomNavBar, { paddingBottom: insets.bottom, backgroundColor: colors.navBar, borderTopColor: colors.navBarBorder }]}>
+                    <View style={[styles.bottomNavBar, { paddingBottom: insets.bottom }]}>
                         <InboxBadge onPress={handleOpenInbox} />
 
                         <AnimatedPressable
@@ -760,7 +759,7 @@ export function HomeScreen({ navigation }: Props) {
                             hitSlop={8}
                             style={styles.navButton}>
                             <Icon name="archive-outline" size={24} color={colors.textTertiary} />
-                            <Text style={[styles.navButtonText, { color: colors.textTertiary }]}>Archive</Text>
+                            <Text style={styles.navButtonText}>Archive</Text>
                         </AnimatedPressable>
 
                         <AnimatedPressable
@@ -768,7 +767,7 @@ export function HomeScreen({ navigation }: Props) {
                             hitSlop={8}
                             style={styles.navButton}>
                             <Icon name="person-outline" size={24} color={colors.textTertiary} />
-                            <Text style={[styles.navButtonText, { color: colors.textTertiary }]}>Profile</Text>
+                            <Text style={styles.navButtonText}>Profile</Text>
                         </AnimatedPressable>
                     </View>
                 </KeyboardAvoidingView>
@@ -780,27 +779,27 @@ export function HomeScreen({ navigation }: Props) {
                 transparent
                 animationType="fade"
                 onRequestClose={handleCancelArchive}>
-                <View style={[styles.modalOverlay, { backgroundColor: colors.modalOverlay }]}>
+                <View style={styles.modalOverlay}>
                     <Animated.View
                         entering={FadeIn.duration(250)}
-                        style={[styles.modalCard, { backgroundColor: colors.modalBg, borderColor: colors.border }]}>
-                        <Text style={[styles.modalTitle, { color: colors.text }]}>
+                        style={styles.modalCard}>
+                        <Text style={styles.modalTitle}>
                             Move {fullyDecayedCount} task
                             {fullyDecayedCount !== 1 ? 's' : ''} to archive?
                         </Text>
-                        <Text style={[styles.modalSubtitle, { color: colors.textTertiary }]}>
+                        <Text style={styles.modalSubtitle}>
                             These tasks have been overdue for 7+ days.
                         </Text>
                         <View style={styles.modalActions}>
                             <Pressable
                                 style={styles.modalCancelButton}
                                 onPress={handleCancelArchive}>
-                                <Text style={[styles.modalCancelText, { color: colors.textTertiary }]}>Cancel</Text>
+                                <Text style={styles.modalCancelText}>Cancel</Text>
                             </Pressable>
                             <Pressable
-                                style={[styles.modalArchiveButton, { backgroundColor: colors.surfaceDark }]}
+                                style={styles.modalArchiveButton}
                                 onPress={handleConfirmArchive}>
-                                <Text style={[styles.modalArchiveText, { color: isDark ? colors.black : colors.white }]}>Archive</Text>
+                                <Text style={styles.modalArchiveText}>Archive</Text>
                             </Pressable>
                         </View>
                     </Animated.View>
@@ -837,11 +836,11 @@ export function HomeScreen({ navigation }: Props) {
                     setShowSubtaskInput(false);
                     setSubtaskParentId(null);
                 }}>
-                <View style={[styles.modalOverlay, { backgroundColor: colors.modalOverlay }]}>
+                <View style={styles.modalOverlay}>
                     <Animated.View
                         entering={FadeIn.duration(250)}
-                        style={[styles.modalCard, { backgroundColor: colors.modalBg, borderColor: colors.border }]}>
-                        <Text style={[styles.modalTitle, { color: colors.text }]}>Add subtask</Text>
+                        style={styles.modalCard}>
+                        <Text style={styles.modalTitle}>Add subtask</Text>
                         <TaskInput
                             onSubmit={handleSubtaskSubmit}
                             placeholder="Subtask title..."
@@ -854,7 +853,7 @@ export function HomeScreen({ navigation }: Props) {
                                 setShowSubtaskInput(false);
                                 setSubtaskParentId(null);
                             }}>
-                            <Text style={[styles.modalCancelText, { color: colors.textTertiary }]}>Cancel</Text>
+                            <Text style={styles.modalCancelText}>Cancel</Text>
                         </Pressable>
                     </Animated.View>
                 </View>
@@ -898,9 +897,10 @@ export function HomeScreen({ navigation }: Props) {
     );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (c: ThemeColors) => StyleSheet.create({
     container: {
         flex: 1,
+        backgroundColor: c.background,
     },
     header: {
         flexDirection: 'row',
@@ -914,11 +914,12 @@ const styles = StyleSheet.create({
         fontSize: 36,
         fontWeight: '800',
         letterSpacing: -1,
+        color: c.text,
+    fontFamily: FontFamily,
     },
     headerCount: {
-        fontSize: 11,
-        fontWeight: '400',
-        letterSpacing: 0.2,
+        ...Typography.small,
+        color: c.gray400,
         marginTop: 2,
     },
     headerActions: {
@@ -933,8 +934,9 @@ const styles = StyleSheet.create({
         paddingVertical: Spacing.xs,
     },
     headerButtonText: {
-        fontSize: 11,
+        ...Typography.small,
         fontWeight: '600',
+        color: c.textTertiary,
     },
     bottomControlsWrapper: {
         position: 'absolute',
@@ -947,7 +949,9 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         justifyContent: 'space-around',
         alignItems: 'center',
+        backgroundColor: c.white,
         borderTopWidth: StyleSheet.hairlineWidth,
+        borderTopColor: c.border,
         paddingTop: Spacing.sm,
         paddingHorizontal: Spacing.md,
     },
@@ -958,8 +962,9 @@ const styles = StyleSheet.create({
         paddingHorizontal: Spacing.sm,
     },
     navButtonText: {
-        fontSize: 11,
+        ...Typography.small,
         fontWeight: '600',
+        color: c.textTertiary,
     },
     topSearchButton: {
         padding: Spacing.sm,
@@ -978,12 +983,13 @@ const styles = StyleSheet.create({
         borderColor: 'transparent',
         borderRadius: BorderRadius.input,
         paddingHorizontal: Spacing.lg,
-        fontSize: 16,
-        fontWeight: '400',
+        backgroundColor: c.gray50,
+        ...Typography.body,
+        color: c.text,
     },
     cancelText: {
-        fontSize: 14,
-        fontWeight: '500',
+        ...Typography.link,
+        color: c.textSecondary,
     },
     listContent: {
         paddingBottom: 100,
@@ -996,7 +1002,7 @@ const styles = StyleSheet.create({
         flex: 1,
     },
     archiveButton: {
-        backgroundColor: Colors.surfaceDark,
+        backgroundColor: c.surfaceDark,
         paddingVertical: Spacing.md,
         paddingHorizontal: Spacing.lg,
         marginHorizontal: Spacing.lg,
@@ -1007,28 +1013,32 @@ const styles = StyleSheet.create({
     archiveButtonText: {
         fontSize: 13,
         fontWeight: '700',
-        color: Colors.white,
+        color: c.white,
+    fontFamily: FontFamily,
     },
     modalOverlay: {
         flex: 1,
+        backgroundColor: 'rgba(0,0,0,0.4)',
         justifyContent: 'center',
         alignItems: 'center',
     },
     modalCard: {
         width: '85%',
+        backgroundColor: c.white,
         borderRadius: BorderRadius.card,
         paddingVertical: Spacing.xxl,
         paddingHorizontal: Spacing.xxl,
         borderWidth: 1,
+        borderColor: c.border,
     },
     modalTitle: {
-        fontSize: 16,
-        fontWeight: '500',
+        ...Typography.bodyMedium,
+        color: c.text,
         textAlign: 'center',
     },
     modalSubtitle: {
-        fontSize: 13,
-        fontWeight: '400',
+        ...Typography.caption,
+        color: c.textTertiary,
         textAlign: 'center',
         marginTop: Spacing.sm,
     },
@@ -1043,16 +1053,17 @@ const styles = StyleSheet.create({
         paddingHorizontal: Spacing.xl,
     },
     modalCancelText: {
-        fontSize: 16,
-        fontWeight: '400',
+        ...Typography.body,
+        color: c.textTertiary,
     },
     modalArchiveButton: {
         paddingVertical: Spacing.md,
         paddingHorizontal: Spacing.xxl,
+        backgroundColor: c.surfaceDark,
         borderRadius: BorderRadius.button,
     },
     modalArchiveText: {
-        fontSize: 16,
-        fontWeight: '400',
+        ...Typography.body,
+        color: c.white,
     },
 });

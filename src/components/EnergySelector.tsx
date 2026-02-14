@@ -1,6 +1,7 @@
 import React from 'react';
 import { View, Text, Pressable, StyleSheet } from 'react-native';
-import { Colors, Spacing, Typography } from '../utils/colors';
+import { Spacing, Typography, FontFamily, type ThemeColors } from '../utils/colors';
+import { useTheme } from '../context/ThemeContext';
 import { EnergyLevel } from '../types';
 
 interface EnergySelectorProps {
@@ -9,10 +10,13 @@ interface EnergySelectorProps {
 }
 
 export const EnergySelector = ({ value, onChange }: EnergySelectorProps) => {
+  const { colors } = useTheme();
+  const styles = React.useMemo(() => createStyles(colors), [colors]);
+
   return (
-    <View style={selectorStyles.container}>
-      <Text style={selectorStyles.label}>Energy Required</Text>
-      <View style={selectorStyles.buttons}>
+    <View style={styles.container}>
+      <Text style={styles.label}>Energy Required</Text>
+      <View style={styles.buttons}>
         {(['high', 'medium', 'low'] as EnergyLevel[]).map((level) => {
           const isSelected = value === level;
           const label = level === 'high' ? 'High Focus' : level === 'medium' ? 'Medium' : 'Low Lift';
@@ -20,14 +24,14 @@ export const EnergySelector = ({ value, onChange }: EnergySelectorProps) => {
             <Pressable
               key={level}
               style={[
-                selectorStyles.button,
-                isSelected && selectorStyles.buttonSelected,
+                styles.button,
+                isSelected && styles.buttonSelected,
               ]}
               onPress={() => onChange(level)}>
               <Text
                 style={[
-                  selectorStyles.buttonText,
-                  isSelected && selectorStyles.buttonTextSelected,
+                  styles.buttonText,
+                  isSelected && styles.buttonTextSelected,
                 ]}>
                 {label}
               </Text>
@@ -39,16 +43,14 @@ export const EnergySelector = ({ value, onChange }: EnergySelectorProps) => {
   );
 };
 
-const selectorStyles = StyleSheet.create({
+const createStyles = (c: ThemeColors) => StyleSheet.create({
   container: {
     paddingVertical: Spacing.sm,
-    backgroundColor: Colors.white,
-    // borderBottomWidth: StyleSheet.hairlineWidth, // Removed border as it might be used in different contexts
-    // borderBottomColor: Colors.borderLight,
+    backgroundColor: c.white,
   },
   label: {
     ...Typography.caption,
-    color: Colors.gray600,
+    color: c.gray600,
     marginBottom: Spacing.xs,
   },
   buttons: {
@@ -56,27 +58,27 @@ const selectorStyles = StyleSheet.create({
     borderRadius: 2,
     overflow: 'hidden',
     borderWidth: 1,
-    borderColor: Colors.black,
+    borderColor: c.black,
   },
   button: {
     flex: 1,
     paddingVertical: 8,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: Colors.white,
+    backgroundColor: c.white,
     borderRightWidth: 1,
-    borderRightColor: Colors.black,
+    borderRightColor: c.black,
   },
   buttonSelected: {
-    backgroundColor: Colors.black,
+    backgroundColor: c.black,
   },
   buttonText: {
     ...Typography.caption,
-    color: Colors.black,
+    color: c.black,
     fontWeight: '400',
   },
   buttonTextSelected: {
-    color: Colors.white,
+    color: c.white,
     fontWeight: '600',
   },
 });

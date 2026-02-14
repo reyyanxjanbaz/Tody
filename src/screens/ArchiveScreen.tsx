@@ -14,15 +14,17 @@ import { useAuth } from '../context/AuthContext';
 import { TaskItem } from '../components/TaskItem';
 import { EmptyState } from '../components/EmptyState';
 import { SectionHeader } from '../components/SectionHeader';
-import { Colors, Spacing, Typography, Shadows, BorderRadius } from '../utils/colors';
-import { Task, RootStackParamList } from '../types';
+import { Spacing, Typography, BorderRadius, FontFamily, type ThemeColors } from '../utils/colors';
 import { useTheme } from '../context/ThemeContext';
+import { Task, RootStackParamList } from '../types';
 
 type Props = {
   navigation: NativeStackNavigationProp<RootStackParamList, 'Archive'>;
 };
 
 export function ArchiveScreen({ navigation }: Props) {
+  const { colors, shadows, isDark } = useTheme();
+  const styles = React.useMemo(() => createStyles(colors), [colors]);
   const insets = useSafeAreaInsets();
   const { tasks, archivedTasks, uncompleteTask } = useTasks();
   const { logout, user } = useAuth();
@@ -117,19 +119,17 @@ export function ArchiveScreen({ navigation }: Props) {
 
   const keyExtractor = useCallback((item: Task) => item.id, []);
 
-  const { colors, isDark } = useTheme();
-
   return (
-    <View style={[styles.container, { backgroundColor: colors.background, paddingTop: insets.top }]}>
+    <View style={[styles.container, { paddingTop: insets.top }]}>
       {/* Header */}
       <View style={styles.header}>
         <Pressable onPress={handleBack} hitSlop={12}>
-          <Text style={[styles.backText, { color: colors.textSecondary }]}>← Back</Text>
+          <Text style={styles.backText}>← Back</Text>
         </Pressable>
         <View style={styles.headerRight}>
-          <Text style={[styles.headerTitle, { color: colors.text }]}>Archive</Text>
+          <Text style={styles.headerTitle}>Archive</Text>
           {(totalCompleted > 0 || archivedTasks.length > 0) && (
-            <Text style={[styles.headerCount, { color: colors.textTertiary }]}>
+            <Text style={styles.headerCount}>
               {totalCompleted + archivedTasks.length} items
             </Text>
           )}
@@ -139,9 +139,9 @@ export function ArchiveScreen({ navigation }: Props) {
       {/* Search */}
       <View style={styles.searchContainer}>
         <TextInput
-          style={[styles.searchInput, { backgroundColor: colors.inputBackground, color: colors.text }]}
+          style={styles.searchInput}
           placeholder="Search archived tasks..."
-          placeholderTextColor={colors.textTertiary}
+          placeholderTextColor={colors.gray400}
           value={searchQuery}
           onChangeText={setSearchQuery}
           autoCorrect={false}
@@ -179,19 +179,19 @@ export function ArchiveScreen({ navigation }: Props) {
 
       {/* Footer: account info + sign out */}
       <View style={[styles.footer, { paddingBottom: insets.bottom + Spacing.md }]}>
-        <Text style={[styles.footerEmail, { color: colors.textTertiary }]}>{user?.email}</Text>
+        <Text style={styles.footerEmail}>{user?.email}</Text>
         <Pressable onPress={handleLogout} hitSlop={8}>
-          <Text style={[styles.signOutText, { color: colors.textSecondary }]}>Sign out</Text>
+          <Text style={styles.signOutText}>Sign out</Text>
         </Pressable>
       </View>
     </View>
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (c: ThemeColors) => StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.background,
+    backgroundColor: c.background,
   },
   header: {
     flexDirection: 'row',
@@ -203,7 +203,7 @@ const styles = StyleSheet.create({
   },
   backText: {
     ...Typography.link,
-    color: Colors.textSecondary,
+    color: c.textSecondary,
   },
   headerRight: {
     flex: 1,
@@ -216,7 +216,7 @@ const styles = StyleSheet.create({
   },
   headerCount: {
     ...Typography.small,
-    color: Colors.gray400,
+    color: c.gray400,
   },
   searchContainer: {
     paddingHorizontal: Spacing.xxl,
@@ -228,9 +228,9 @@ const styles = StyleSheet.create({
     borderColor: 'transparent',
     borderRadius: BorderRadius.input,
     paddingHorizontal: Spacing.lg,
-    backgroundColor: '#F2F2F7',
+    backgroundColor: c.gray50,
     ...Typography.body,
-    color: Colors.text,
+    color: c.text,
   },
   listContent: {
     paddingBottom: 20,
@@ -245,11 +245,11 @@ const styles = StyleSheet.create({
   },
   footerEmail: {
     ...Typography.small,
-    color: Colors.gray400,
+    color: c.gray400,
   },
   signOutText: {
     ...Typography.caption,
-    color: Colors.gray800,
+    color: c.gray800,
     fontWeight: '500',
   },
 });

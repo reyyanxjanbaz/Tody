@@ -18,7 +18,8 @@ import Animated, {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useAuth } from '../context/AuthContext';
-import { Colors, Spacing, Typography, BorderRadius } from '../utils/colors';
+import { Spacing, Typography, BorderRadius, FontFamily, type ThemeColors } from '../utils/colors';
+import { useTheme } from '../context/ThemeContext';
 import { Button } from '../components/Button';
 import { AnimatedPressable } from '../components/ui';
 import { haptic } from '../utils/haptics';
@@ -29,6 +30,8 @@ type Props = {
 };
 
 export function LoginScreen({ navigation }: Props) {
+  const { colors, shadows, isDark } = useTheme();
+  const styles = React.useMemo(() => createStyles(colors), [colors]);
   const insets = useSafeAreaInsets();
   const { login, error, isLoading, clearError } = useAuth();
   const [email, setEmail] = useState('');
@@ -97,7 +100,7 @@ export function LoginScreen({ navigation }: Props) {
             <TextInput
               style={styles.input}
               placeholder="Email"
-              placeholderTextColor={Colors.gray500}
+              placeholderTextColor={colors.gray500}
               value={email}
               onChangeText={setEmail}
               keyboardType="email-address"
@@ -112,7 +115,7 @@ export function LoginScreen({ navigation }: Props) {
             <TextInput
               style={styles.input}
               placeholder="Password"
-              placeholderTextColor={Colors.gray500}
+              placeholderTextColor={colors.gray500}
               value={password}
               onChangeText={setPassword}
               secureTextEntry
@@ -150,10 +153,10 @@ export function LoginScreen({ navigation }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (c: ThemeColors) => StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.background,
+    backgroundColor: c.background,
   },
   content: {
     flex: 1,
@@ -166,11 +169,12 @@ const styles = StyleSheet.create({
     fontSize: 40,
     fontWeight: '800',
     letterSpacing: -1,
-    color: Colors.text,
+    color: c.text,
+    fontFamily: FontFamily,
   },
   subtitle: {
     ...Typography.caption,
-    color: Colors.textTertiary,
+    color: c.textTertiary,
     marginTop: Spacing.xs,
   },
   form: {
@@ -178,13 +182,13 @@ const styles = StyleSheet.create({
   },
   errorContainer: {
     borderLeftWidth: 2,
-    borderLeftColor: Colors.gray800,
+    borderLeftColor: c.gray800,
     paddingLeft: Spacing.md,
     paddingVertical: Spacing.sm,
   },
   errorText: {
     ...Typography.caption,
-    color: Colors.gray800,
+    color: c.gray800,
   },
   input: {
     height: 56,
@@ -193,8 +197,8 @@ const styles = StyleSheet.create({
     borderRadius: BorderRadius.input,
     paddingHorizontal: Spacing.xl,
     ...Typography.body,
-    color: Colors.text,
-    backgroundColor: '#F2F2F7',
+    color: c.text,
+    backgroundColor: c.gray50,
   },
   button: {
     marginTop: Spacing.sm,
@@ -205,10 +209,10 @@ const styles = StyleSheet.create({
   },
   linkText: {
     ...Typography.caption,
-    color: Colors.textTertiary,
+    color: c.textTertiary,
   },
   linkTextBold: {
     fontWeight: '600',
-    color: Colors.text,
+    color: c.text,
   },
 });

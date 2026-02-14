@@ -34,10 +34,10 @@ import {
   saveUserPreferences,
   getUserPreferences,
 } from '../utils/storage';
-import { Colors, Spacing, Typography, BorderRadius, Shadows } from '../utils/colors';
+import { Spacing, Typography, BorderRadius, FontFamily, type ThemeColors } from '../utils/colors';
+import { useTheme } from '../context/ThemeContext';
 import { haptic } from '../utils/haptics';
 import { AnimatedPressable } from '../components/ui';
-import { useTheme } from '../context/ThemeContext';
 
 type Props = {
   navigation: NativeStackNavigationProp<RootStackParamList, 'Settings'>;
@@ -56,6 +56,8 @@ const TIME_FORMATS: UserPreferences['timeFormat'][] = ['12h', '24h'];
 const WEEK_STARTS: UserPreferences['weekStartsOn'][] = ['sunday', 'monday'];
 
 export function SettingsScreen({ navigation }: Props) {
+  const { colors, shadows, isDark, toggleTheme } = useTheme();
+  const styles = React.useMemo(() => createStyles(colors), [colors]);
   const insets = useSafeAreaInsets();
   const { logout } = useAuth();
 
@@ -162,16 +164,14 @@ export function SettingsScreen({ navigation }: Props) {
     updatePref('weekStartsOn', WEEK_STARTS[(idx + 1) % WEEK_STARTS.length]);
   }, [prefs.weekStartsOn, updatePref]);
 
-  const { colors, isDark, setDarkMode } = useTheme();
-
   return (
-    <View style={[styles.container, { backgroundColor: colors.background, paddingTop: insets.top }]}>
+    <View style={[styles.container, { paddingTop: insets.top }]}>
       {/* Header */}
       <View style={styles.header}>
         <Pressable onPress={handleBack} hitSlop={12}>
-          <Text style={[styles.backText, { color: colors.textSecondary }]}>← Profile</Text>
+          <Text style={styles.backText}>← Profile</Text>
         </Pressable>
-        <Text style={[styles.headerTitle, { color: colors.text }]}>Settings</Text>
+        <Text style={styles.headerTitle}>Settings</Text>
         <View style={styles.headerSpacer} />
       </View>
 
@@ -182,37 +182,37 @@ export function SettingsScreen({ navigation }: Props) {
 
         {/* ═══════ ACCOUNT SECTION ═══════════════════════════════════════════ */}
         <Animated.View entering={FadeInDown.duration(350)}>
-          <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>ACCOUNT</Text>
+          <Text style={styles.sectionTitle}>ACCOUNT</Text>
 
           {/* Change Password */}
-          <View style={[styles.card, { backgroundColor: colors.card }]}>
-            <Text style={[styles.cardTitle, { color: colors.text }]}>Change Password</Text>
+          <View style={styles.card}>
+            <Text style={styles.cardTitle}>Change Password</Text>
             <TextInput
-              style={[styles.input, { backgroundColor: colors.inputBackground, color: colors.text }]}
+              style={styles.input}
               placeholder="Current password"
-              placeholderTextColor={colors.textTertiary}
+              placeholderTextColor={colors.gray500}
               value={currentPw}
               onChangeText={setCurrentPw}
               secureTextEntry
               textContentType="password"
             />
             <TextInput
-              style={[styles.input, { backgroundColor: colors.inputBackground, color: colors.text }]}
+              style={styles.input}
               placeholder="New password"
-              placeholderTextColor={colors.textTertiary}
+              placeholderTextColor={colors.gray500}
               value={newPw}
               onChangeText={setNewPw}
               secureTextEntry
               textContentType="newPassword"
             />
             {pwMessage ? (
-              <Text style={[styles.pwMessage, { color: colors.textSecondary }]}>{pwMessage}</Text>
+              <Text style={styles.pwMessage}>{pwMessage}</Text>
             ) : null}
             <AnimatedPressable
               onPress={handleChangePassword}
               hapticStyle="light"
-              style={[styles.actionButton, { backgroundColor: isDark ? '#F5F5F7' : Colors.surfaceDark }]}>
-              <Text style={[styles.actionButtonText, { color: isDark ? '#000' : Colors.white }]}>Update Password</Text>
+              style={styles.actionButton}>
+              <Text style={styles.actionButtonText}>Update Password</Text>
             </AnimatedPressable>
           </View>
 
@@ -220,18 +220,18 @@ export function SettingsScreen({ navigation }: Props) {
           <AnimatedPressable
             onPress={handleLogout}
             hapticStyle="medium"
-            style={[styles.rowButton, { backgroundColor: colors.card }]}>
+            style={styles.rowButton}>
             <Icon name="log-out-outline" size={20} color={colors.text} />
-            <Text style={[styles.rowButtonText, { color: colors.text }]}>Log Out</Text>
+            <Text style={styles.rowButtonText}>Log Out</Text>
           </AnimatedPressable>
 
           {/* Delete Account */}
           <AnimatedPressable
             onPress={handleDeleteAccount}
             hapticStyle="heavy"
-            style={[styles.rowButton, styles.dangerRow, { backgroundColor: colors.card, borderColor: isDark ? '#333' : Colors.gray200 }]}>
-            <Icon name="trash-outline" size={20} color={isDark ? '#FF6B6B' : Colors.gray800} />
-            <Text style={[styles.rowButtonText, { color: isDark ? '#FF6B6B' : Colors.gray800 }]}>
+            style={[styles.rowButton, styles.dangerRow]}>
+            <Icon name="trash-outline" size={20} color={colors.gray800} />
+            <Text style={[styles.rowButtonText, styles.dangerText]}>
               Delete Account
             </Text>
           </AnimatedPressable>
@@ -239,49 +239,49 @@ export function SettingsScreen({ navigation }: Props) {
 
         {/* ═══════ PREFERENCES SECTION ═══════════════════════════════════════ */}
         <Animated.View entering={FadeInDown.delay(120).duration(350)}>
-          <Text style={[styles.sectionTitle, { marginTop: Spacing.xxxl, color: colors.textSecondary }]}>
+          <Text style={[styles.sectionTitle, { marginTop: Spacing.xxxl }]}>
             PREFERENCES
           </Text>
 
           {/* Dark Mode Toggle */}
-          <View style={[styles.preferenceRow, { backgroundColor: colors.card }]}>
+          <View style={styles.preferenceRow}>
             <View style={styles.prefLabel}>
               <Icon name="moon-outline" size={18} color={colors.textSecondary} />
-              <Text style={[styles.prefText, { color: colors.text }]}>Dark Mode</Text>
+              <Text style={styles.prefText}>Dark Mode</Text>
             </View>
             <Switch
               value={isDark}
-              onValueChange={v => { setDarkMode(v); updatePref('darkMode', v); }}
-              trackColor={{ false: Colors.gray200, true: '#555' }}
-              thumbColor={Colors.white}
+              onValueChange={() => { toggleTheme(); updatePref('darkMode', !isDark); }}
+              trackColor={{ false: colors.gray200, true: colors.gray800 }}
+              thumbColor={colors.white}
             />
           </View>
 
           {/* Date Format */}
-          <Pressable onPress={cycleDateFormat} style={[styles.preferenceRow, { backgroundColor: colors.card }]}>
+          <Pressable onPress={cycleDateFormat} style={styles.preferenceRow}>
             <View style={styles.prefLabel}>
               <Icon name="calendar-outline" size={18} color={colors.textSecondary} />
-              <Text style={[styles.prefText, { color: colors.text }]}>Date Format</Text>
+              <Text style={styles.prefText}>Date Format</Text>
             </View>
-            <Text style={[styles.prefValue, { color: colors.textSecondary }]}>{prefs.dateFormat}</Text>
+            <Text style={styles.prefValue}>{prefs.dateFormat}</Text>
           </Pressable>
 
           {/* Time Format */}
-          <Pressable onPress={cycleTimeFormat} style={[styles.preferenceRow, { backgroundColor: colors.card }]}>
+          <Pressable onPress={cycleTimeFormat} style={styles.preferenceRow}>
             <View style={styles.prefLabel}>
               <Icon name="time-outline" size={18} color={colors.textSecondary} />
-              <Text style={[styles.prefText, { color: colors.text }]}>Time Format</Text>
+              <Text style={styles.prefText}>Time Format</Text>
             </View>
-            <Text style={[styles.prefValue, { color: colors.textSecondary }]}>{prefs.timeFormat}</Text>
+            <Text style={styles.prefValue}>{prefs.timeFormat}</Text>
           </Pressable>
 
           {/* Week Starts On */}
-          <Pressable onPress={cycleWeekStart} style={[styles.preferenceRow, { backgroundColor: colors.card }]}>
+          <Pressable onPress={cycleWeekStart} style={styles.preferenceRow}>
             <View style={styles.prefLabel}>
               <Icon name="grid-outline" size={18} color={colors.textSecondary} />
-              <Text style={[styles.prefText, { color: colors.text }]}>Week Starts On</Text>
+              <Text style={styles.prefText}>Week Starts On</Text>
             </View>
-            <Text style={[styles.prefValue, { color: colors.textSecondary }]}>
+            <Text style={styles.prefValue}>
               {prefs.weekStartsOn === 'sunday' ? 'Sunday' : 'Monday'}
             </Text>
           </Pressable>
@@ -290,9 +290,9 @@ export function SettingsScreen({ navigation }: Props) {
           <AnimatedPressable
             onPress={handleResetPreferences}
             hapticStyle="medium"
-            style={[styles.rowButton, { marginTop: Spacing.lg, backgroundColor: colors.card }]}>
+            style={[styles.rowButton, { marginTop: Spacing.lg }]}>
             <Icon name="refresh-outline" size={20} color={colors.textSecondary} />
-            <Text style={[styles.rowButtonText, { color: colors.text }]}>Reset Preferences</Text>
+            <Text style={styles.rowButtonText}>Reset Preferences</Text>
           </AnimatedPressable>
         </Animated.View>
       </ScrollView>
@@ -303,22 +303,22 @@ export function SettingsScreen({ navigation }: Props) {
         transparent
         animationType="fade"
         onRequestClose={() => setShowDeleteModal(false)}>
-        <View style={[styles.modalOverlay, { backgroundColor: colors.modalOverlay }]}>
-          <Animated.View entering={FadeIn.duration(250)} style={[styles.modalCard, { backgroundColor: colors.modalBg, borderColor: isDark ? '#333' : 'rgba(0,0,0,0.10)' }]}>
-            <Text style={[styles.modalTitle, { color: colors.text }]}>Delete Account?</Text>
-            <Text style={[styles.modalSubtitle, { color: colors.textTertiary }]}>
+        <View style={styles.modalOverlay}>
+          <Animated.View entering={FadeIn.duration(250)} style={styles.modalCard}>
+            <Text style={styles.modalTitle}>Delete Account?</Text>
+            <Text style={styles.modalSubtitle}>
               This action cannot be undone. All your data will be permanently removed.
             </Text>
             <View style={styles.modalActions}>
               <Pressable
                 style={styles.modalCancelButton}
                 onPress={() => setShowDeleteModal(false)}>
-                <Text style={[styles.modalCancelText, { color: colors.textTertiary }]}>Cancel</Text>
+                <Text style={styles.modalCancelText}>Cancel</Text>
               </Pressable>
               <Pressable
-                style={[styles.modalDeleteButton, { backgroundColor: '#EF4444' }]}
+                style={styles.modalDeleteButton}
                 onPress={confirmDeleteAccount}>
-                <Text style={[styles.modalDeleteText, { color: '#fff' }]}>Delete</Text>
+                <Text style={styles.modalDeleteText}>Delete</Text>
               </Pressable>
             </View>
           </Animated.View>
@@ -328,10 +328,10 @@ export function SettingsScreen({ navigation }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (c: ThemeColors) => StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.background,
+    backgroundColor: c.background,
   },
   header: {
     flexDirection: 'row',
@@ -342,7 +342,7 @@ const styles = StyleSheet.create({
   },
   backText: {
     ...Typography.link,
-    color: Colors.textSecondary,
+    color: c.textSecondary,
   },
   headerTitle: {
     ...Typography.heading,
@@ -362,34 +362,35 @@ const styles = StyleSheet.create({
     marginBottom: Spacing.md,
   },
   card: {
-    backgroundColor: Colors.surface,
+    backgroundColor: c.surface,
     borderRadius: BorderRadius.card,
     padding: Spacing.lg,
     marginBottom: Spacing.md,
-    ...Shadows.subtle,
+    borderWidth: StyleSheet.hairlineWidth, borderColor: c.borderLight,
   },
   cardTitle: {
     fontSize: 15,
     fontWeight: '600',
-    color: Colors.text,
+    color: c.text,
     marginBottom: Spacing.md,
+    fontFamily: FontFamily,
   },
   input: {
     height: 48,
     borderRadius: BorderRadius.input,
     paddingHorizontal: Spacing.lg,
-    backgroundColor: Colors.gray100,
+    backgroundColor: c.gray100,
     ...Typography.body,
-    color: Colors.text,
+    color: c.text,
     marginBottom: Spacing.sm,
   },
   pwMessage: {
     ...Typography.small,
-    color: Colors.textSecondary,
+    color: c.textSecondary,
     marginBottom: Spacing.sm,
   },
   actionButton: {
-    backgroundColor: Colors.surfaceDark,
+    backgroundColor: c.surfaceDark,
     paddingVertical: Spacing.md,
     borderRadius: BorderRadius.button,
     alignItems: 'center',
@@ -398,39 +399,41 @@ const styles = StyleSheet.create({
   actionButtonText: {
     fontSize: 14,
     fontWeight: '600',
-    color: Colors.white,
+    color: c.white,
+    fontFamily: FontFamily,
   },
   rowButton: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: Spacing.md,
-    backgroundColor: Colors.surface,
+    backgroundColor: c.surface,
     borderRadius: BorderRadius.card,
     padding: Spacing.lg,
     marginBottom: Spacing.sm,
-    ...Shadows.subtle,
+    borderWidth: StyleSheet.hairlineWidth, borderColor: c.borderLight,
   },
   rowButtonText: {
     fontSize: 15,
     fontWeight: '500',
-    color: Colors.text,
+    color: c.text,
+    fontFamily: FontFamily,
   },
   dangerRow: {
     borderWidth: 1,
-    borderColor: Colors.gray200,
+    borderColor: c.gray200,
   },
   dangerText: {
-    color: Colors.gray800,
+    color: c.gray800,
   },
   preferenceRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    backgroundColor: Colors.surface,
+    backgroundColor: c.surface,
     borderRadius: BorderRadius.card,
     padding: Spacing.lg,
     marginBottom: Spacing.sm,
-    ...Shadows.subtle,
+    borderWidth: StyleSheet.hairlineWidth, borderColor: c.borderLight,
   },
   prefLabel: {
     flexDirection: 'row',
@@ -440,12 +443,14 @@ const styles = StyleSheet.create({
   prefText: {
     fontSize: 15,
     fontWeight: '500',
-    color: Colors.text,
+    color: c.text,
+    fontFamily: FontFamily,
   },
   prefValue: {
     fontSize: 14,
     fontWeight: '600',
-    color: Colors.textSecondary,
+    color: c.textSecondary,
+    fontFamily: FontFamily,
   },
   // Modal
   modalOverlay: {
@@ -456,22 +461,21 @@ const styles = StyleSheet.create({
   },
   modalCard: {
     width: '85%',
-    backgroundColor: Colors.white,
+    backgroundColor: c.white,
     borderRadius: BorderRadius.card,
     paddingVertical: Spacing.xxl,
     paddingHorizontal: Spacing.xxl,
-    ...Shadows.floating,
     borderWidth: 1,
-    borderColor: 'rgba(0,0,0,0.10)',
+    borderColor: c.border,
   },
   modalTitle: {
     ...Typography.bodyMedium,
-    color: Colors.text,
+    color: c.text,
     textAlign: 'center',
   },
   modalSubtitle: {
     ...Typography.caption,
-    color: Colors.textTertiary,
+    color: c.textTertiary,
     textAlign: 'center',
     marginTop: Spacing.sm,
   },
@@ -487,16 +491,16 @@ const styles = StyleSheet.create({
   },
   modalCancelText: {
     ...Typography.body,
-    color: Colors.textTertiary,
+    color: c.textTertiary,
   },
   modalDeleteButton: {
     paddingVertical: Spacing.md,
     paddingHorizontal: Spacing.xxl,
-    backgroundColor: Colors.surfaceDark,
+    backgroundColor: c.surfaceDark,
     borderRadius: BorderRadius.button,
   },
   modalDeleteText: {
     ...Typography.body,
-    color: Colors.white,
+    color: c.white,
   },
 });

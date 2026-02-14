@@ -22,7 +22,8 @@ import Animated, {
   runOnJS,
 } from 'react-native-reanimated';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
-import { Colors, Spacing, Shadows, BorderRadius } from '../utils/colors';
+import { Spacing, BorderRadius, FontFamily, type ThemeColors } from '../utils/colors';
+import { useTheme } from '../context/ThemeContext';
 import { SPRING_SNAPPY, PRESS_SCALE, TIMING_FADE } from '../utils/animations';
 import { haptic } from '../utils/haptics';
 
@@ -45,6 +46,9 @@ export const Button = memo(function Button({
   style,
   textStyle,
 }: ButtonProps) {
+  const { colors, shadows, isDark } = useTheme();
+  const styles = React.useMemo(() => createStyles(colors), [colors]);
+
   const isDisabled = disabled || loading;
   const scale = useSharedValue(1);
   const opacity = useSharedValue(1);
@@ -86,7 +90,7 @@ export const Button = memo(function Button({
         ]}>
         {loading ? (
           <ActivityIndicator
-            color={variant === 'primary' ? Colors.white : Colors.black}
+            color={variant === 'primary' ? colors.white : colors.black}
             size="small"
           />
         ) : (
@@ -106,7 +110,7 @@ export const Button = memo(function Button({
   );
 });
 
-const styles = StyleSheet.create({
+const createStyles = (c: ThemeColors) => StyleSheet.create({
   base: {
     height: 52,
     justifyContent: 'center',
@@ -115,12 +119,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.xxl,
   },
   primary: {
-    backgroundColor: Colors.surfaceDark,
+    backgroundColor: c.surfaceDark,
   },
   secondary: {
-    backgroundColor: Colors.white,
+    backgroundColor: c.white,
     borderWidth: 1.5,
-    borderColor: Colors.surfaceDark,
+    borderColor: c.surfaceDark,
   },
   ghost: {
     backgroundColor: 'transparent',
@@ -131,14 +135,15 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '700',
     letterSpacing: -0.2,
+    fontFamily: FontFamily,
   },
   textPrimary: {
-    color: Colors.white,
+    color: c.white,
   },
   textSecondary: {
-    color: Colors.black,
+    color: c.black,
   },
   textGhost: {
-    color: Colors.textSecondary,
+    color: c.textSecondary,
   },
 });

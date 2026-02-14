@@ -21,11 +21,14 @@ import Animated, {
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useInbox } from '../context/InboxContext';
-import { Colors, Spacing, Shadows, BorderRadius } from '../utils/colors';
+import { Spacing, BorderRadius, FontFamily, type ThemeColors } from '../utils/colors';
+import { useTheme } from '../context/ThemeContext';
 import { haptic } from '../utils/haptics';
 import { SPRING_SNAPPY, PRESS_SCALE } from '../utils/animations';
 
 export const QuickCaptureFAB = memo(function QuickCaptureFAB() {
+  const { colors, shadows, isDark } = useTheme();
+  const styles = React.useMemo(() => createStyles(colors), [colors]);
   const insets = useSafeAreaInsets();
   const { captureTask } = useInbox();
   const [visible, setVisible] = useState(false);
@@ -137,7 +140,7 @@ export const QuickCaptureFAB = memo(function QuickCaptureFAB() {
                 ref={inputRef}
                 style={styles.input}
                 placeholder="What's on your mind?"
-                placeholderTextColor={Colors.gray400}
+                placeholderTextColor={colors.gray400}
                 value={value}
                 onChangeText={setValue}
                 onSubmitEditing={handleSubmit}
@@ -170,23 +173,24 @@ export const QuickCaptureFAB = memo(function QuickCaptureFAB() {
   );
 });
 
-const styles = StyleSheet.create({
+const createStyles = (c: ThemeColors) => StyleSheet.create({
   fab: {
     position: 'absolute',
     width: 60,
     height: 60,
     borderRadius: 30,
-    backgroundColor: Colors.surfaceDark,
+    backgroundColor: c.surfaceDark,
     justifyContent: 'center',
     alignItems: 'center',
     zIndex: 100,
   },
   fabIcon: {
-    color: Colors.white,
+    color: c.white,
     fontSize: 30,
     fontWeight: '400',
     lineHeight: 32,
     marginTop: -1,
+    fontFamily: FontFamily,
   },
   overlay: {
     flex: 1,
@@ -197,7 +201,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   modalContent: {
-    backgroundColor: Colors.white,
+    backgroundColor: c.white,
     borderTopLeftRadius: BorderRadius.card,
     borderTopRightRadius: BorderRadius.card,
     paddingHorizontal: Spacing.xxl,
@@ -208,12 +212,13 @@ const styles = StyleSheet.create({
   input: {
     fontSize: 17,
     fontWeight: '400',
-    color: Colors.text,
-    backgroundColor: '#F2F2F7',
+    color: c.text,
+    backgroundColor: c.gray50,
     borderRadius: BorderRadius.input,
     paddingVertical: Spacing.md,
     paddingHorizontal: Spacing.lg,
     minHeight: 52,
+    fontFamily: FontFamily,
   },
   modalActions: {
     flexDirection: 'row',
@@ -230,12 +235,13 @@ const styles = StyleSheet.create({
   modalButtonText: {
     fontSize: 15,
     fontWeight: '600',
-    color: Colors.textSecondary,
+    color: c.textSecondary,
+    fontFamily: FontFamily,
   },
   modalSubmitText: {
-    color: Colors.white,
+    color: c.white,
     fontWeight: '700',
-    backgroundColor: Colors.surfaceDark,
+    backgroundColor: c.surfaceDark,
     borderRadius: BorderRadius.pill,
     overflow: 'hidden',
     paddingHorizontal: Spacing.xl,

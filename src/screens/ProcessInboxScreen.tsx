@@ -19,7 +19,8 @@ import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import { useInbox } from '../context/InboxContext';
 import { useTasks } from '../context/TaskContext';
-import { Colors, Spacing, Typography, Shadows, BorderRadius } from '../utils/colors';
+import { Spacing, Typography, BorderRadius, FontFamily, type ThemeColors } from '../utils/colors';
+import { useTheme } from '../context/ThemeContext';
 import { formatDeadline } from '../utils/dateUtils';
 import { Priority, RootStackParamList, EnergyLevel } from '../types';
 import Icon from 'react-native-vector-icons/Ionicons';
@@ -56,6 +57,8 @@ function getBentoSize(text: string): { colSpan: 1 | 2; minH: number } {
 }
 
 export function ProcessInboxScreen({ navigation }: Props) {
+  const { colors, shadows, isDark } = useTheme();
+  const styles = React.useMemo(() => createStyles(colors), [colors]);
   const insets = useSafeAreaInsets();
   const { inboxTasks, captureTask, deleteInboxTask, removeInboxTask } = useInbox();
   const { addTask } = useTasks();
@@ -332,7 +335,7 @@ export function ProcessInboxScreen({ navigation }: Props) {
             ref={addMemoInputRef}
             style={styles.modalInput}
             placeholder="What's on your mind?"
-            placeholderTextColor={Colors.gray400}
+            placeholderTextColor={colors.gray400}
             value={newMemoText}
             onChangeText={setNewMemoText}
             onSubmitEditing={handleSubmitMemo}
@@ -359,15 +362,15 @@ export function ProcessInboxScreen({ navigation }: Props) {
       <View style={[styles.container, { paddingTop: insets.top }]}>
         <View style={styles.header}>
           <Pressable onPress={() => navigation.goBack()} hitSlop={12}>
-            <Icon name="chevron-back" size={24} color={Colors.textSecondary} />
+            <Icon name="chevron-back" size={24} color={colors.textSecondary} />
           </Pressable>
           <Text style={styles.headerTitle}>Memos</Text>
           <Pressable onPress={handleOpenAddMemo} hitSlop={12}>
-            <Icon name="add" size={26} color={Colors.text} />
+            <Icon name="add" size={26} color={colors.text} />
           </Pressable>
         </View>
         <View style={styles.emptyContainer}>
-          <Icon name="document-text-outline" size={48} color={Colors.gray400} />
+          <Icon name="document-text-outline" size={48} color={colors.gray400} />
           <Text style={styles.emptyTitle}>No memos yet</Text>
           <Text style={styles.emptySubtitle}>
             Tap + to capture a new thought.
@@ -383,7 +386,7 @@ export function ProcessInboxScreen({ navigation }: Props) {
       {/* Header */}
       <View style={styles.header}>
         <Pressable onPress={() => navigation.goBack()} hitSlop={12}>
-          <Icon name="chevron-back" size={24} color={Colors.textSecondary} />
+          <Icon name="chevron-back" size={24} color={colors.textSecondary} />
         </Pressable>
         <Text style={styles.headerTitle}>
           {viewMode === 'swipe'
@@ -462,7 +465,7 @@ export function ProcessInboxScreen({ navigation }: Props) {
             value={title}
             onChangeText={setTitle}
             placeholder="Task title"
-            placeholderTextColor={Colors.gray400}
+            placeholderTextColor={colors.gray400}
             autoCapitalize="sentences"
           />
 
@@ -472,7 +475,7 @@ export function ProcessInboxScreen({ navigation }: Props) {
             value={description}
             onChangeText={setDescription}
             placeholder="Optional description"
-            placeholderTextColor={Colors.gray400}
+            placeholderTextColor={colors.gray400}
             multiline
             autoCapitalize="sentences"
           />
@@ -540,7 +543,7 @@ export function ProcessInboxScreen({ navigation }: Props) {
                 mode="datetime"
                 display="spinner"
                 onChange={handleDateChange}
-                textColor={Colors.black}
+                textColor={colors.black}
               />
               <Pressable onPress={handleConfirmDate} style={styles.dateConfirmButton}>
                 <Text style={styles.dateConfirmText}>Confirm</Text>
@@ -572,7 +575,7 @@ export function ProcessInboxScreen({ navigation }: Props) {
                 styles.dockBtnSmall,
                 (viewMode !== 'swipe' || currentIndex <= 0) && { opacity: 0.3 },
               ]}>
-              <Icon name="chevron-back" size={20} color={Colors.white} />
+              <Icon name="chevron-back" size={20} color={colors.white} />
             </Pressable>
 
             <View style={styles.dockDivider} />
@@ -585,7 +588,7 @@ export function ProcessInboxScreen({ navigation }: Props) {
               <Icon
                 name={viewMode === 'swipe' ? 'grid-outline' : 'albums-outline'}
                 size={20}
-                color={Colors.white}
+                color={colors.white}
               />
             </Pressable>
 
@@ -594,7 +597,7 @@ export function ProcessInboxScreen({ navigation }: Props) {
               onPress={handleOpenAddMemo}
               hitSlop={12}
               style={styles.dockBtnLarge}>
-              <Icon name="add" size={24} color={Colors.black} />
+              <Icon name="add" size={24} color={colors.black} />
               <Text style={styles.dockBtnText}>New Memo</Text>
             </Pressable>
 
@@ -609,7 +612,7 @@ export function ProcessInboxScreen({ navigation }: Props) {
                 styles.dockBtnSmall,
                 (viewMode !== 'swipe' || currentIndex >= totalCount - 1) && { opacity: 0.3 },
               ]}>
-              <Icon name="chevron-forward" size={20} color={Colors.white} />
+              <Icon name="chevron-forward" size={20} color={colors.white} />
             </Pressable>
           </Animated.View>
         </View>
@@ -629,7 +632,7 @@ export function ProcessInboxScreen({ navigation }: Props) {
                 <Icon
                   name="arrow-redo-outline"
                   size={22}
-                  color={activeTask ? Colors.text : Colors.gray400}
+                  color={activeTask ? colors.text : colors.gray400}
                 />
                 <Text style={[styles.actionLabel, activeTask && styles.actionLabelPrimary]}>
                   Make Task
@@ -644,7 +647,7 @@ export function ProcessInboxScreen({ navigation }: Props) {
                 <Icon
                   name="checkmark-circle-outline"
                   size={22}
-                  color={activeTask ? Colors.textSecondary : Colors.gray400}
+                  color={activeTask ? colors.textSecondary : colors.gray400}
                 />
                 <Text style={styles.actionLabel}>Done</Text>
               </Pressable>
@@ -657,7 +660,7 @@ export function ProcessInboxScreen({ navigation }: Props) {
                 <Icon
                   name="trash-outline"
                   size={22}
-                  color={activeTask ? Colors.textSecondary : Colors.gray400}
+                  color={activeTask ? colors.textSecondary : colors.gray400}
                 />
                 <Text style={styles.actionLabel}>Delete</Text>
               </Pressable>
@@ -668,7 +671,7 @@ export function ProcessInboxScreen({ navigation }: Props) {
                 style={styles.actionBtn}
                 onPress={handleMakeTask}
                 hitSlop={4}>
-                <Icon name="save-outline" size={22} color={Colors.text} />
+                <Icon name="save-outline" size={22} color={colors.text} />
                 <Text style={[styles.actionLabel, styles.actionLabelPrimary]}>Save</Text>
               </Pressable>
 
@@ -676,7 +679,7 @@ export function ProcessInboxScreen({ navigation }: Props) {
                 style={styles.actionBtn}
                 onPress={() => setIsExpanded(false)}
                 hitSlop={4}>
-                <Icon name="close-outline" size={22} color={Colors.textSecondary} />
+                <Icon name="close-outline" size={22} color={colors.textSecondary} />
                 <Text style={styles.actionLabel}>Cancel</Text>
               </Pressable>
             </>
@@ -708,10 +711,10 @@ function formatCapturedAt(timestamp: number): string {
   return date.toLocaleDateString();
 }
 
-const styles = StyleSheet.create({
+const createStyles = (c: ThemeColors) => StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F5F5F5',
+    backgroundColor: c.surface,
   },
 
   // ── Header ──────────────────────────────────────────────────
@@ -725,8 +728,9 @@ const styles = StyleSheet.create({
   headerTitle: {
     fontSize: 17,
     fontWeight: '700',
-    color: Colors.text,
+    color: c.text,
     letterSpacing: -0.3,
+    fontFamily: FontFamily,
   },
   headerActions: {
     flexDirection: 'row',
@@ -755,21 +759,23 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     paddingVertical: Spacing.xxl,
     paddingHorizontal: Spacing.xxl,
-    backgroundColor: Colors.white,
-    ...Shadows.card,
+    backgroundColor: c.white,
+    borderWidth: StyleSheet.hairlineWidth, borderColor: c.border,
   },
   rawText: {
     fontSize: 20,
     fontWeight: '500',
-    color: Colors.text,
+    color: c.text,
     textAlign: 'center',
     lineHeight: 28,
+    fontFamily: FontFamily,
   },
   capturedAt: {
     fontSize: 13,
     fontWeight: '400',
-    color: Colors.textTertiary,
+    color: c.textTertiary,
     marginTop: Spacing.md,
+    fontFamily: FontFamily,
   },
 
   // ── Grid / Bento ────────────────────────────────────────────
@@ -789,27 +795,29 @@ const styles = StyleSheet.create({
     borderWidth: 0,
     borderColor: 'transparent',
     borderRadius: BorderRadius.card,
-    backgroundColor: Colors.white,
+    backgroundColor: c.white,
     padding: Spacing.lg,
     justifyContent: 'space-between',
-    ...Shadows.card,
+    borderWidth: StyleSheet.hairlineWidth, borderColor: c.border,
   },
   bentoCardSelected: {
-    borderColor: Colors.surfaceDark,
+    borderColor: c.surfaceDark,
     borderWidth: 2,
-    backgroundColor: Colors.white,
+    backgroundColor: c.white,
   },
   bentoText: {
     fontSize: 14,
     fontWeight: '500',
-    color: Colors.text,
+    color: c.text,
     lineHeight: 20,
+    fontFamily: FontFamily,
   },
   bentoCaptured: {
     fontSize: 11,
     fontWeight: '400',
-    color: Colors.textTertiary,
+    color: c.textTertiary,
     marginTop: Spacing.sm,
+    fontFamily: FontFamily,
   },
 
   // ── Empty ───────────────────────────────────────────────────
@@ -823,14 +831,16 @@ const styles = StyleSheet.create({
   emptyTitle: {
     fontSize: 16,
     fontWeight: '500',
-    color: Colors.gray500,
+    color: c.gray500,
     textAlign: 'center',
+    fontFamily: FontFamily,
   },
   emptySubtitle: {
     fontSize: 13,
     fontWeight: '400',
-    color: Colors.gray400,
+    color: c.gray400,
     textAlign: 'center',
+    fontFamily: FontFamily,
   },
 
   // ── Expanded form ───────────────────────────────────────────
@@ -846,21 +856,23 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     letterSpacing: 1.5,
     textTransform: 'uppercase',
-    color: Colors.gray500,
+    color: c.gray500,
     marginTop: Spacing.lg,
     marginBottom: Spacing.sm,
+    fontFamily: FontFamily,
   },
   formInput: {
     borderBottomWidth: 0,
     borderBottomColor: 'transparent',
-    backgroundColor: '#F2F2F7',
+    backgroundColor: c.gray50,
     borderRadius: BorderRadius.input,
     fontSize: 16,
     fontWeight: '400',
-    color: Colors.text,
+    color: c.text,
     paddingVertical: Spacing.md,
     paddingHorizontal: Spacing.lg,
     minHeight: 48,
+    fontFamily: FontFamily,
   },
   descriptionInput: {
     minHeight: 80,
@@ -874,22 +886,23 @@ const styles = StyleSheet.create({
     paddingVertical: Spacing.sm,
     paddingHorizontal: Spacing.lg,
     borderWidth: 1.5,
-    borderColor: Colors.border,
+    borderColor: c.border,
     borderRadius: BorderRadius.pill,
     minHeight: 44,
     justifyContent: 'center',
   },
   optionButtonActive: {
-    backgroundColor: Colors.surfaceDark,
-    borderColor: Colors.surfaceDark,
+    backgroundColor: c.surfaceDark,
+    borderColor: c.surfaceDark,
   },
   optionText: {
     fontSize: 14,
     fontWeight: '500',
-    color: Colors.textSecondary,
+    color: c.textSecondary,
+    fontFamily: FontFamily,
   },
   optionTextActive: {
-    color: Colors.white,
+    color: c.white,
   },
   deadlineRow: {
     flexDirection: 'row',
@@ -900,7 +913,7 @@ const styles = StyleSheet.create({
     paddingVertical: Spacing.sm,
     paddingHorizontal: Spacing.lg,
     borderWidth: 1.5,
-    borderColor: Colors.border,
+    borderColor: c.border,
     borderRadius: BorderRadius.pill,
     minHeight: 44,
     justifyContent: 'center',
@@ -908,12 +921,14 @@ const styles = StyleSheet.create({
   deadlineButtonText: {
     fontSize: 14,
     fontWeight: '500',
-    color: Colors.textSecondary,
+    color: c.textSecondary,
+    fontFamily: FontFamily,
   },
   clearText: {
     fontSize: 14,
     fontWeight: '500',
-    color: Colors.textTertiary,
+    color: c.textTertiary,
+    fontFamily: FontFamily,
   },
   datePickerContainer: {
     marginTop: Spacing.sm,
@@ -928,7 +943,8 @@ const styles = StyleSheet.create({
   dateConfirmText: {
     fontSize: 14,
     fontWeight: '600',
-    color: Colors.black,
+    color: c.black,
+    fontFamily: FontFamily,
   },
 
   // ── Action bar (icon + label) ───────────────────────────────
@@ -958,10 +974,10 @@ const styles = StyleSheet.create({
   actionLabel: {
     ...Typography.small,
     fontWeight: '600',
-    color: Colors.textTertiary,
+    color: c.textTertiary,
   },
   actionLabelPrimary: {
-    color: Colors.text,
+    color: c.text,
     fontWeight: '700',
   },
 
@@ -975,22 +991,23 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   modalContent: {
-    backgroundColor: Colors.white,
+    backgroundColor: c.white,
     borderTopLeftRadius: BorderRadius.card,
     borderTopRightRadius: BorderRadius.card,
     paddingHorizontal: Spacing.xxl,
     paddingTop: Spacing.xxl,
-    ...Shadows.floating,
+    borderWidth: 1, borderColor: c.border,
   },
   modalInput: {
     fontSize: 17,
     fontWeight: '400',
-    color: Colors.text,
-    backgroundColor: '#F2F2F7',
+    color: c.text,
+    backgroundColor: c.gray50,
     borderRadius: BorderRadius.input,
     paddingVertical: Spacing.md,
     paddingHorizontal: Spacing.lg,
     minHeight: 52,
+    fontFamily: FontFamily,
   },
   modalActions: {
     flexDirection: 'row',
@@ -1007,10 +1024,11 @@ const styles = StyleSheet.create({
   modalButtonText: {
     fontSize: 14,
     fontWeight: '500',
-    color: Colors.textSecondary,
+    color: c.textSecondary,
+    fontFamily: FontFamily,
   },
   modalSubmitText: {
-    color: Colors.black,
+    color: c.black,
     fontWeight: '600',
   },
 
@@ -1025,7 +1043,7 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     padding: 6,
     borderWidth: 1,
-    borderColor: 'rgba(0,0,0,0.10)',
+    borderColor: c.border,
     alignItems: 'center',
     gap: 8,
   },
@@ -1046,7 +1064,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     height: 44,
     paddingHorizontal: 20,
-    backgroundColor: Colors.white,
+    backgroundColor: c.white,
     borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
@@ -1055,7 +1073,8 @@ const styles = StyleSheet.create({
   dockBtnText: {
     fontSize: 15,
     fontWeight: '700',
-    color: Colors.black,
+    color: c.black,
     letterSpacing: -0.3,
+    fontFamily: FontFamily,
   },
 });

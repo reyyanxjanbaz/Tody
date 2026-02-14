@@ -10,7 +10,8 @@ import {
 } from 'react-native';
 import Animated, { FadeIn } from 'react-native-reanimated';
 import Icon from 'react-native-vector-icons/Ionicons';
-import { Colors, Spacing, Typography, BorderRadius, Shadows } from '../utils/colors';
+import { Spacing, Typography, BorderRadius, FontFamily, type ThemeColors } from '../utils/colors';
+import { useTheme } from '../context/ThemeContext';
 import { haptic } from '../utils/haptics';
 
 const ICON_OPTIONS = [
@@ -56,6 +57,8 @@ export const AddCategoryModal = memo(function AddCategoryModal({
   onClose,
   onCreate,
 }: AddCategoryModalProps) {
+  const { colors, shadows, isDark } = useTheme();
+  const styles = React.useMemo(() => createStyles(colors), [colors]);
   const [name, setName] = useState('');
   const [icon, setIcon] = useState('briefcase-outline');
   const [color, setColor] = useState('#3B82F6');
@@ -87,7 +90,7 @@ export const AddCategoryModal = memo(function AddCategoryModal({
           <TextInput
             style={styles.input}
             placeholder="Category name"
-            placeholderTextColor={Colors.gray400}
+            placeholderTextColor={colors.gray400}
             value={name}
             onChangeText={setName}
             autoFocus
@@ -108,7 +111,7 @@ export const AddCategoryModal = memo(function AddCategoryModal({
                 onPress={() => { haptic('selection'); setIcon(ic); }}
                 style={[styles.iconChoice, icon === ic && { borderColor: color, backgroundColor: color + '18' }]}
               >
-                <Icon name={ic} size={20} color={icon === ic ? color : Colors.gray500} />
+                <Icon name={ic} size={20} color={icon === ic ? color : colors.gray500} />
               </Pressable>
             ))}
           </ScrollView>
@@ -153,7 +156,7 @@ export const AddCategoryModal = memo(function AddCategoryModal({
   );
 });
 
-const styles = StyleSheet.create({
+const createStyles = (c: ThemeColors) => StyleSheet.create({
   overlay: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.4)',
@@ -162,13 +165,12 @@ const styles = StyleSheet.create({
   },
   card: {
     width: '88%',
-    backgroundColor: Colors.white,
+    backgroundColor: c.white,
     borderRadius: BorderRadius.card,
     paddingVertical: Spacing.xxl,
     paddingHorizontal: Spacing.xxl,
-    ...Shadows.floating,
     borderWidth: 1,
-    borderColor: 'rgba(0,0,0,0.10)',
+    borderColor: c.border,
   },
   title: {
     ...Typography.heading,
@@ -178,21 +180,22 @@ const styles = StyleSheet.create({
   input: {
     height: 48,
     borderWidth: 1,
-    borderColor: Colors.gray200,
+    borderColor: c.gray200,
     borderRadius: BorderRadius.input,
     paddingHorizontal: Spacing.lg,
     ...Typography.body,
-    color: Colors.text,
-    backgroundColor: Colors.gray50,
+    color: c.text,
+    backgroundColor: c.gray50,
   },
   sectionLabel: {
     fontSize: 11,
     fontWeight: '600',
     letterSpacing: 1,
     textTransform: 'uppercase',
-    color: Colors.gray500,
+    color: c.gray500,
     marginTop: Spacing.lg,
     marginBottom: Spacing.sm,
+    fontFamily: FontFamily,
   },
   pickerRow: {
     flexDirection: 'row',
@@ -206,8 +209,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     borderRadius: 10,
     borderWidth: 1.5,
-    borderColor: Colors.gray200,
-    backgroundColor: Colors.gray50,
+    borderColor: c.gray200,
+    backgroundColor: c.gray50,
   },
   colorRow: {
     flexDirection: 'row',
@@ -223,7 +226,7 @@ const styles = StyleSheet.create({
   },
   colorChoiceActive: {
     borderWidth: 3,
-    borderColor: Colors.white,
+    borderColor: c.white,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.25,
@@ -237,7 +240,7 @@ const styles = StyleSheet.create({
     paddingVertical: Spacing.md,
     marginTop: Spacing.md,
     borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: Colors.gray200,
+    borderTopColor: c.gray200,
     justifyContent: 'center',
   },
   previewDot: {
@@ -248,6 +251,7 @@ const styles = StyleSheet.create({
   previewName: {
     fontSize: 15,
     fontWeight: '600',
+    fontFamily: FontFamily,
   },
   actions: {
     flexDirection: 'row',
@@ -261,12 +265,12 @@ const styles = StyleSheet.create({
   },
   cancelText: {
     ...Typography.body,
-    color: Colors.textTertiary,
+    color: c.textTertiary,
   },
   createBtn: {
     paddingVertical: Spacing.md,
     paddingHorizontal: Spacing.xxl,
-    backgroundColor: Colors.surfaceDark,
+    backgroundColor: c.surfaceDark,
     borderRadius: BorderRadius.button,
   },
   createBtnDisabled: {
@@ -274,7 +278,7 @@ const styles = StyleSheet.create({
   },
   createText: {
     ...Typography.body,
-    color: Colors.white,
+    color: c.white,
     fontWeight: '600',
   },
 });

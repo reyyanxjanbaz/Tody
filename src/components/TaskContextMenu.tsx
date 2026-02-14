@@ -6,7 +6,8 @@ import {
   Modal,
   StyleSheet,
 } from 'react-native';
-import { Colors, Spacing, Typography } from '../utils/colors';
+import { Spacing, Typography, FontFamily, type ThemeColors } from '../utils/colors';
+import { useTheme } from '../context/ThemeContext';
 
 interface TaskContextMenuProps {
   visible: boolean;
@@ -24,6 +25,9 @@ export const TaskContextMenu = memo(function TaskContextMenu({
   canAddSubtask,
 }: TaskContextMenuProps) {
   const handleAddSubtask = useCallback(() => {
+  const { colors, shadows, isDark } = useTheme();
+  const styles = React.useMemo(() => createStyles(colors), [colors]);
+
     onClose();
     onAddSubtask();
   }, [onClose, onAddSubtask]);
@@ -68,7 +72,7 @@ export const TaskContextMenu = memo(function TaskContextMenu({
   );
 });
 
-const styles = StyleSheet.create({
+const createStyles = (c: ThemeColors) => StyleSheet.create({
   overlay: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.4)',
@@ -77,9 +81,9 @@ const styles = StyleSheet.create({
   },
   card: {
     width: 200,
-    backgroundColor: Colors.white,
+    backgroundColor: c.white,
     borderRadius: 4,
-    shadowColor: Colors.black,
+    shadowColor: c.black,
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 2,
@@ -95,17 +99,17 @@ const styles = StyleSheet.create({
   },
   menuText: {
     ...Typography.body,
-    color: Colors.text,
+    color: c.text,
   },
   menuTextDisabled: {
     ...Typography.body,
-    color: Colors.gray500,
+    color: c.gray500,
   },
   cancelText: {
-    color: Colors.textTertiary,
+    color: c.textTertiary,
   },
   separator: {
     height: 1,
-    backgroundColor: Colors.border,
+    backgroundColor: c.border,
   },
 });

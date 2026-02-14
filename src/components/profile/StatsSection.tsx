@@ -11,7 +11,8 @@ import Animated, { FadeInDown } from 'react-native-reanimated';
 import Icon from 'react-native-vector-icons/Ionicons';
 import { ProfileStats } from '../../types';
 import { formatMinutes } from '../../utils/timeTracking';
-import { Colors, Spacing, Typography, BorderRadius, Shadows } from '../../utils/colors';
+import { Spacing, Typography, BorderRadius, FontFamily, type ThemeColors } from '../../utils/colors';
+import { useTheme } from '../../context/ThemeContext';
 
 interface StatsSectionProps {
   stats: ProfileStats;
@@ -25,6 +26,9 @@ interface StatCardData {
 
 export const StatsSection = memo(function StatsSection({ stats }: StatsSectionProps) {
   const cards: StatCardData[] = [
+  const { colors, shadows, isDark } = useTheme();
+  const styles = React.useMemo(() => createStyles(colors), [colors]);
+
     {
       label: 'Completed',
       value: `${stats.totalCompleted}`,
@@ -79,7 +83,7 @@ export const StatsSection = memo(function StatsSection({ stats }: StatsSectionPr
             entering={FadeInDown.delay(400 + i * 40).duration(300)}
             style={styles.card}>
             <View style={styles.cardIconRow}>
-              <Icon name={card.icon} size={16} color={Colors.textTertiary} />
+              <Icon name={card.icon} size={16} color={colors.textTertiary} />
             </View>
             <Text style={styles.cardValue}>{card.value}</Text>
             <Text style={styles.cardLabel}>{card.label}</Text>
@@ -97,7 +101,7 @@ export const StatsSection = memo(function StatsSection({ stats }: StatsSectionPr
   );
 });
 
-const styles = StyleSheet.create({
+const createStyles = (c: ThemeColors) => StyleSheet.create({
   container: {
     marginHorizontal: Spacing.xxl,
     marginBottom: Spacing.xxl,
@@ -113,10 +117,10 @@ const styles = StyleSheet.create({
   },
   card: {
     width: '48%',
-    backgroundColor: Colors.surface,
+    backgroundColor: c.surface,
     borderRadius: BorderRadius.card,
     padding: Spacing.md,
-    ...Shadows.subtle,
+    borderWidth: StyleSheet.hairlineWidth, borderColor: c.borderLight,
   },
   cardIconRow: {
     marginBottom: Spacing.xs,
@@ -124,12 +128,13 @@ const styles = StyleSheet.create({
   cardValue: {
     fontSize: 22,
     fontWeight: '700',
-    color: Colors.text,
+    color: c.text,
     letterSpacing: -0.3,
+    fontFamily: FontFamily,
   },
   cardLabel: {
     ...Typography.small,
-    color: Colors.textTertiary,
+    color: c.textTertiary,
     marginTop: 2,
   },
   summaryRow: {
@@ -138,6 +143,6 @@ const styles = StyleSheet.create({
   },
   summaryText: {
     ...Typography.small,
-    color: Colors.gray400,
+    color: c.gray400,
   },
 });

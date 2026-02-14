@@ -9,7 +9,7 @@ import {
   hasEnoughDataForStats,
 } from '../../utils/statsCalculation';
 import { formatMinutes } from '../../utils/timeTracking';
-import { Colors, Spacing, Typography, BorderRadius, Shadows } from '../../utils/colors';
+import { Spacing, Typography, BorderRadius, FontFamily, type ThemeColors } from '../../utils/colors';
 import { useTheme } from '../../context/ThemeContext';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
@@ -28,6 +28,9 @@ export const PerformanceFusionSection = memo(function PerformanceFusionSection({
   stats,
   tasks,
 }: PerformanceFusionSectionProps) {
+  const { colors, shadows, isDark } = useTheme();
+  const styles = React.useMemo(() => createStyles(colors), [colors]);
+
   const realityStats = useMemo(() => calculateUserStats(tasks), [tasks]);
   const recentTasks = useMemo(() => getRecentEstimatedTasks(tasks, 10), [tasks]);
   const hasRealityData = useMemo(() => hasEnoughDataForStats(tasks), [tasks]);
@@ -88,13 +91,11 @@ export const PerformanceFusionSection = memo(function PerformanceFusionSection({
     },
   ];
 
-  const { colors, isDark } = useTheme();
-
   return (
     <Animated.View
       entering={FadeInDown.delay(320).duration(350)}
       style={styles.container}>
-      <Text style={[styles.sectionTitle, { color: colors.textTertiary }]}>PERFORMANCE STORY</Text>
+      <Text style={styles.sectionTitle}>PERFORMANCE STORY</Text>
 
       <View style={styles.heroCard}>
         <View style={styles.heroTopRow}>
@@ -103,7 +104,7 @@ export const PerformanceFusionSection = memo(function PerformanceFusionSection({
             <Text style={styles.heroHeadline}>{scoreTone}</Text>
           </View>
           <View style={styles.momentumPill}>
-            <Icon name="pulse-outline" size={12} color={Colors.white} />
+            <Icon name="pulse-outline" size={12} color={colors.white} />
             <Text style={styles.momentumText}>{momentumLabel}</Text>
           </View>
         </View>
@@ -197,7 +198,7 @@ export const PerformanceFusionSection = memo(function PerformanceFusionSection({
                     top: point.actualY - 1,
                     transformOrigin: 'left center',
                     transform: [{ rotate: `${angle}deg` }],
-                    backgroundColor: Colors.text,
+                    backgroundColor: colors.text,
                     borderRadius: 1,
                   }}
                 />
@@ -223,7 +224,7 @@ export const PerformanceFusionSection = memo(function PerformanceFusionSection({
                     top: point.estimatedY - 1,
                     transformOrigin: 'left center',
                     transform: [{ rotate: `${angle}deg` }],
-                    backgroundColor: Colors.gray400,
+                    backgroundColor: colors.gray400,
                     borderRadius: 1,
                   }}
                 />
@@ -236,7 +237,7 @@ export const PerformanceFusionSection = memo(function PerformanceFusionSection({
                 key={`ad-${index}`}
                 style={[
                   styles.chartDot,
-                  { left: point.x - 4, top: point.actualY - 4, backgroundColor: Colors.text },
+                  { left: point.x - 4, top: point.actualY - 4, backgroundColor: colors.text },
                 ]}
               />
             ))}
@@ -247,7 +248,7 @@ export const PerformanceFusionSection = memo(function PerformanceFusionSection({
                 key={`ed-${index}`}
                 style={[
                   styles.chartDot,
-                  { left: point.x - 4, top: point.estimatedY - 4, backgroundColor: Colors.gray400 },
+                  { left: point.x - 4, top: point.estimatedY - 4, backgroundColor: colors.gray400 },
                 ]}
               />
             ))}
@@ -255,11 +256,11 @@ export const PerformanceFusionSection = memo(function PerformanceFusionSection({
 
           <View style={styles.legendRow}>
             <View style={styles.legendItem}>
-              <View style={[styles.legendDot, { backgroundColor: Colors.text }]} />
+              <View style={[styles.legendDot, { backgroundColor: colors.text }]} />
               <Text style={styles.legendText}>Actual</Text>
             </View>
             <View style={styles.legendItem}>
-              <View style={[styles.legendDot, { backgroundColor: Colors.gray400 }]} />
+              <View style={[styles.legendDot, { backgroundColor: colors.gray400 }]} />
               <Text style={styles.legendText}>Estimated</Text>
             </View>
           </View>
@@ -281,7 +282,7 @@ export const PerformanceFusionSection = memo(function PerformanceFusionSection({
   );
 });
 
-const styles = StyleSheet.create({
+const createStyles = (c: ThemeColors) => StyleSheet.create({
   container: {
     marginHorizontal: Spacing.xxl,
     marginBottom: Spacing.xl,
@@ -291,11 +292,11 @@ const styles = StyleSheet.create({
     marginBottom: Spacing.md,
   },
   heroCard: {
-    backgroundColor: Colors.surfaceDark,
+    backgroundColor: c.surfaceDark,
     borderRadius: BorderRadius.card,
     padding: Spacing.lg,
     marginBottom: Spacing.sm,
-    ...Shadows.card,
+    borderWidth: StyleSheet.hairlineWidth, borderColor: c.border,
   },
   heroTopRow: {
     flexDirection: 'row',
@@ -305,27 +306,28 @@ const styles = StyleSheet.create({
   },
   heroEyebrow: {
     ...Typography.small,
-    color: Colors.gray400,
+    color: c.gray400,
     marginBottom: 2,
   },
   heroHeadline: {
     fontSize: 22,
     fontWeight: '700',
     letterSpacing: -0.4,
-    color: Colors.white,
+    color: c.white,
+    fontFamily: FontFamily,
   },
   momentumPill: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: Spacing.xs,
-    backgroundColor: Colors.gray800,
+    backgroundColor: c.gray800,
     paddingHorizontal: Spacing.md,
     paddingVertical: Spacing.sm,
     borderRadius: BorderRadius.pill,
   },
   momentumText: {
     ...Typography.small,
-    color: Colors.white,
+    color: c.white,
   },
   heroMiddleRow: {
     flexDirection: 'row',
@@ -337,7 +339,7 @@ const styles = StyleSheet.create({
     height: 96,
     borderRadius: 48,
     borderWidth: 1,
-    borderColor: Colors.gray600,
+    borderColor: c.gray600,
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: Spacing.lg,
@@ -346,12 +348,13 @@ const styles = StyleSheet.create({
     fontSize: 34,
     fontWeight: '800',
     letterSpacing: -1,
-    color: Colors.white,
+    color: c.white,
     lineHeight: 38,
+    fontFamily: FontFamily,
   },
   scoreSuffix: {
     ...Typography.small,
-    color: Colors.gray400,
+    color: c.gray400,
     marginTop: -2,
   },
   heroFacts: {
@@ -366,36 +369,37 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontWeight: '700',
     letterSpacing: -0.3,
-    color: Colors.white,
+    color: c.white,
+    fontFamily: FontFamily,
   },
   factLabel: {
     ...Typography.small,
-    color: Colors.gray400,
+    color: c.gray400,
     marginTop: 2,
   },
   unlockTrack: {
     height: 5,
     borderRadius: BorderRadius.pill,
-    backgroundColor: Colors.gray800,
+    backgroundColor: c.gray800,
     overflow: 'hidden',
     marginBottom: Spacing.md,
   },
   unlockFill: {
     height: '100%',
     borderRadius: BorderRadius.pill,
-    backgroundColor: Colors.white,
+    backgroundColor: c.white,
   },
   narrativeText: {
     ...Typography.caption,
-    color: Colors.gray200,
+    color: c.gray200,
     lineHeight: 19,
   },
   alignmentCard: {
-    backgroundColor: Colors.surface,
+    backgroundColor: c.surface,
     borderRadius: BorderRadius.card,
     padding: Spacing.lg,
     marginBottom: Spacing.sm,
-    ...Shadows.subtle,
+    borderWidth: StyleSheet.hairlineWidth, borderColor: c.borderLight,
   },
   alignmentHeader: {
     marginBottom: Spacing.md,
@@ -406,7 +410,7 @@ const styles = StyleSheet.create({
   },
   alignmentSubtitle: {
     ...Typography.small,
-    color: Colors.textTertiary,
+    color: c.textTertiary,
   },
   barBlock: {
     marginBottom: Spacing.md,
@@ -419,41 +423,41 @@ const styles = StyleSheet.create({
   },
   barLabel: {
     ...Typography.caption,
-    color: Colors.textSecondary,
+    color: c.textSecondary,
   },
   barValue: {
     ...Typography.caption,
-    color: Colors.text,
+    color: c.text,
     fontWeight: '600',
   },
   barTrack: {
     height: 6,
     borderRadius: BorderRadius.pill,
-    backgroundColor: Colors.gray100,
+    backgroundColor: c.gray100,
     overflow: 'hidden',
   },
   barFillEstimated: {
     height: '100%',
-    backgroundColor: Colors.gray500,
+    backgroundColor: c.gray500,
     borderRadius: BorderRadius.pill,
   },
   barFillActual: {
     height: '100%',
-    backgroundColor: Colors.surfaceDark,
+    backgroundColor: c.surfaceDark,
     borderRadius: BorderRadius.pill,
   },
   alignmentFooter: {
     ...Typography.small,
-    color: Colors.textTertiary,
+    color: c.textTertiary,
     textAlign: 'center',
     marginTop: Spacing.xs,
   },
   chartCard: {
-    backgroundColor: Colors.surface,
+    backgroundColor: c.surface,
     borderRadius: BorderRadius.card,
     padding: Spacing.lg,
     marginBottom: Spacing.sm,
-    ...Shadows.subtle,
+    borderWidth: StyleSheet.hairlineWidth, borderColor: c.borderLight,
   },
   chartTitle: {
     ...Typography.sectionHeader,
@@ -479,7 +483,7 @@ const styles = StyleSheet.create({
     marginTop: Spacing.md,
     paddingTop: Spacing.sm,
     borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: Colors.border,
+    borderTopColor: c.border,
   },
   legendItem: {
     flexDirection: 'row',
@@ -493,7 +497,8 @@ const styles = StyleSheet.create({
   },
   legendText: {
     fontSize: 11,
-    color: Colors.gray500,
+    color: c.gray500,
+    fontFamily: FontFamily,
   },
   statsGrid: {
     flexDirection: 'row',
@@ -502,21 +507,22 @@ const styles = StyleSheet.create({
   },
   statCard: {
     width: '48%',
-    backgroundColor: Colors.surface,
+    backgroundColor: c.surface,
     borderRadius: BorderRadius.card,
     paddingVertical: Spacing.lg,
     paddingHorizontal: Spacing.md,
-    ...Shadows.subtle,
+    borderWidth: StyleSheet.hairlineWidth, borderColor: c.borderLight,
   },
   statValue: {
     fontSize: 22,
     fontWeight: '700',
     letterSpacing: -0.4,
-    color: Colors.text,
+    color: c.text,
+    fontFamily: FontFamily,
   },
   statLabel: {
     ...Typography.small,
-    color: Colors.textTertiary,
+    color: c.textTertiary,
     marginTop: 2,
   },
 });

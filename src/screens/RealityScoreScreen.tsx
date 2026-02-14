@@ -16,7 +16,8 @@ import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useTasks } from '../context/TaskContext';
 import { calculateUserStats, getRecentEstimatedTasks, hasEnoughDataForStats } from '../utils/statsCalculation';
 import { formatMinutes } from '../utils/timeTracking';
-import { Colors, Spacing, Typography } from '../utils/colors';
+import { Spacing, Typography, FontFamily, type ThemeColors } from '../utils/colors';
+import { useTheme } from '../context/ThemeContext';
 import { RootStackParamList } from '../types';
 
 type Props = {
@@ -28,6 +29,8 @@ const CHART_WIDTH = SCREEN_WIDTH - Spacing.lg * 4;
 const CHART_HEIGHT = 150;
 
 export function RealityScoreScreen({ navigation }: Props) {
+  const { colors, shadows, isDark } = useTheme();
+  const styles = React.useMemo(() => createStyles(colors), [colors]);
   const insets = useSafeAreaInsets();
   const { tasks, archivedTasks } = useTasks();
 
@@ -150,7 +153,7 @@ export function RealityScoreScreen({ navigation }: Props) {
                             top: point.actualY,
                             transform: [{ rotate: `${angle}deg` }],
                             transformOrigin: 'left center',
-                            backgroundColor: Colors.black,
+                            backgroundColor: colors.black,
                           },
                         ]}
                       />
@@ -175,7 +178,7 @@ export function RealityScoreScreen({ navigation }: Props) {
                             top: point.estimatedY,
                             transform: [{ rotate: `${angle}deg` }],
                             transformOrigin: 'left center',
-                            backgroundColor: Colors.gray400,
+                            backgroundColor: colors.gray400,
                           },
                         ]}
                       />
@@ -190,7 +193,7 @@ export function RealityScoreScreen({ navigation }: Props) {
                         {
                           left: point.x - 3,
                           top: point.actualY - 3,
-                          backgroundColor: Colors.black,
+                          backgroundColor: colors.black,
                         },
                       ]}
                     />
@@ -204,7 +207,7 @@ export function RealityScoreScreen({ navigation }: Props) {
                         {
                           left: point.x - 3,
                           top: point.estimatedY - 3,
-                          backgroundColor: Colors.gray400,
+                          backgroundColor: colors.gray400,
                         },
                       ]}
                     />
@@ -213,11 +216,11 @@ export function RealityScoreScreen({ navigation }: Props) {
                 {/* Legend */}
                 <View style={styles.legendRow}>
                   <View style={styles.legendItem}>
-                    <View style={[styles.legendDot, { backgroundColor: Colors.black }]} />
+                    <View style={[styles.legendDot, { backgroundColor: colors.black }]} />
                     <Text style={styles.legendText}>Actual</Text>
                   </View>
                   <View style={styles.legendItem}>
-                    <View style={[styles.legendDot, { backgroundColor: Colors.gray400 }]} />
+                    <View style={[styles.legendDot, { backgroundColor: colors.gray400 }]} />
                     <Text style={styles.legendText}>Estimated</Text>
                   </View>
                 </View>
@@ -235,10 +238,10 @@ export function RealityScoreScreen({ navigation }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (c: ThemeColors) => StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.white,
+    backgroundColor: c.white,
   },
   header: {
     flexDirection: 'row',
@@ -249,7 +252,7 @@ const styles = StyleSheet.create({
   },
   backText: {
     ...Typography.link,
-    color: Colors.textSecondary,
+    color: c.textSecondary,
   },
   scrollView: {
     flex: 1,
@@ -267,13 +270,15 @@ const styles = StyleSheet.create({
     fontSize: 48,
     fontWeight: '700',
     letterSpacing: -1,
-    color: Colors.black,
+    color: c.black,
+    fontFamily: FontFamily,
   },
   scoreLabel: {
     fontSize: 14,
     fontWeight: '400',
-    color: Colors.gray500,
+    color: c.gray500,
     marginTop: Spacing.xs,
+    fontFamily: FontFamily,
   },
   // Underestimation
   underestimationSection: {
@@ -283,8 +288,9 @@ const styles = StyleSheet.create({
   underestimationText: {
     fontSize: 16,
     fontWeight: '400',
-    color: Colors.textSecondary,
+    color: c.textSecondary,
     textAlign: 'center',
+    fontFamily: FontFamily,
   },
   // Totals
   totalsRow: {
@@ -299,13 +305,15 @@ const styles = StyleSheet.create({
   totalValue: {
     fontSize: 20,
     fontWeight: '600',
-    color: Colors.black,
+    color: c.black,
+    fontFamily: FontFamily,
   },
   totalLabel: {
     fontSize: 12,
     fontWeight: '400',
-    color: Colors.gray500,
+    color: c.gray500,
     marginTop: 2,
+    fontFamily: FontFamily,
   },
   // Chart
   chartSection: {
@@ -351,14 +359,16 @@ const styles = StyleSheet.create({
   },
   legendText: {
     fontSize: 11,
-    color: Colors.gray500,
+    color: c.gray500,
+    fontFamily: FontFamily,
   },
   // Task count
   taskCount: {
     fontSize: 11,
-    color: Colors.gray400,
+    color: c.gray400,
     textAlign: 'center',
     marginTop: Spacing.lg,
+    fontFamily: FontFamily,
   },
   // No data state
   noDataContainer: {
@@ -368,19 +378,22 @@ const styles = StyleSheet.create({
   noDataTitle: {
     fontSize: 20,
     fontWeight: '600',
-    color: Colors.black,
+    color: c.black,
     marginBottom: Spacing.md,
+    fontFamily: FontFamily,
   },
   noDataSubtitle: {
     fontSize: 14,
-    color: Colors.gray500,
+    color: c.gray500,
     textAlign: 'center',
     lineHeight: 20,
     paddingHorizontal: Spacing.xxl,
+    fontFamily: FontFamily,
   },
   noDataCount: {
     fontSize: 13,
-    color: Colors.gray400,
+    color: c.gray400,
     marginTop: Spacing.xl,
+    fontFamily: FontFamily,
   },
 });

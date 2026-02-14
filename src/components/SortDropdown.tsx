@@ -8,14 +8,13 @@ import {
 } from 'react-native';
 import Animated, { FadeIn } from 'react-native-reanimated';
 import Icon from 'react-native-vector-icons/Ionicons';
-import { Colors, Spacing, Typography, BorderRadius, Shadows, type ThemeColors } from '../utils/colors';
+import { Spacing, Typography, BorderRadius, FontFamily, type ThemeColors } from '../utils/colors';
 import { useTheme } from '../context/ThemeContext';
 import { SortOption } from '../types';
 import { haptic } from '../utils/haptics';
 
-const SORT_OPTIONS: { key: SortOption; label: string; icon: string; description?: string }[] = [
+const SORT_OPTIONS: { key: SortOption; label: string; icon: string }[] = [
   { key: 'default',       label: 'Default (Sections)',  icon: 'layers-outline' },
-  { key: 'smart',         label: 'Smart Sort',          icon: 'sparkles-outline', description: 'Priority + Deadline + Energy + Time' },
   { key: 'deadline-asc',  label: 'Deadline — soonest',  icon: 'arrow-up-outline' },
   { key: 'deadline-desc', label: 'Deadline — latest',   icon: 'arrow-down-outline' },
   { key: 'priority-high', label: 'Priority — high first', icon: 'flag' },
@@ -37,18 +36,20 @@ export const SortDropdown = memo(function SortDropdown({
   onSelect,
   onClose,
 }: SortDropdownProps) {
-  const { colors } = useTheme();
+  const { colors, shadows, isDark } = useTheme();
+  const styles = React.useMemo(() => createStyles(colors), [colors]);
+
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
-      <Pressable style={[styles.overlay, { backgroundColor: colors.modalOverlay }]} onPress={onClose}>
-        <Animated.View entering={FadeIn.duration(200)} style={[styles.card, { backgroundColor: colors.modalBg, borderColor: colors.border }]}>
-          <Text style={[styles.title, { color: colors.text }]}>Sort Tasks</Text>
+      <Pressable style={styles.overlay} onPress={onClose}>
+        <Animated.View entering={FadeIn.duration(200)} style={styles.card}>
+          <Text style={styles.title}>Sort Tasks</Text>
           {SORT_OPTIONS.map((opt) => {
             const isActive = current === opt.key;
             return (
               <Pressable
                 key={opt.key}
-                style={[styles.row, isActive && { backgroundColor: colors.gray50 }]}
+                style={[styles.row, isActive && styles.rowActive]}
                 onPress={() => {
                   haptic('selection');
                   onSelect(opt.key);
@@ -59,14 +60,9 @@ export const SortDropdown = memo(function SortDropdown({
                   size={16}
                   color={isActive ? colors.text : colors.gray500}
                 />
-                <View style={styles.rowTextContainer}>
-                  <Text style={[styles.rowText, { color: colors.textSecondary }, isActive && { color: colors.text, fontWeight: '600' }]}>
-                    {opt.label}
-                  </Text>
-                  {opt.description && (
-                    <Text style={[styles.rowDescription, { color: colors.textTertiary }]}>{opt.description}</Text>
-                  )}
-                </View>
+                <Text style={[styles.rowText, isActive && styles.rowTextActive]}>
+                  {opt.label}
+                </Text>
                 {isActive && (
                   <Icon name="checkmark" size={18} color={colors.text} />
                 )}
@@ -79,25 +75,30 @@ export const SortDropdown = memo(function SortDropdown({
   );
 });
 
-const styles = StyleSheet.create({
+const createStyles = (c: ThemeColors) => StyleSheet.create({
   overlay: {
     flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.35)',
     justifyContent: 'center',
     alignItems: 'center',
   },
   card: {
     width: '80%',
+    backgroundColor: c.white,
     borderRadius: BorderRadius.card,
     paddingVertical: Spacing.lg,
     paddingHorizontal: Spacing.lg,
     borderWidth: 1,
+    borderColor: c.border,
   },
   title: {
     fontSize: 15,
     fontWeight: '700',
+    color: c.text,
     letterSpacing: -0.3,
     marginBottom: Spacing.sm,
     paddingHorizontal: Spacing.sm,
+    fontFamily: FontFamily,
   },
   row: {
     flexDirection: 'row',
@@ -107,15 +108,18 @@ const styles = StyleSheet.create({
     gap: 10,
     borderRadius: 8,
   },
-  rowTextContainer: {
-    flex: 1,
+  rowActive: {
+    backgroundColor: c.gray50,
   },
   rowText: {
+    flex: 1,
     fontSize: 14,
     fontWeight: '500',
+    color: c.textSecondary,
+    fontFamily: FontFamily,
   },
-  rowDescription: {
-    fontSize: 11,
-    marginTop: 1,
+  rowTextActive: {
+    color: c.text,
+    fontWeight: '600',
   },
 });

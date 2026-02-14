@@ -1,93 +1,99 @@
+/**
+ * ThemeContext – provides dark/light mode colors throughout the app.
+ *
+ * Usage:
+ *   const { colors, shadows, isDark, toggleTheme } = useTheme();
+ *
+ * Persists the user's choice to AsyncStorage and defaults to light mode.
+ */
+
 import React, {
   createContext,
   useContext,
   useState,
-  useCallback,
   useEffect,
+  useCallback,
   useMemo,
 } from 'react';
-import { useColorScheme } from 'react-native';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useColorScheme, StatusBar } from 'react-native';
 import {
-  LightTheme,
-  DarkTheme,
+  LightColors,
+  DarkColors,
   Shadows,
+  DarkShadows,
+  FontFamily,
   type ThemeColors,
+  type ThemeShadows,
 } from '../utils/colors';
+import { getUserPreferences, saveUserPreferences } from '../utils/storage';
+import { UserPreferences, DEFAULT_PREFERENCES } from '../types';
 
-// ── Types ──────────────────────────────────────────────────────────────────
+// ── Theme shape ─────────────────────────────────────────────────────────────
 
 interface ThemeContextValue {
   colors: ThemeColors;
+  shadows: ThemeShadows;
   isDark: boolean;
-  shadows: typeof Shadows;
-  toggleDarkMode: () => void;
-  setDarkMode: (enabled: boolean) => void;
+  toggleTheme: () => void;
+  fontFamily: string;
 }
 
-// ── Context ────────────────────────────────────────────────────────────────
-
 const ThemeContext = createContext<ThemeContextValue>({
-  colors: LightTheme,
-  isDark: false,
+  colors: LightColors,
   shadows: Shadows,
-  toggleDarkMode: () => {},
-  setDarkMode: () => {},
+  isDark: false,
+  toggleTheme: () => {},
+  fontFamily: FontFamily,
 });
 
-const DARK_MODE_KEY = '@tody_dark_mode';
-
-// ── Provider ───────────────────────────────────────────────────────────────
+// ── Provider ────────────────────────────────────────────────────────────────
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
-  const systemScheme = useColorScheme();
   const [isDark, setIsDark] = useState(false);
   const [loaded, setLoaded] = useState(false);
 
-  // Load persisted preference
+  // Load persisted preference on mount
   useEffect(() => {
-    AsyncStorage.getItem(DARK_MODE_KEY).then((val) => {
-      if (val !== null) {
-        setIsDark(val === 'true');
-      } else {
-        setIsDark(systemScheme === 'dark');
+    (async () => {
+      const prefs = await getUserPreferences<UserPreferences>();
+      if (prefs?.darkMode) {
+        setIsDark(true);
       }
       setLoaded(true);
-    });
+    })();
   }, []);
 
-  const toggleDarkMode = useCallback(() => {
-    setIsDark((prev) => {
-      const next = !prev;
-      AsyncStorage.setItem(DARK_MODE_KEY, String(next));
-      return next;
-    });
-  }, []);
-
-  const setDarkModeExplicit = useCallback((enabled: boolean) => {
-    setIsDark(enabled);
-    AsyncStorage.setItem(DARK_MODE_KEY, String(enabled));
-  }, []);
-
-  const colors = useMemo(() => (isDark ? DarkTheme : LightTheme), [isDark]);
+  const toggleTheme = useCallback(async () => {
+    const next = !isDark;
+    setIsDark(next);
+    // Persist to storage
+    const prefs = await getUserPreferences<UserPreferences>();
+    await saveUserPreferences({ ...(prefs ?? DEFAULT_PREFERENCES), darkMode: next });
+  }, [isDark]);
 
   const value = useMemo<ThemeContextValue>(
     () => ({
-      colors,
+      colors: isDark ? DarkColors : LightColors,
+      shadows: isDark ? DarkShadows : Shadows,
       isDark,
-      shadows: Shadows,
-      toggleDarkMode,
-      setDarkMode: setDarkModeExplicit,
+      toggleTheme,
+      fontFamily: FontFamily,
     }),
-    [colors, isDark, toggleDarkMode, setDarkModeExplicit],
+    [isDark, toggleTheme],
   );
 
   return (
-    <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>
+    <ThemeContext.Provider value={value}>
+      <StatusBar
+        barStyle={isDark ? 'light-content' : 'dark-content'}
+        backgroundColor={isDark ? '#000000' : '#FFFFFF'}
+      />
+      {children}
+    </ThemeContext.Provider>
   );
 }
 
-// ── Hook ───────────────────────────────────────────────────────────────────
+// ── Hook ────────────────────────────────────────────────────────────────────
 
 export function useTheme(): ThemeContextValue {
   return useContext(ThemeContext);
