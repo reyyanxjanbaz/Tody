@@ -34,7 +34,7 @@ import { ZeroStateOnboarding } from '../components/ZeroStateOnboarding';
 import { FocusMode } from '../components/FocusMode';
 import { TodayLine } from '../components/TodayLine';
 import { CalendarStrip } from '../components/CalendarStrip';
-import { AnimatedPressable } from '../components/ui';
+import { AnimatedPressable, TodyLogo } from '../components/ui';
 import { useUndo } from '../components/UndoToast';
 import { organizeTasks, searchTasks } from '../utils/taskIntelligence';
 import { isFullyDecayed } from '../utils/decay';
@@ -663,19 +663,22 @@ export function HomeScreen({ navigation }: Props) {
                 <Animated.View
                     entering={FadeIn.duration(200)}
                     style={styles.header}>
-                    <View style={styles.headerTitleWrap}>
-                        <Text
-                            style={styles.headerTitle}
-                            numberOfLines={1}
-                            adjustsFontSizeToFit
-                            minimumFontScale={0.7}>
-                            {personalTitle}
-                        </Text>
-                        {activeCount > 0 && (
-                            <Text style={styles.headerCount}>
-                                {activeCount} task{activeCount !== 1 ? 's' : ''}
+                    <View style={styles.headerRow}>
+                        <TodyLogo size={48} />
+                        <View style={styles.headerTitleWrap}>
+                            <Text
+                                style={styles.headerTitle}
+                                numberOfLines={1}
+                                adjustsFontSizeToFit
+                                minimumFontScale={0.7}>
+                                {personalTitle}
                             </Text>
-                        )}
+                            {activeCount > 0 && (
+                                <Text style={styles.headerCount}>
+                                    {activeCount} task{activeCount !== 1 ? 's' : ''}
+                                </Text>
+                            )}
+                        </View>
                     </View>
                     <AnimatedPressable
                         onPress={handleOpenSearch}
@@ -932,9 +935,15 @@ const createStyles = (c: ThemeColors) => StyleSheet.create({
         paddingTop: Spacing.xl,
         paddingBottom: Spacing.lg,
     },
-    headerTitleWrap: {
+    headerRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
         flex: 1,
         marginRight: Spacing.sm,
+        gap: Spacing.md,
+    },
+    headerTitleWrap: {
+        flex: 1,
     },
     headerTitle: {
         fontSize: 32,

@@ -3,9 +3,15 @@ import { StyleSheet, ViewStyle, Platform } from 'react-native';
 // ── Font Family ─────────────────────────────────────────────────────────────
 
 export const FontFamily = Platform.select({
-  ios: 'Times New Roman',
-  android: 'serif',
-  default: 'serif',
+  ios: 'CharisSIL',
+  android: 'CharisSIL-Regular',
+  default: 'CharisSIL-Regular',
+}) as string;
+
+export const FontFamilyBold = Platform.select({
+  ios: 'CharisSIL-Bold',
+  android: 'CharisSIL-Bold',
+  default: 'CharisSIL-Bold',
 }) as string;
 
 // ── Theme Color Type ────────────────────────────────────────────────────────

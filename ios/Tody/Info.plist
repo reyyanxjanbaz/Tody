@@ -59,6 +59,10 @@
 			<string>Ionicons.ttf</string>
 			<string>MaterialCommunityIcons.ttf</string>
 			<string>Feather.ttf</string>
+			<string>CharisSIL-Regular.ttf</string>
+			<string>CharisSIL-Bold.ttf</string>
+			<string>CharisSIL-Italic.ttf</string>
+			<string>CharisSIL-BoldItalic.ttf</string>
 		</array>
 		<key>UIViewControllerBasedStatusBarAppearance</key>
 		<false/>
