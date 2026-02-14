@@ -84,7 +84,7 @@ const createStyles = (c: ThemeColors) => StyleSheet.create({
   },
   card: {
     width: '80%',
-    backgroundColor: c.white,
+    backgroundColor: c.surface,
     borderRadius: BorderRadius.card,
     paddingVertical: Spacing.lg,
     paddingHorizontal: Spacing.lg,

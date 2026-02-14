@@ -227,7 +227,7 @@ const createStyles = (c: ThemeColors) => StyleSheet.create({
     fontFamily: FontFamily,
   },
   dayLabelSelected: {
-    color: c.white,
+    color: c.background,
   },
   dayLabelToday: {
     color: c.textSecondary,
@@ -239,7 +239,7 @@ const createStyles = (c: ThemeColors) => StyleSheet.create({
     fontFamily: FontFamily,
   },
   dateNumSelected: {
-    color: c.white,
+    color: c.background,
     fontWeight: '700',
   },
   dateNumToday: {

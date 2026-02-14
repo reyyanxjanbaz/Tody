@@ -155,7 +155,7 @@ const createStyles = (c: ThemeColors) => StyleSheet.create({
     left: 0,
     right: 0,
     height: 3,
-    backgroundColor: c.black,
+    backgroundColor: c.text,
     borderRadius: 1.5,
   },
   actions: {

@@ -530,7 +530,7 @@ const createStyles = (c: ThemeColors) => StyleSheet.create({
     marginBottom: Spacing.lg,
     paddingTop: Spacing.sm,
     borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: 'rgba(0,0,0,0.06)',
+    borderTopColor: c.border,
   },
   pillRow: {
     flexDirection: 'row',
@@ -590,7 +590,7 @@ const createStyles = (c: ThemeColors) => StyleSheet.create({
     marginTop: Spacing.lg,
     paddingTop: Spacing.md,
     borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: 'rgba(0,0,0,0.06)',
+    borderTopColor: c.border,
   },
   sectionLabel: {
     fontSize: 13,
@@ -651,7 +651,7 @@ const createStyles = (c: ThemeColors) => StyleSheet.create({
     marginTop: Spacing.xl,
     paddingTop: Spacing.md,
     borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: 'rgba(0,0,0,0.06)',
+    borderTopColor: c.border,
   },
   actionBtn: {
     flexDirection: 'row',

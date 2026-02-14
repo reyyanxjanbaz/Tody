@@ -346,6 +346,7 @@ const createStyles = (c: ThemeColors) => StyleSheet.create({
   },
   headerTitle: {
     ...Typography.heading,
+    color: c.text,
   },
   headerSpacer: {
     width: 60,
@@ -461,7 +462,7 @@ const createStyles = (c: ThemeColors) => StyleSheet.create({
   },
   modalCard: {
     width: '85%',
-    backgroundColor: c.white,
+    backgroundColor: c.surface,
     borderRadius: BorderRadius.card,
     paddingVertical: Spacing.xxl,
     paddingHorizontal: Spacing.xxl,

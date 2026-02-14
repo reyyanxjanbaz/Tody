@@ -705,7 +705,7 @@ export function HomeScreen({ navigation }: Props) {
                         <RefreshControl
                             refreshing={false}
                             onRefresh={() => setIsFocusMode(true)}
-                            tintColor={colors.black}
+                            tintColor={colors.text}
                             title="Pull for Focus Mode"
                             titleColor={colors.gray400}
                         />
@@ -949,7 +949,7 @@ const createStyles = (c: ThemeColors) => StyleSheet.create({
         flexDirection: 'row',
         justifyContent: 'space-around',
         alignItems: 'center',
-        backgroundColor: c.white,
+        backgroundColor: c.surface,
         borderTopWidth: StyleSheet.hairlineWidth,
         borderTopColor: c.border,
         paddingTop: Spacing.sm,
@@ -1024,7 +1024,7 @@ const createStyles = (c: ThemeColors) => StyleSheet.create({
     },
     modalCard: {
         width: '85%',
-        backgroundColor: c.white,
+        backgroundColor: c.surface,
         borderRadius: BorderRadius.card,
         paddingVertical: Spacing.xxl,
         paddingHorizontal: Spacing.xxl,

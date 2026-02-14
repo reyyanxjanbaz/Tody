@@ -100,7 +100,7 @@ const createStyles = (c: ThemeColors) => StyleSheet.create({
     marginTop: Spacing.lg,
     paddingVertical: Spacing.sm,
     paddingHorizontal: Spacing.xl,
-    backgroundColor: c.black,
+    backgroundColor: c.text,
     borderRadius: 6,
   },
   actionText: {

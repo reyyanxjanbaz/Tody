@@ -376,7 +376,7 @@ const createStyles = (c: ThemeColors) => StyleSheet.create({
   inputRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: c.white,
+    backgroundColor: c.surface,
     borderRadius: BorderRadius.input,
     marginHorizontal: Spacing.lg,
     marginVertical: Spacing.sm,
