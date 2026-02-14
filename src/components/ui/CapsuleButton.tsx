@@ -6,7 +6,8 @@ import Animated, {
     withSpring,
 } from 'react-native-reanimated';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
-import { Colors, Shadows, BorderRadius } from '../../utils/colors';
+import { BorderRadius, FontFamily, type ThemeColors } from '../../utils/colors';
+import { useTheme } from '../../context/ThemeContext';
 import { SPRING_SNAPPY } from '../../utils/animations';
 import { haptic } from '../../utils/haptics';
 
@@ -34,6 +35,9 @@ export const CapsuleButton = memo(function CapsuleButton({
     textStyle,
 }: CapsuleButtonProps) {
     const scale = useSharedValue(1);
+  const { colors, shadows, isDark } = useTheme();
+  const styles = React.useMemo(() => createStyles(colors), [colors]);
+
 
     const handlePress = useCallback(() => {
         if (disabled) return;
@@ -60,10 +64,22 @@ export const CapsuleButton = memo(function CapsuleButton({
         transform: [{ scale: scale.value }],
     }));
 
+    const variantStyleMap = {
+        primary: styles.variantPrimary,
+        secondary: styles.variantSecondary,
+        ghost: styles.variantGhost,
+    };
+
+    const variantLabelMap = {
+        primary: styles.variantLabelPrimary,
+        secondary: styles.variantLabelSecondary,
+        ghost: styles.variantLabelGhost,
+    };
+
     const containerStyle = [
         styles.base,
         sizeStyles[size],
-        variantStyles[variant],
+        variantStyleMap[variant],
         disabled && styles.disabled,
         style,
     ];
@@ -71,7 +87,7 @@ export const CapsuleButton = memo(function CapsuleButton({
     const labelStyle = [
         styles.label,
         sizeLabelStyles[size],
-        variantLabelStyles[variant],
+        variantLabelMap[variant],
         disabled && styles.disabledLabel,
         textStyle,
     ];
@@ -89,7 +105,7 @@ export const CapsuleButton = memo(function CapsuleButton({
     );
 });
 
-const styles = StyleSheet.create({
+const createStyles = (c: ThemeColors) => StyleSheet.create({
     base: {
         flexDirection: 'row',
         alignItems: 'center',
@@ -106,6 +122,30 @@ const styles = StyleSheet.create({
     },
     disabledLabel: {
         opacity: 0.6,
+    },
+    // variant styles (need theme colors)
+    variantPrimary: {
+        backgroundColor: c.surfaceDark,
+    },
+    variantSecondary: {
+        backgroundColor: c.white,
+        borderWidth: 1.5,
+        borderColor: c.surfaceDark,
+    },
+    variantGhost: {
+        backgroundColor: c.surfaceGlass,
+        shadowOpacity: 0,
+        elevation: 0,
+    },
+    // variant label styles (need theme colors)
+    variantLabelPrimary: {
+        color: c.white,
+    },
+    variantLabelSecondary: {
+        color: c.surfaceDark,
+    },
+    variantLabelGhost: {
+        color: c.white,
     },
 });
 
@@ -127,39 +167,14 @@ const sizeStyles = StyleSheet.create({
 const sizeLabelStyles = StyleSheet.create({
     small: {
         fontSize: 13,
+    fontFamily: FontFamily,
     },
     medium: {
         fontSize: 15,
+    fontFamily: FontFamily,
     },
     large: {
         fontSize: 17,
-    },
-});
-
-const variantStyles = StyleSheet.create({
-    primary: {
-        backgroundColor: Colors.surfaceDark,
-    },
-    secondary: {
-        backgroundColor: Colors.white,
-        borderWidth: 1.5,
-        borderColor: Colors.surfaceDark,
-    },
-    ghost: {
-        backgroundColor: Colors.surfaceGlass,
-        shadowOpacity: 0,
-        elevation: 0,
-    },
-});
-
-const variantLabelStyles = StyleSheet.create({
-    primary: {
-        color: Colors.white,
-    },
-    secondary: {
-        color: Colors.surfaceDark,
-    },
-    ghost: {
-        color: Colors.white,
+    fontFamily: FontFamily,
     },
 });
