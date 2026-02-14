@@ -112,8 +112,8 @@ export const STAGGER_MAX = 12;
 
 // ── Press Feedback ──────────────────────────────────────────────────────────
 
-/** Scale-down factor on press (0.96 = scale to 96%) */
-export const PRESS_SCALE = 0.96;
+/** Scale-down factor on press (0.95 = squishy tactile capsule feel) */
+export const PRESS_SCALE = 0.95;
 
 /** Delay before showing press state to avoid flashing (ms) */
 export const PRESS_DELAY = 60;

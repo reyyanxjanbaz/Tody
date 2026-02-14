@@ -16,7 +16,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import Icon from 'react-native-vector-icons/Ionicons';
 import { Task, Priority } from '../types';
-import { Colors, Spacing, Typography } from '../utils/colors';
+import { Colors, Spacing, Typography, BorderRadius } from '../utils/colors';
 import { formatDeadline } from '../utils/dateUtils';
 import { AnimatedPressable } from './ui';
 import { haptic } from '../utils/haptics';
@@ -237,10 +237,10 @@ export const FocusMode = memo(function FocusMode({
                         )}
 
                         {/* Complete button */}
-                        <AnimatedPressable
-                            onPress={handleComplete}
-                            hapticStyle="success"
-                            pressScale={0.97}>
+                <AnimatedPressable
+                    onPress={handleComplete}
+                    hapticStyle="success"
+                    pressScale={0.95}>
                             <View style={styles.completeButton}>
                                 <Icon
                                     name="checkmark-circle-outline"
@@ -268,7 +268,7 @@ export const FocusMode = memo(function FocusMode({
                         <Icon
                             name="chevron-back"
                             size={20}
-                            color={currentIndex === 0 ? Colors.gray200 : Colors.gray600}
+                            color={currentIndex === 0 ? 'rgba(255,255,255,0.2)' : Colors.white}
                         />
                     </View>
                 </AnimatedPressable>
@@ -292,8 +292,8 @@ export const FocusMode = memo(function FocusMode({
                             size={20}
                             color={
                                 currentIndex >= focusTasks.length - 1
-                                    ? Colors.gray200
-                                    : Colors.gray600
+                                    ? 'rgba(255,255,255,0.2)'
+                                    : Colors.white
                             }
                         />
                     </View>
@@ -303,7 +303,7 @@ export const FocusMode = memo(function FocusMode({
             {/* Exit */}
             <AnimatedPressable onPress={onExit} hapticStyle="light">
                 <View style={styles.exitButton}>
-                    <Icon name="close-outline" size={16} color={Colors.gray500} />
+                    <Icon name="close-outline" size={16} color="rgba(255,255,255,0.6)" />
                     <Text style={styles.exitText}>Exit Focus Mode</Text>
                 </View>
             </AnimatedPressable>
@@ -314,7 +314,7 @@ export const FocusMode = memo(function FocusMode({
 const styles = StyleSheet.create({
     container: {
         ...StyleSheet.absoluteFillObject,
-        backgroundColor: Colors.white,
+        backgroundColor: Colors.surfaceDark,
         justifyContent: 'center',
         alignItems: 'center',
         paddingHorizontal: 32,
@@ -329,7 +329,7 @@ const styles = StyleSheet.create({
         fontSize: 48,
         fontWeight: '200',
         letterSpacing: -2,
-        color: Colors.text,
+        color: Colors.white,
     },
     progressDots: {
         flexDirection: 'row',
@@ -341,10 +341,10 @@ const styles = StyleSheet.create({
         width: 8,
         height: 8,
         borderRadius: 4,
-        backgroundColor: Colors.gray200,
+        backgroundColor: 'rgba(255,255,255,0.2)',
     },
     dotActive: {
-        backgroundColor: Colors.black,
+        backgroundColor: Colors.white,
         width: 24,
     },
     dotCompleted: {
@@ -355,7 +355,11 @@ const styles = StyleSheet.create({
     },
     taskCard: {
         width: '100%',
-        padding: 24,
+        padding: 28,
+        backgroundColor: 'rgba(255,255,255,0.08)',
+        borderRadius: BorderRadius.card,
+        borderWidth: StyleSheet.hairlineWidth,
+        borderColor: 'rgba(255,255,255,0.12)',
     },
     priorityRow: {
         flexDirection: 'row',
@@ -365,20 +369,20 @@ const styles = StyleSheet.create({
     },
     priorityLabel: {
         fontSize: 12,
-        fontWeight: '600',
-        letterSpacing: 0.5,
+        fontWeight: '700',
+        letterSpacing: 0.8,
     },
     taskTitle: {
-        fontSize: 24,
+        fontSize: 26,
         fontWeight: '700',
         letterSpacing: -0.5,
-        color: Colors.text,
-        lineHeight: 32,
+        color: Colors.white,
+        lineHeight: 34,
         marginBottom: 12,
     },
     taskDescription: {
         fontSize: 15,
-        color: Colors.textSecondary,
+        color: 'rgba(255,255,255,0.7)',
         lineHeight: 22,
         marginBottom: 16,
     },
@@ -390,22 +394,22 @@ const styles = StyleSheet.create({
     },
     deadlineText: {
         fontSize: 14,
-        color: Colors.gray500,
+        color: 'rgba(255,255,255,0.5)',
     },
     completeButton: {
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'center',
-        backgroundColor: Colors.black,
-        height: 48,
-        borderRadius: 8,
-        marginTop: 24,
+        backgroundColor: Colors.white,
+        height: 52,
+        borderRadius: BorderRadius.button,
+        marginTop: 28,
         gap: 8,
     },
     completeText: {
-        fontSize: 15,
-        fontWeight: '600',
-        color: Colors.white,
+        fontSize: 16,
+        fontWeight: '700',
+        color: Colors.surfaceDark,
     },
     navigationRow: {
         flexDirection: 'row',
@@ -415,33 +419,35 @@ const styles = StyleSheet.create({
         bottom: 120,
     },
     navButton: {
-        width: 40,
-        height: 40,
-        borderRadius: 20,
-        backgroundColor: Colors.gray50,
+        width: 44,
+        height: 44,
+        borderRadius: 12,
+        backgroundColor: 'rgba(255,255,255,0.1)',
         justifyContent: 'center',
         alignItems: 'center',
     },
     navButtonDisabled: {
-        opacity: 0.4,
+        opacity: 0.3,
     },
     positionText: {
         fontSize: 13,
-        color: Colors.gray500,
+        color: 'rgba(255,255,255,0.5)',
     },
     exitButton: {
         position: 'absolute',
         bottom: 60,
         flexDirection: 'row',
         alignItems: 'center',
-        gap: 4,
-        paddingVertical: 12,
-        paddingHorizontal: 20,
+        gap: 6,
+        paddingVertical: 14,
+        paddingHorizontal: 24,
+        backgroundColor: 'rgba(255,255,255,0.08)',
+        borderRadius: BorderRadius.pill,
     },
     exitText: {
         fontSize: 14,
-        fontWeight: '500',
-        color: Colors.gray500,
+        fontWeight: '600',
+        color: 'rgba(255,255,255,0.6)',
     },
     emptyFocusContainer: {
         alignItems: 'center',
@@ -450,11 +456,11 @@ const styles = StyleSheet.create({
     emptyTitle: {
         fontSize: 24,
         fontWeight: '700',
-        color: Colors.text,
+        color: Colors.white,
     },
     emptySubtitle: {
         fontSize: 14,
-        color: Colors.gray500,
+        color: 'rgba(255,255,255,0.5)',
         textAlign: 'center',
     },
 });

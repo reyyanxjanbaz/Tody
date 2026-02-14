@@ -19,7 +19,7 @@ import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import { useInbox } from '../context/InboxContext';
 import { useTasks } from '../context/TaskContext';
-import { Colors, Spacing, Typography } from '../utils/colors';
+import { Colors, Spacing, Typography, Shadows, BorderRadius } from '../utils/colors';
 import { formatDeadline } from '../utils/dateUtils';
 import { Priority, RootStackParamList, EnergyLevel } from '../types';
 import Icon from 'react-native-vector-icons/Ionicons';
@@ -559,10 +559,24 @@ export function ProcessInboxScreen({ navigation }: Props) {
         </ScrollView>
       )}
 
-      {/* ── Floating Controls (Dynamic Capsule Dock) ───────────── */}
+      {/* ── Floating Controls (Dock) ───────────── */}
       {!isExpanded && (
         <View style={styles.floatingContainer}>
           <Animated.View style={styles.dockCapsule}>
+            {/* Previous */}
+            <Pressable
+              onPress={goToPrev}
+              hitSlop={12}
+              disabled={viewMode !== 'swipe' || currentIndex <= 0}
+              style={[
+                styles.dockBtnSmall,
+                (viewMode !== 'swipe' || currentIndex <= 0) && { opacity: 0.3 },
+              ]}>
+              <Icon name="chevron-back" size={20} color={Colors.white} />
+            </Pressable>
+
+            <View style={styles.dockDivider} />
+
             {/* Layout Toggle */}
             <Pressable
               onPress={toggleViewMode}
@@ -575,8 +589,6 @@ export function ProcessInboxScreen({ navigation }: Props) {
               />
             </Pressable>
 
-            <View style={styles.dockDivider} />
-
             {/* Add Memo */}
             <Pressable
               onPress={handleOpenAddMemo}
@@ -584,6 +596,20 @@ export function ProcessInboxScreen({ navigation }: Props) {
               style={styles.dockBtnLarge}>
               <Icon name="add" size={24} color={Colors.black} />
               <Text style={styles.dockBtnText}>New Memo</Text>
+            </Pressable>
+
+            <View style={styles.dockDivider} />
+
+            {/* Next */}
+            <Pressable
+              onPress={goNext}
+              hitSlop={12}
+              disabled={viewMode !== 'swipe' || currentIndex >= totalCount - 1}
+              style={[
+                styles.dockBtnSmall,
+                (viewMode !== 'swipe' || currentIndex >= totalCount - 1) && { opacity: 0.3 },
+              ]}>
+              <Icon name="chevron-forward" size={20} color={Colors.white} />
             </Pressable>
           </Animated.View>
         </View>
@@ -695,7 +721,7 @@ function formatCapturedAt(timestamp: number): string {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.background,
+    backgroundColor: '#F5F5F5',
   },
 
   // ── Header ──────────────────────────────────────────────────
@@ -703,15 +729,14 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: Spacing.lg,
-    paddingVertical: Spacing.md,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: Colors.border,
+    paddingHorizontal: Spacing.xxl,
+    paddingVertical: Spacing.lg,
   },
   headerTitle: {
-    fontSize: 16,
-    fontWeight: '600',
+    fontSize: 17,
+    fontWeight: '700',
     color: Colors.text,
+    letterSpacing: -0.3,
   },
   headerActions: {
     flexDirection: 'row',
@@ -735,12 +760,13 @@ const styles = StyleSheet.create({
   },
   memoBox: {
     width: '100%',
-    borderWidth: 1,
-    borderColor: Colors.border,
-    borderRadius: 8,
-    paddingVertical: Spacing.xl,
-    paddingHorizontal: Spacing.lg,
-    backgroundColor: Colors.gray50,
+    borderWidth: 0,
+    borderColor: 'transparent',
+    borderRadius: 14,
+    paddingVertical: Spacing.xxl,
+    paddingHorizontal: Spacing.xxl,
+    backgroundColor: Colors.white,
+    ...Shadows.card,
   },
   rawText: {
     fontSize: 20,
@@ -770,15 +796,16 @@ const styles = StyleSheet.create({
     gap: GRID_GAP,
   },
   bentoCard: {
-    borderWidth: 1,
-    borderColor: Colors.border,
-    borderRadius: 8,
-    backgroundColor: Colors.gray50,
-    padding: Spacing.md,
+    borderWidth: 0,
+    borderColor: 'transparent',
+    borderRadius: BorderRadius.card,
+    backgroundColor: Colors.white,
+    padding: Spacing.lg,
     justifyContent: 'space-between',
+    ...Shadows.card,
   },
   bentoCardSelected: {
-    borderColor: Colors.black,
+    borderColor: Colors.surfaceDark,
     borderWidth: 2,
     backgroundColor: Colors.white,
   },
@@ -819,7 +846,7 @@ const styles = StyleSheet.create({
   // ── Expanded form ───────────────────────────────────────────
   formContainer: {
     flex: 1,
-    paddingHorizontal: Spacing.lg,
+    paddingHorizontal: Spacing.xxl,
   },
   formContent: {
     paddingVertical: Spacing.lg,
@@ -834,13 +861,16 @@ const styles = StyleSheet.create({
     marginBottom: Spacing.sm,
   },
   formInput: {
-    borderBottomWidth: 1,
-    borderBottomColor: Colors.border,
+    borderBottomWidth: 0,
+    borderBottomColor: 'transparent',
+    backgroundColor: '#F2F2F7',
+    borderRadius: BorderRadius.input,
     fontSize: 16,
     fontWeight: '400',
     color: Colors.text,
-    paddingVertical: Spacing.sm,
-    minHeight: 44,
+    paddingVertical: Spacing.md,
+    paddingHorizontal: Spacing.lg,
+    minHeight: 48,
   },
   descriptionInput: {
     minHeight: 80,
@@ -852,16 +882,16 @@ const styles = StyleSheet.create({
   },
   optionButton: {
     paddingVertical: Spacing.sm,
-    paddingHorizontal: Spacing.md,
-    borderWidth: 1,
+    paddingHorizontal: Spacing.lg,
+    borderWidth: 1.5,
     borderColor: Colors.border,
-    borderRadius: 2,
+    borderRadius: BorderRadius.pill,
     minHeight: 44,
     justifyContent: 'center',
   },
   optionButtonActive: {
-    backgroundColor: Colors.black,
-    borderColor: Colors.black,
+    backgroundColor: Colors.surfaceDark,
+    borderColor: Colors.surfaceDark,
   },
   optionText: {
     fontSize: 14,
@@ -878,10 +908,10 @@ const styles = StyleSheet.create({
   },
   deadlineButton: {
     paddingVertical: Spacing.sm,
-    paddingHorizontal: Spacing.md,
-    borderWidth: 1,
+    paddingHorizontal: Spacing.lg,
+    borderWidth: 1.5,
     borderColor: Colors.border,
-    borderRadius: 2,
+    borderRadius: BorderRadius.pill,
     minHeight: 44,
     justifyContent: 'center',
   },
@@ -913,11 +943,11 @@ const styles = StyleSheet.create({
 
   // ── Action bar (icon + label) ───────────────────────────────
   actions: {
-    paddingHorizontal: Spacing.lg,
+    paddingHorizontal: Spacing.xxl,
   },
   separator: {
-    height: StyleSheet.hairlineWidth,
-    backgroundColor: Colors.border,
+    height: 0,
+    backgroundColor: 'transparent',
   },
   actionRow: {
     flexDirection: 'row',
@@ -948,7 +978,7 @@ const styles = StyleSheet.create({
   // ── Add Memo Modal ──────────────────────────────────────────
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.4)',
+    backgroundColor: 'rgba(0,0,0,0.5)',
     justifyContent: 'flex-end',
   },
   modalOverlayTouch: {
@@ -956,17 +986,21 @@ const styles = StyleSheet.create({
   },
   modalContent: {
     backgroundColor: Colors.white,
-    paddingHorizontal: Spacing.lg,
-    paddingTop: Spacing.xl,
+    borderTopLeftRadius: BorderRadius.card,
+    borderTopRightRadius: BorderRadius.card,
+    paddingHorizontal: Spacing.xxl,
+    paddingTop: Spacing.xxl,
+    ...Shadows.floating,
   },
   modalInput: {
-    fontSize: 16,
+    fontSize: 17,
     fontWeight: '400',
     color: Colors.text,
-    borderBottomWidth: 1,
-    borderBottomColor: Colors.border,
+    backgroundColor: '#F2F2F7',
+    borderRadius: BorderRadius.input,
     paddingVertical: Spacing.md,
-    minHeight: 44,
+    paddingHorizontal: Spacing.lg,
+    minHeight: 52,
   },
   modalActions: {
     flexDirection: 'row',
@@ -975,8 +1009,10 @@ const styles = StyleSheet.create({
   },
   modalButton: {
     paddingVertical: Spacing.md,
-    minHeight: 44,
+    paddingHorizontal: Spacing.lg,
+    minHeight: 48,
     justifyContent: 'center',
+    borderRadius: BorderRadius.pill,
   },
   modalButtonText: {
     fontSize: 14,
@@ -996,20 +1032,17 @@ const styles = StyleSheet.create({
   dockCapsule: {
     flexDirection: 'row',
     backgroundColor: '#1C1C1E', // Dark heavy background
-    borderRadius: 32,
+    borderRadius: 14,
     padding: 6,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.25,
-    shadowRadius: 16,
-    elevation: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(0,0,0,0.10)',
     alignItems: 'center',
     gap: 8,
   },
   dockBtnSmall: {
     width: 44,
     height: 44,
-    borderRadius: 22,
+    borderRadius: 12,
     justifyContent: 'center',
     alignItems: 'center',
     backgroundColor: 'rgba(255,255,255,0.1)',
@@ -1024,7 +1057,7 @@ const styles = StyleSheet.create({
     height: 44,
     paddingHorizontal: 20,
     backgroundColor: Colors.white,
-    borderRadius: 22,
+    borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
     gap: 6,

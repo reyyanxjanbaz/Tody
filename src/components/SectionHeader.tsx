@@ -1,7 +1,7 @@
 import React, { memo } from 'react';
 import { Text, StyleSheet } from 'react-native';
 import Animated, { FadeIn } from 'react-native-reanimated';
-import { Colors, Spacing, Typography } from '../utils/colors';
+import { Colors, Spacing } from '../utils/colors';
 
 interface SectionHeaderProps {
   title: string;
@@ -18,24 +18,31 @@ export const SectionHeader = memo(function SectionHeader({
       style={styles.container}>
       <Text style={styles.title}>
         {title}
-        <Text style={styles.count}>{`  ${count}`}</Text>
       </Text>
+      <Text style={styles.count}>{count}</Text>
     </Animated.View>
   );
 });
 
 const styles = StyleSheet.create({
   container: {
-    paddingHorizontal: Spacing.lg,
-    paddingTop: Spacing.xl,
-    paddingBottom: Spacing.sm,
-    backgroundColor: Colors.background,
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    gap: 8,
+    paddingHorizontal: Spacing.xxl,
+    paddingTop: Spacing.xxl,
+    paddingBottom: Spacing.md,
+    backgroundColor: 'transparent',
   },
   title: {
-    ...Typography.sectionHeader,
+    fontSize: 22,
+    fontWeight: '700',
+    letterSpacing: -0.4,
+    color: Colors.text,
   },
   count: {
-    ...Typography.sectionHeader,
+    fontSize: 16,
+    fontWeight: '600',
     color: Colors.gray400,
   },
 });

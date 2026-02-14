@@ -14,7 +14,7 @@ import Animated, {
   withSpring,
   withTiming,
 } from 'react-native-reanimated';
-import { Colors, Spacing, Typography } from '../utils/colors';
+import { Colors, Spacing, Typography, Shadows, BorderRadius } from '../utils/colors';
 import { parseEstimateInput, formatMinutes } from '../utils/timeTracking';
 import { EstimateSuggestion } from './EstimateSuggestion';
 import { EnergyLevel } from '../types';
@@ -177,9 +177,7 @@ const selectorStyles = StyleSheet.create({
   container: {
     paddingHorizontal: Spacing.lg,
     paddingVertical: Spacing.sm,
-    backgroundColor: Colors.white,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: Colors.borderLight,
+    backgroundColor: 'transparent',
   },
   label: {
     ...Typography.caption,
@@ -188,10 +186,10 @@ const selectorStyles = StyleSheet.create({
   },
   buttons: {
     flexDirection: 'row',
-    borderRadius: 2,
+    borderRadius: BorderRadius.pill,
     overflow: 'hidden',
-    borderWidth: 1,
-    borderColor: Colors.black,
+    borderWidth: 1.5,
+    borderColor: Colors.surfaceDark,
   },
   button: {
     flex: 1,
@@ -200,14 +198,14 @@ const selectorStyles = StyleSheet.create({
     justifyContent: 'center',
     backgroundColor: Colors.white,
     borderRightWidth: 1,
-    borderRightColor: Colors.black,
+    borderRightColor: Colors.surfaceDark,
   },
   buttonSelected: {
-    backgroundColor: Colors.black,
+    backgroundColor: Colors.surfaceDark,
   },
   buttonText: {
     ...Typography.caption,
-    color: Colors.black,
+    color: Colors.surfaceDark,
     fontWeight: '400',
   },
   buttonTextSelected: {
@@ -221,23 +219,12 @@ const styles = StyleSheet.create({
   container: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: Colors.surface, // Softer background
-    borderRadius: 12, // Rounded corners
+    backgroundColor: '#F2F2F7',
+    borderRadius: BorderRadius.input,
     marginHorizontal: Spacing.lg,
     marginVertical: Spacing.sm,
-    paddingHorizontal: Spacing.md,
-    height: 56, // Slightly taller
-    // Shadow for depth
-    shadowColor: "#000",
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.05,
-    shadowRadius: 3.84,
-    elevation: 2,
-    borderWidth: 1,
-    borderColor: Colors.borderLight,
+    paddingHorizontal: Spacing.lg,
+    height: 56,
   },
   input: {
     flex: 1,
@@ -247,12 +234,12 @@ const styles = StyleSheet.create({
     color: Colors.text,
   },
   addButton: {
-    width: 36,
-    height: 36,
+    width: 38,
+    height: 38,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: Colors.black,
-    borderRadius: 18,
+    backgroundColor: Colors.surfaceDark,
+    borderRadius: 10,
     marginLeft: Spacing.sm,
   },
   addButtonText: {
@@ -266,9 +253,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: Spacing.lg,
-    backgroundColor: Colors.white,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: Colors.borderLight,
+    marginHorizontal: Spacing.lg,
+    backgroundColor: '#F2F2F7',
+    borderRadius: BorderRadius.button,
+    marginTop: Spacing.xs,
+    paddingVertical: Spacing.xs,
   },
   estimateInput: {
     flex: 1,
@@ -283,8 +272,6 @@ const styles = StyleSheet.create({
   },
   energySelectorWrapper: {
     paddingHorizontal: Spacing.lg,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: Colors.borderLight,
     paddingBottom: Spacing.sm,
   },
 });

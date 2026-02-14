@@ -14,7 +14,7 @@ import { useAuth } from '../context/AuthContext';
 import { TaskItem } from '../components/TaskItem';
 import { EmptyState } from '../components/EmptyState';
 import { SectionHeader } from '../components/SectionHeader';
-import { Colors, Spacing, Typography } from '../utils/colors';
+import { Colors, Spacing, Typography, Shadows, BorderRadius } from '../utils/colors';
 import { Task, RootStackParamList } from '../types';
 
 type Props = {
@@ -193,9 +193,9 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: Spacing.lg,
-    paddingTop: Spacing.lg,
-    paddingBottom: Spacing.md,
+    paddingHorizontal: Spacing.xxl,
+    paddingTop: Spacing.xl,
+    paddingBottom: Spacing.lg,
     gap: Spacing.lg,
   },
   backText: {
@@ -216,15 +216,16 @@ const styles = StyleSheet.create({
     color: Colors.gray400,
   },
   searchContainer: {
-    paddingHorizontal: Spacing.lg,
+    paddingHorizontal: Spacing.xxl,
     paddingBottom: Spacing.md,
   },
   searchInput: {
-    height: 44,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    borderRadius: 2,
-    paddingHorizontal: Spacing.md,
+    height: 48,
+    borderWidth: 0,
+    borderColor: 'transparent',
+    borderRadius: BorderRadius.input,
+    paddingHorizontal: Spacing.lg,
+    backgroundColor: '#F2F2F7',
     ...Typography.body,
     color: Colors.text,
   },
@@ -236,10 +237,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: Spacing.lg,
-    paddingTop: Spacing.md,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: Colors.border,
+    paddingHorizontal: Spacing.xxl,
+    paddingTop: Spacing.lg,
   },
   footerEmail: {
     ...Typography.small,

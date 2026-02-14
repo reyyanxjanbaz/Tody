@@ -37,7 +37,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { Task, Priority } from '../types';
-import { Colors, Spacing, Typography } from '../utils/colors';
+import { Colors, Spacing, Typography, Shadows, BorderRadius } from '../utils/colors';
 import { formatDeadline, formatCompletedDate, daysFromNow } from '../utils/dateUtils';
 import { getTaskOpacity, formatOverdueGently } from '../utils/decay';
 import { formatMinutes, getElapsedMinutes, isUnreasonableDuration } from '../utils/timeTracking';
@@ -449,22 +449,23 @@ export const TaskItem = memo(function TaskItem({
 const styles = StyleSheet.create({
   outerContainer: {
     position: 'relative',
-    overflow: 'hidden',
+    overflow: 'visible',
     backgroundColor: Colors.white,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: Colors.borderLight,
+    borderBottomColor: 'rgba(0,0,0,0.06)',
   },
   container: {
     backgroundColor: Colors.white,
     zIndex: 2,
+    overflow: 'hidden',
   },
   innerContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: Spacing.md,
+    paddingVertical: Spacing.md + 2,
     paddingRight: Spacing.lg,
-    paddingLeft: 0,
-    minHeight: 52,
+    paddingLeft: Spacing.md,
+    minHeight: 56,
   },
   leftActionBg: {
     ...StyleSheet.absoluteFillObject,
@@ -476,7 +477,7 @@ const styles = StyleSheet.create({
   },
   rightActionBg: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: Colors.black,
+    backgroundColor: Colors.surfaceDark,
     justifyContent: 'center',
     alignItems: 'flex-end',
     paddingRight: 24,
@@ -489,12 +490,18 @@ const styles = StyleSheet.create({
     letterSpacing: 1.5,
   },
   priorityBar: {
-    width: 3,
+    width: 4,
     alignSelf: 'stretch',
-    marginRight: Spacing.md,
-    borderRadius: 0,
+    marginRight: Spacing.sm,
+    borderRadius: 2,
   },
   checkboxContainer: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: Colors.gray50,
+    justifyContent: 'center',
+    alignItems: 'center',
     marginRight: Spacing.md,
   },
   content: {

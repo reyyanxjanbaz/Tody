@@ -18,7 +18,7 @@ import Animated, {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useAuth } from '../context/AuthContext';
-import { Colors, Spacing, Typography } from '../utils/colors';
+import { Colors, Spacing, Typography, BorderRadius } from '../utils/colors';
 import { Button } from '../components/Button';
 import { AnimatedPressable } from '../components/ui';
 import { haptic } from '../utils/haptics';
@@ -201,14 +201,14 @@ const styles = StyleSheet.create({
     color: Colors.gray800,
   },
   input: {
-    height: 52,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    borderRadius: 2,
-    paddingHorizontal: Spacing.lg,
+    height: 56,
+    borderWidth: 0,
+    borderColor: 'transparent',
+    borderRadius: BorderRadius.input,
+    paddingHorizontal: Spacing.xl,
     ...Typography.body,
     color: Colors.text,
-    backgroundColor: Colors.white,
+    backgroundColor: '#F2F2F7',
   },
   button: {
     marginTop: Spacing.sm,

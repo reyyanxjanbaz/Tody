@@ -39,7 +39,7 @@ import {
     countDescendants,
     flattenTasksHierarchically,
 } from '../utils/dependencyChains';
-import { Colors, Spacing, Typography } from '../utils/colors';
+import { Colors, Spacing, Typography, Shadows, BorderRadius } from '../utils/colors';
 import { Task, RootStackParamList, EnergyLevel } from '../types';
 import { haptic } from '../utils/haptics';
 
@@ -708,6 +708,7 @@ export function HomeScreen({ navigation }: Props) {
                 >
                     <TaskInput onSubmit={handleAddTask} />
 
+                    {/* Bottom Nav Bar */}
                     <View style={[styles.bottomNavBar, { paddingBottom: insets.bottom }]}>
                         <InboxBadge onPress={handleOpenInbox} />
 
@@ -902,14 +903,14 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         justifyContent: 'space-between',
         alignItems: 'flex-end',
-        paddingHorizontal: Spacing.lg,
-        paddingTop: Spacing.lg,
-        paddingBottom: Spacing.md,
+        paddingHorizontal: Spacing.xxl,
+        paddingTop: Spacing.xl,
+        paddingBottom: Spacing.lg,
     },
     headerTitle: {
-        fontSize: 32,
+        fontSize: 36,
         fontWeight: '800',
-        letterSpacing: -0.8,
+        letterSpacing: -1,
         color: Colors.text,
     },
     headerCount: {
@@ -946,7 +947,7 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         backgroundColor: Colors.white,
         borderTopWidth: StyleSheet.hairlineWidth,
-        borderTopColor: Colors.borderLight,
+        borderTopColor: Colors.border,
         paddingTop: Spacing.sm,
         paddingHorizontal: Spacing.md,
     },
@@ -973,11 +974,12 @@ const styles = StyleSheet.create({
     },
     searchInput: {
         flex: 1,
-        height: 44,
-        borderWidth: 1,
-        borderColor: Colors.border,
-        borderRadius: 2,
-        paddingHorizontal: Spacing.md,
+        height: 48,
+        borderWidth: 0,
+        borderColor: 'transparent',
+        borderRadius: BorderRadius.input,
+        paddingHorizontal: Spacing.lg,
+        backgroundColor: '#F2F2F7',
         ...Typography.body,
         color: Colors.text,
     },
@@ -996,18 +998,18 @@ const styles = StyleSheet.create({
         flex: 1,
     },
     archiveButton: {
-        backgroundColor: Colors.gray50,
+        backgroundColor: Colors.surfaceDark,
         paddingVertical: Spacing.md,
         paddingHorizontal: Spacing.lg,
         marginHorizontal: Spacing.lg,
         marginTop: Spacing.lg,
-        borderRadius: 4,
+        borderRadius: BorderRadius.button,
         alignItems: 'center',
     },
     archiveButtonText: {
-        fontSize: 12,
-        fontWeight: '400',
-        color: Colors.text,
+        fontSize: 13,
+        fontWeight: '700',
+        color: Colors.white,
     },
     modalOverlay: {
         flex: 1,
@@ -1016,11 +1018,14 @@ const styles = StyleSheet.create({
         alignItems: 'center',
     },
     modalCard: {
-        width: '80%',
+        width: '85%',
         backgroundColor: Colors.white,
-        borderRadius: 8,
-        paddingVertical: Spacing.xl,
-        paddingHorizontal: Spacing.lg,
+        borderRadius: BorderRadius.card,
+        paddingVertical: Spacing.xxl,
+        paddingHorizontal: Spacing.xxl,
+        ...Shadows.floating,
+        borderWidth: 1,
+        borderColor: 'rgba(0,0,0,0.10)',
     },
     modalTitle: {
         ...Typography.bodyMedium,
@@ -1048,10 +1053,10 @@ const styles = StyleSheet.create({
         color: Colors.textTertiary,
     },
     modalArchiveButton: {
-        paddingVertical: Spacing.sm,
-        paddingHorizontal: Spacing.xl,
-        backgroundColor: Colors.text,
-        borderRadius: 4,
+        paddingVertical: Spacing.md,
+        paddingHorizontal: Spacing.xxl,
+        backgroundColor: Colors.surfaceDark,
+        borderRadius: BorderRadius.button,
     },
     modalArchiveText: {
         ...Typography.body,

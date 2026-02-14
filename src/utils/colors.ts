@@ -1,4 +1,4 @@
-import { StyleSheet } from 'react-native';
+import { StyleSheet, ViewStyle } from 'react-native';
 
 export const Colors = {
   black: '#000000',
@@ -21,6 +21,33 @@ export const Colors = {
   borderLight: '#F5F5F5',
   activeState: '#424242',
   danger: '#424242',
+
+  // Dynamic Capsule Theme
+  surfaceDark: '#1C1C1E',
+  surfaceGlass: 'rgba(255,255,255,0.1)',
+  backgroundOffWhite: '#F5F5F7',
+} as const;
+
+export const Shadows = {
+  floating: {
+    borderWidth: 1,
+    borderColor: 'rgba(0,0,0,0.10)',
+  } as ViewStyle,
+  card: {
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(0,0,0,0.12)',
+  } as ViewStyle,
+  subtle: {
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(0,0,0,0.08)',
+  } as ViewStyle,
+};
+
+export const BorderRadius = {
+  pill: 100,
+  card: 14,
+  button: 10,
+  input: 10,
 } as const;
 
 export const Spacing = {

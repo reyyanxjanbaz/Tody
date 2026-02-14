@@ -22,7 +22,7 @@ import Animated, {
   runOnJS,
 } from 'react-native-reanimated';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
-import { Colors, Spacing } from '../utils/colors';
+import { Colors, Spacing, Shadows, BorderRadius } from '../utils/colors';
 import { SPRING_SNAPPY, PRESS_SCALE, TIMING_FADE } from '../utils/animations';
 import { haptic } from '../utils/haptics';
 
@@ -108,27 +108,29 @@ export const Button = memo(function Button({
 
 const styles = StyleSheet.create({
   base: {
-    height: 48,
+    height: 52,
     justifyContent: 'center',
     alignItems: 'center',
-    borderRadius: 2,
-    paddingHorizontal: Spacing.xl,
+    borderRadius: BorderRadius.button,
+    paddingHorizontal: Spacing.xxl,
   },
   primary: {
-    backgroundColor: Colors.black,
+    backgroundColor: Colors.surfaceDark,
   },
   secondary: {
     backgroundColor: Colors.white,
-    borderWidth: 1,
-    borderColor: Colors.black,
+    borderWidth: 1.5,
+    borderColor: Colors.surfaceDark,
   },
   ghost: {
     backgroundColor: 'transparent',
+    shadowOpacity: 0,
+    elevation: 0,
   },
   text: {
-    fontSize: 15,
-    fontWeight: '600',
-    letterSpacing: 0.3,
+    fontSize: 16,
+    fontWeight: '700',
+    letterSpacing: -0.2,
   },
   textPrimary: {
     color: Colors.white,

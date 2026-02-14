@@ -14,7 +14,7 @@ import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RouteProp } from '@react-navigation/native';
 import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import { useTasks } from '../context/TaskContext';
-import { Colors, Spacing, Typography } from '../utils/colors';
+import { Colors, Spacing, Typography, Shadows, BorderRadius } from '../utils/colors';
 import { formatDeadline } from '../utils/dateUtils';
 import { formatMinutes, parseEstimateInput, getElapsedMinutes } from '../utils/timeTracking';
 import { isTaskLocked, getChildren, countDescendants } from '../utils/dependencyChains';
@@ -476,8 +476,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: Spacing.lg,
-    paddingVertical: Spacing.md,
+    paddingHorizontal: Spacing.xxl,
+    paddingVertical: Spacing.lg,
   },
   backText: {
     ...Typography.link,
@@ -491,8 +491,8 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   content: {
-    paddingHorizontal: Spacing.lg,
-    paddingTop: Spacing.md,
+    paddingHorizontal: Spacing.xxl,
+    paddingTop: Spacing.lg,
   },
   titleInput: {
     fontSize: 24,
@@ -510,10 +510,10 @@ const styles = StyleSheet.create({
     padding: 0,
   },
   divider: {
-    height: StyleSheet.hairlineWidth,
-    backgroundColor: Colors.border,
-    marginTop: Spacing.lg,
-    marginBottom: Spacing.lg,
+    height: 0,
+    backgroundColor: 'transparent',
+    marginTop: Spacing.xxl,
+    marginBottom: Spacing.xxl,
   },
   fieldLabel: {
     ...Typography.sectionHeader,
@@ -526,13 +526,13 @@ const styles = StyleSheet.create({
   priorityOption: {
     paddingHorizontal: Spacing.lg,
     paddingVertical: Spacing.sm,
-    borderWidth: 1,
+    borderWidth: 1.5,
     borderColor: Colors.border,
-    borderRadius: 2,
+    borderRadius: BorderRadius.pill,
   },
   priorityOptionActive: {
-    backgroundColor: Colors.black,
-    borderColor: Colors.black,
+    backgroundColor: Colors.surfaceDark,
+    borderColor: Colors.surfaceDark,
   },
   priorityText: {
     ...Typography.caption,
@@ -550,9 +550,9 @@ const styles = StyleSheet.create({
   deadlineButton: {
     paddingVertical: Spacing.sm,
     paddingHorizontal: Spacing.lg,
-    borderWidth: 1,
+    borderWidth: 1.5,
     borderColor: Colors.border,
-    borderRadius: 2,
+    borderRadius: BorderRadius.pill,
   },
   deadlineValue: {
     ...Typography.body,
@@ -602,22 +602,23 @@ const styles = StyleSheet.create({
     paddingLeft: Spacing.sm,
   },
   subtaskCheckbox: {
-    width: 14,
-    height: 14,
+    width: 18,
+    height: 18,
     borderWidth: 1.5,
     borderColor: Colors.gray400,
-    borderRadius: 1,
+    borderRadius: 9,
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: Spacing.md,
   },
   subtaskCheckboxDone: {
-    borderColor: Colors.black,
-    backgroundColor: Colors.black,
+    borderColor: Colors.surfaceDark,
+    backgroundColor: Colors.surfaceDark,
   },
   subtaskCheckboxInner: {
-    width: 6,
-    height: 6,
+    width: 8,
+    height: 8,
+    borderRadius: 4,
     backgroundColor: Colors.white,
   },
   subtaskTitle: {

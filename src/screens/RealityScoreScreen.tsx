@@ -244,8 +244,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'flex-start',
     alignItems: 'center',
-    paddingHorizontal: Spacing.lg,
-    paddingVertical: Spacing.md,
+    paddingHorizontal: Spacing.xxl,
+    paddingVertical: Spacing.lg,
   },
   backText: {
     ...Typography.link,

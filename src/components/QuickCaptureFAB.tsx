@@ -21,7 +21,7 @@ import Animated, {
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useInbox } from '../context/InboxContext';
-import { Colors, Spacing } from '../utils/colors';
+import { Colors, Spacing, Shadows, BorderRadius } from '../utils/colors';
 import { haptic } from '../utils/haptics';
 import { SPRING_SNAPPY, PRESS_SCALE } from '../utils/animations';
 
@@ -173,24 +173,24 @@ export const QuickCaptureFAB = memo(function QuickCaptureFAB() {
 const styles = StyleSheet.create({
   fab: {
     position: 'absolute',
-    width: 56,
-    height: 56,
-    borderRadius: 4,
-    backgroundColor: Colors.black,
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    backgroundColor: Colors.surfaceDark,
     justifyContent: 'center',
     alignItems: 'center',
     zIndex: 100,
   },
   fabIcon: {
     color: Colors.white,
-    fontSize: 28,
-    fontWeight: '300',
-    lineHeight: 30,
+    fontSize: 30,
+    fontWeight: '400',
+    lineHeight: 32,
     marginTop: -1,
   },
   overlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.4)',
+    backgroundColor: 'rgba(0,0,0,0.5)',
     justifyContent: 'flex-end',
   },
   overlayTouch: {
@@ -198,35 +198,47 @@ const styles = StyleSheet.create({
   },
   modalContent: {
     backgroundColor: Colors.white,
-    paddingHorizontal: Spacing.lg,
-    paddingTop: Spacing.xl,
+    borderTopLeftRadius: BorderRadius.card,
+    borderTopRightRadius: BorderRadius.card,
+    paddingHorizontal: Spacing.xxl,
+    paddingTop: Spacing.xxl,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: 'rgba(0,0,0,0.12)',
   },
   input: {
-    fontSize: 16,
+    fontSize: 17,
     fontWeight: '400',
     color: Colors.text,
-    borderBottomWidth: 1,
-    borderBottomColor: Colors.border,
+    backgroundColor: '#F2F2F7',
+    borderRadius: BorderRadius.input,
     paddingVertical: Spacing.md,
-    minHeight: 44,
+    paddingHorizontal: Spacing.lg,
+    minHeight: 52,
   },
   modalActions: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginTop: Spacing.lg,
+    marginTop: Spacing.xl,
   },
   modalButton: {
     paddingVertical: Spacing.md,
-    minHeight: 44,
+    paddingHorizontal: Spacing.lg,
+    minHeight: 48,
     justifyContent: 'center',
+    borderRadius: BorderRadius.pill,
   },
   modalButtonText: {
-    fontSize: 14,
-    fontWeight: '500',
+    fontSize: 15,
+    fontWeight: '600',
     color: Colors.textSecondary,
   },
   modalSubmitText: {
-    color: Colors.black,
-    fontWeight: '600',
+    color: Colors.white,
+    fontWeight: '700',
+    backgroundColor: Colors.surfaceDark,
+    borderRadius: BorderRadius.pill,
+    overflow: 'hidden',
+    paddingHorizontal: Spacing.xl,
+    paddingVertical: Spacing.md,
   },
 });
