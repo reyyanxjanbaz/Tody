@@ -22,7 +22,8 @@ import Animated, {
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { SPRING_SNAPPY, TIMING_MICRO } from '../../utils/animations';
 import { haptic } from '../../utils/haptics';
-import { Colors } from '../../utils/colors';
+import { FontFamily, type ThemeColors } from '../../utils/colors';
+import { useTheme } from '../../context/ThemeContext';
 
 interface AnimatedCheckboxProps {
     checked: boolean;
@@ -37,6 +38,7 @@ export function AnimatedCheckbox({
     onToggle,
     size = 20,
 }: AnimatedCheckboxProps) {
+  const { colors, shadows, isDark } = useTheme();
     const progress = useSharedValue(checked ? 1 : 0);
     const shakeX = useSharedValue(0);
     const pressScale = useSharedValue(1);
@@ -88,12 +90,12 @@ export function AnimatedCheckbox({
         const bgColor = interpolateColor(
             progress.value,
             [0, 1],
-            [Colors.white, Colors.black],
+            [colors.white, colors.black],
         );
         const borderColor = interpolateColor(
             progress.value,
             [0, 1],
-            [locked ? Colors.gray200 : Colors.gray400, Colors.black],
+            [locked ? colors.gray200 : colors.gray400, colors.black],
         );
 
         return {
@@ -116,7 +118,7 @@ export function AnimatedCheckbox({
         width: size * 0.4,
         height: size * 0.4,
         borderRadius: 1,
-        backgroundColor: Colors.white,
+        backgroundColor: colors.white,
         opacity: progress.value,
         transform: [{ scale: progress.value }],
     }));

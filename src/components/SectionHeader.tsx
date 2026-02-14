@@ -1,7 +1,8 @@
 import React, { memo } from 'react';
 import { Text, StyleSheet } from 'react-native';
 import Animated, { FadeIn } from 'react-native-reanimated';
-import { Colors, Spacing } from '../utils/colors';
+import { Spacing, FontFamily, type ThemeColors } from '../utils/colors';
+import { useTheme } from '../context/ThemeContext';
 
 interface SectionHeaderProps {
   title: string;
@@ -12,6 +13,9 @@ export const SectionHeader = memo(function SectionHeader({
   title,
   count,
 }: SectionHeaderProps) {
+  const { colors, shadows, isDark } = useTheme();
+  const styles = React.useMemo(() => createStyles(colors), [colors]);
+
   return (
     <Animated.View
       entering={FadeIn.duration(300)}
@@ -24,7 +28,7 @@ export const SectionHeader = memo(function SectionHeader({
   );
 });
 
-const styles = StyleSheet.create({
+const createStyles = (c: ThemeColors) => StyleSheet.create({
   container: {
     flexDirection: 'row',
     alignItems: 'baseline',
@@ -38,11 +42,13 @@ const styles = StyleSheet.create({
     fontSize: 22,
     fontWeight: '700',
     letterSpacing: -0.4,
-    color: Colors.text,
+    color: c.text,
+    fontFamily: FontFamily,
   },
   count: {
     fontSize: 16,
     fontWeight: '600',
-    color: Colors.gray400,
+    color: c.gray400,
+    fontFamily: FontFamily,
   },
 });

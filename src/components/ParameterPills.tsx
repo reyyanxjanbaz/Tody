@@ -32,7 +32,8 @@ import Animated, {
     withSpring,
 } from 'react-native-reanimated';
 import Icon from 'react-native-vector-icons/Ionicons';
-import { Colors, Spacing, Typography } from '../utils/colors';
+import { Spacing, Typography, FontFamily, type ThemeColors } from '../utils/colors';
+import { useTheme } from '../context/ThemeContext';
 import { Priority, EnergyLevel } from '../types';
 import { haptic } from '../utils/haptics';
 import { formatMinutes } from '../utils/timeTracking';
@@ -41,8 +42,8 @@ import { SPRING_SNAPPY } from '../utils/animations';
 // ── Priority ────────────────────────────────────────────────────────────────
 
 const PRIORITY_CYCLE: Priority[] = ['none', 'low', 'medium', 'high'];
-const PRIORITY_DISPLAY: Record<Priority, { label: string; icon: string; color: string }> = {
-    none: { label: 'Priority', icon: 'remove-outline', color: Colors.gray400 },
+const PRIORITY_DISPLAY: Record<Priority, { label: string; icon: string; color: string | null }> = {
+    none: { label: 'Priority', icon: 'remove-outline', color: null },
     low: { label: 'Low', icon: 'flag-outline', color: '#22C55E' },
     medium: { label: 'Medium', icon: 'flag-outline', color: '#F59E0B' },
     high: { label: 'High', icon: 'flag', color: '#EF4444' },
@@ -54,6 +55,8 @@ interface PriorityPillProps {
 }
 
 export const PriorityPill = memo(function PriorityPill({ value, onChange }: PriorityPillProps) {
+    const { colors } = useTheme();
+    const styles = React.useMemo(() => createStyles(colors), [colors]);
     const scale = useSharedValue(1);
     const animStyle = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }] }));
 
@@ -67,17 +70,18 @@ export const PriorityPill = memo(function PriorityPill({ value, onChange }: Prio
 
     const d = PRIORITY_DISPLAY[value];
     const isActive = value !== 'none';
+    const pillColor = d.color ?? colors.gray400;
 
     return (
         <Pressable onPress={handleTap}>
             <Animated.View
                 style={[
                     styles.pill,
-                    isActive && { borderColor: d.color, backgroundColor: d.color + '14' },
+                    isActive && { borderColor: pillColor, backgroundColor: pillColor + '14' },
                     animStyle,
                 ]}>
-                <Icon name={d.icon} size={13} color={d.color} />
-                <Text style={[styles.pillText, isActive && { color: d.color, fontWeight: '600' }]}>
+                <Icon name={d.icon} size={13} color={pillColor} />
+                <Text style={[styles.pillText, isActive && { color: pillColor, fontWeight: '600' }]}>
                     {d.label}
                 </Text>
             </Animated.View>
@@ -100,6 +104,8 @@ interface EnergyPillProps {
 }
 
 export const EnergyPill = memo(function EnergyPill({ value, onChange }: EnergyPillProps) {
+    const { colors } = useTheme();
+    const styles = React.useMemo(() => createStyles(colors), [colors]);
     const scale = useSharedValue(1);
     const animStyle = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }] }));
 
@@ -134,16 +140,18 @@ interface EstimatePillProps {
 }
 
 export const EstimatePill = memo(function EstimatePill({ value, onPress }: EstimatePillProps) {
+    const { colors } = useTheme();
+    const styles = React.useMemo(() => createStyles(colors), [colors]);
     const hasValue = value != null && value > 0;
     return (
         <Pressable
             style={[
                 styles.pill,
-                hasValue && { borderColor: Colors.gray800, backgroundColor: Colors.gray800 + '0A' },
+                hasValue && { borderColor: colors.gray800, backgroundColor: colors.gray800 + '0A' },
             ]}
             onPress={() => { haptic('selection'); onPress(); }}>
-            <Icon name="time-outline" size={13} color={hasValue ? Colors.gray800 : Colors.gray400} />
-            <Text style={[styles.pillText, hasValue && { color: Colors.gray800, fontWeight: '600' }]}>
+            <Icon name="time-outline" size={13} color={hasValue ? colors.gray800 : colors.gray400} />
+            <Text style={[styles.pillText, hasValue && { color: colors.gray800, fontWeight: '600' }]}>
                 {hasValue ? `~${formatMinutes(value!)}` : 'How long?'}
             </Text>
         </Pressable>
@@ -158,6 +166,8 @@ interface DeadlinePillProps {
 }
 
 export const DeadlinePill = memo(function DeadlinePill({ value, onPress }: DeadlinePillProps) {
+    const { colors } = useTheme();
+    const styles = React.useMemo(() => createStyles(colors), [colors]);
     const hasValue = value !== null;
     const label = hasValue ? formatDeadlineShort(value!) : 'Deadline';
 
@@ -165,11 +175,11 @@ export const DeadlinePill = memo(function DeadlinePill({ value, onPress }: Deadl
         <Pressable
             style={[
                 styles.pill,
-                hasValue && { borderColor: Colors.gray800, backgroundColor: Colors.gray800 + '0A' },
+                hasValue && { borderColor: colors.gray800, backgroundColor: colors.gray800 + '0A' },
             ]}
             onPress={() => { haptic('selection'); onPress(); }}>
-            <Icon name="calendar-outline" size={13} color={hasValue ? Colors.gray800 : Colors.gray400} />
-            <Text style={[styles.pillText, hasValue && { color: Colors.gray800, fontWeight: '600' }]}>
+            <Icon name="calendar-outline" size={13} color={hasValue ? colors.gray800 : colors.gray400} />
+            <Text style={[styles.pillText, hasValue && { color: colors.gray800, fontWeight: '600' }]}>
                 {label}
             </Text>
         </Pressable>
@@ -204,6 +214,8 @@ interface TimeQuickPickProps {
 }
 
 export const TimeQuickPick = memo(function TimeQuickPick({ value, onChange }: TimeQuickPickProps) {
+  const { colors, shadows, isDark } = useTheme();
+  const styles = React.useMemo(() => createStyles(colors), [colors]);
     const [showStepper, setShowStepper] = useState(false);
     const isCustom = value != null && value > 0 && !TIME_OPTIONS.includes(value);
     const currentVal = value ?? 45;
@@ -256,7 +268,7 @@ export const TimeQuickPick = memo(function TimeQuickPick({ value, onChange }: Ti
                     <Icon
                         name={showStepper ? 'close' : 'add'}
                         size={18}
-                        color={(showStepper || isCustom) ? Colors.white : Colors.gray500}
+                        color={(showStepper || isCustom) ? colors.white : colors.gray500}
                     />
                 </Pressable>
             </View>
@@ -275,13 +287,13 @@ export const TimeQuickPick = memo(function TimeQuickPick({ value, onChange }: Ti
 
                     <View style={styles.stepperCenter}>
                         <Pressable onPress={() => adjustBy(-1)} hitSlop={8} style={styles.stepperBtn}>
-                            <Icon name="remove-circle" size={32} color={Colors.gray400} />
+                            <Icon name="remove-circle" size={32} color={colors.gray400} />
                         </Pressable>
                         <View style={styles.stepperDisplay}>
                             <Text style={styles.stepperValue}>{formatMinutes(currentVal)}</Text>
                         </View>
                         <Pressable onPress={() => adjustBy(1)} hitSlop={8} style={styles.stepperBtn}>
-                            <Icon name="add-circle" size={32} color={Colors.surfaceDark} />
+                            <Icon name="add-circle" size={32} color={colors.surfaceDark} />
                         </Pressable>
                     </View>
 
@@ -318,9 +330,12 @@ export const PropertyRow = memo(function PropertyRow({
     onPress,
     hint,
 }: PropertyRowProps) {
+    const { colors } = useTheme();
+    const styles = React.useMemo(() => createStyles(colors), [colors]);
+
     return (
         <Pressable style={styles.propertyRow} onPress={onPress}>
-            <Icon name={icon} size={18} color={Colors.gray500} style={styles.propertyIcon} />
+            <Icon name={icon} size={18} color={colors.gray500} style={styles.propertyIcon} />
             <Text style={styles.propertyLabel}>{label}</Text>
             <Text
                 style={[
@@ -330,14 +345,14 @@ export const PropertyRow = memo(function PropertyRow({
                 numberOfLines={1}>
                 {value}
             </Text>
-            <Icon name="chevron-forward" size={14} color={Colors.gray400} />
+            <Icon name="chevron-forward" size={14} color={colors.gray400} />
         </Pressable>
     );
 });
 
 // ── Styles ──────────────────────────────────────────────────────────────────
 
-const styles = StyleSheet.create({
+const createStyles = (c: ThemeColors) => StyleSheet.create({
     // Pills
     pill: {
         flexDirection: 'row',
@@ -345,15 +360,16 @@ const styles = StyleSheet.create({
         height: 30,
         paddingHorizontal: 10,
         borderWidth: 1,
-        borderColor: Colors.gray200,
+        borderColor: c.gray200,
         borderRadius: 15,
         gap: 4,
-        backgroundColor: Colors.gray50,
+        backgroundColor: c.gray50,
     },
     pillText: {
         fontSize: 12,
         fontWeight: '500',
-        color: Colors.gray400,
+        color: c.gray400,
+    fontFamily: FontFamily,
     },
 
     // Time Quick Pick
@@ -372,20 +388,21 @@ const styles = StyleSheet.create({
         justifyContent: 'center',
         alignItems: 'center',
         borderWidth: 1,
-        borderColor: Colors.gray200,
+        borderColor: c.gray200,
         borderRadius: 8,
     },
     timePillActive: {
-        backgroundColor: Colors.surfaceDark,
-        borderColor: Colors.surfaceDark,
+        backgroundColor: c.surfaceDark,
+        borderColor: c.surfaceDark,
     },
     timePillText: {
         fontSize: 13,
         fontWeight: '500',
-        color: Colors.gray500,
+        color: c.gray500,
+    fontFamily: FontFamily,
     },
     timePillTextActive: {
-        color: Colors.white,
+        color: c.white,
     },
     timePillPlus: {
         width: 34,
@@ -393,9 +410,9 @@ const styles = StyleSheet.create({
         justifyContent: 'center',
         alignItems: 'center',
         borderWidth: 1,
-        borderColor: Colors.gray200,
+        borderColor: c.gray200,
         borderRadius: 8,
-        backgroundColor: Colors.gray50,
+        backgroundColor: c.gray50,
     },
     stepperRow: {
         flexDirection: 'row',
@@ -420,15 +437,16 @@ const styles = StyleSheet.create({
         height: 28,
         borderRadius: 8,
         borderWidth: 1,
-        borderColor: Colors.gray200,
-        backgroundColor: Colors.gray50,
+        borderColor: c.gray200,
+        backgroundColor: c.gray50,
         justifyContent: 'center',
         alignItems: 'center',
     },
     stepperJumpText: {
         fontSize: 12,
         fontWeight: '600',
-        color: Colors.gray500,
+        color: c.gray500,
+    fontFamily: FontFamily,
     },
     stepperBtn: {
         padding: 4,
@@ -440,8 +458,9 @@ const styles = StyleSheet.create({
     stepperValue: {
         fontSize: 22,
         fontWeight: '700',
-        color: Colors.text,
+        color: c.text,
         letterSpacing: -0.3,
+    fontFamily: FontFamily,
     },
 
     // Property Row (detail screen)
@@ -458,13 +477,15 @@ const styles = StyleSheet.create({
     },
     propertyLabel: {
         fontSize: 15,
-        color: Colors.textSecondary,
+        color: c.textSecondary,
         flex: 1,
+    fontFamily: FontFamily,
     },
     propertyValue: {
         fontSize: 15,
         fontWeight: '500',
-        color: Colors.text,
+        color: c.text,
         marginRight: 6,
+    fontFamily: FontFamily,
     },
 });

@@ -1,6 +1,8 @@
 import React, { memo } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import Icon from 'react-native-vector-icons/Ionicons';
+import { FontFamily, type ThemeColors } from '../utils/colors';
+import { useTheme } from '../context/ThemeContext';
 
 /**
  * Feature 2: The Today Line
@@ -10,6 +12,9 @@ import Icon from 'react-native-vector-icons/Ionicons';
  * 1px black line, full-width, with "TODAY" label in 10pt gray (#9E9E9E)
  */
 export const TodayLine = memo(function TodayLine() {
+  const { colors } = useTheme();
+  const styles = React.useMemo(() => createStyles(colors), [colors]);
+
   return (
     <View style={styles.container}>
       <View style={styles.lineLeft} />
@@ -22,18 +27,18 @@ export const TodayLine = memo(function TodayLine() {
   );
 });
 
-const styles = StyleSheet.create({
+const createStyles = (c: ThemeColors) => StyleSheet.create({
   container: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 16,
     paddingVertical: 4,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: c.background,
   },
   lineLeft: {
     height: 1,
     width: 12,
-    backgroundColor: '#000000',
+    backgroundColor: c.text,
   },
   labelContainer: {
     flexDirection: 'row',
@@ -47,11 +52,12 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: '600',
     letterSpacing: 1.5,
-    color: '#9E9E9E',
+    color: c.textSecondary,
+    fontFamily: FontFamily,
   },
   lineRight: {
     flex: 1,
     height: 1,
-    backgroundColor: '#000000',
+    backgroundColor: c.text,
   },
 });

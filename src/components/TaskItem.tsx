@@ -38,7 +38,8 @@ import Animated, {
 } from 'react-native-reanimated';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { Task, Priority } from '../types';
-import { Colors, Spacing, Typography, Shadows, BorderRadius } from '../utils/colors';
+import { Spacing, Typography, BorderRadius, FontFamily, type ThemeColors } from '../utils/colors';
+import { useTheme } from '../context/ThemeContext';
 import { formatDeadline, formatCompletedDate, daysFromNow } from '../utils/dateUtils';
 import { formatOverdueGently } from '../utils/decay';
 import { formatMinutes, getElapsedMinutes, isUnreasonableDuration } from '../utils/timeTracking';
@@ -74,13 +75,6 @@ interface TaskItemProps {
 
 // ── Constants ───────────────────────────────────────────────────────────────
 
-const PRIORITY_COLORS: Record<Priority, string> = {
-  high: Colors.black,
-  medium: Colors.gray500,
-  low: Colors.gray200,
-  none: 'transparent',
-};
-
 // ── Dashed Line ─────────────────────────────────────────────────────────────
 
 const DASH_WIDTH = 4;
@@ -89,16 +83,6 @@ const DASH_HEIGHT = 1;
 const SCREEN_WIDTH = Dimensions.get('window').width;
 const SEPARATOR_INSET = 24;
 const DASH_COUNT = Math.ceil((SCREEN_WIDTH - SEPARATOR_INSET * 2) / (DASH_WIDTH + DASH_GAP));
-
-const DashedSeparator = memo(function DashedSeparator() {
-  return (
-    <View style={styles.dashedSeparator}>
-      {Array.from({ length: DASH_COUNT }, (_, i) => (
-        <View key={i} style={styles.dash} />
-      ))}
-    </View>
-  );
-});
 
 // ── Component ───────────────────────────────────────────────────────────────
 
@@ -123,24 +107,21 @@ export const TaskItem = memo(function TaskItem({
   const hasPassedThreshold = useSharedValue(false);
 
   // ── Computed ──────────────────────────────────────────────────────────
+  const { colors, shadows, isDark } = useTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
+
+  const PRIORITY_COLORS: Record<Priority, string> = useMemo(() => ({
+    high: colors.text,
+    medium: colors.gray500,
+    low: colors.gray200,
+    none: 'transparent',
+  }), [colors]);
+
   const overdueLabel = useMemo(() => formatOverdueGently(task), [task]);
   const isOverdue = task.deadline ? daysFromNow(task.deadline) < 0 : false;
   const isInProgress = !!task.startedAt && !task.isCompleted;
   const indentation = (task.depth || 0) * 16;
   const hasChildren = task.childIds && task.childIds.length > 0;
-
-  const energyStyle = useMemo(() => {
-    switch (task.energyLevel) {
-      case 'high':
-        return { fontWeight: '600' as const };
-      case 'medium':
-        return { fontWeight: '400' as const };
-      case 'low':
-        return { fontWeight: '300' as const, fontSize: 14 };
-      default:
-        return { fontWeight: '400' as const };
-    }
-  }, [task.energyLevel]);
 
   // ── JS callbacks (run on JS thread via runOnJS) ───────────────────────
 
@@ -424,9 +405,7 @@ export const TaskItem = memo(function TaskItem({
                 <Text
                   style={[
                     styles.title,
-                    energyStyle,
                     task.isCompleted && styles.titleCompleted,
-                    hasChildren && styles.titleParent,
                   ]}
                   numberOfLines={1}
                 >
@@ -473,7 +452,11 @@ export const TaskItem = memo(function TaskItem({
           </Animated.View>
         </GestureDetector>
 
-        <DashedSeparator />
+        <View style={styles.dashedSeparator}>
+          {Array.from({ length: DASH_COUNT }, (_, i) => (
+            <View key={i} style={styles.dash} />
+          ))}
+        </View>
       </View>
     </Animated.View>
   );
@@ -481,11 +464,11 @@ export const TaskItem = memo(function TaskItem({
 
 // ── Styles ──────────────────────────────────────────────────────────────────
 
-const styles = StyleSheet.create({
+const createStyles = (c: ThemeColors) => StyleSheet.create({
   outerContainer: {
     position: 'relative',
     overflow: 'visible',
-    backgroundColor: Colors.white,
+    backgroundColor: c.background,
   },
   dashedSeparator: {
     flexDirection: 'row',
@@ -497,12 +480,12 @@ const styles = StyleSheet.create({
   dash: {
     width: DASH_WIDTH,
     height: DASH_HEIGHT,
-    backgroundColor: 'rgba(0,0,0,0.12)',
+    backgroundColor: c.border,
     marginRight: DASH_GAP,
     borderRadius: 0.5,
   },
   container: {
-    backgroundColor: Colors.white,
+    backgroundColor: c.background,
     zIndex: 1,
   },
   innerContainer: {
@@ -515,7 +498,7 @@ const styles = StyleSheet.create({
   },
   leftActionBg: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: Colors.gray800,
+    backgroundColor: c.gray800,
     justifyContent: 'center',
     alignItems: 'flex-start',
     paddingLeft: 24,
@@ -523,17 +506,18 @@ const styles = StyleSheet.create({
   },
   rightActionBg: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: Colors.surfaceDark,
+    backgroundColor: c.surfaceDark,
     justifyContent: 'center',
     alignItems: 'flex-end',
     paddingRight: 24,
     zIndex: 0,
   },
   swipeActionText: {
-    color: Colors.white,
+    color: c.white,
     fontSize: 11,
     fontWeight: '700',
     letterSpacing: 1.5,
+    fontFamily: FontFamily,
   },
   priorityBar: {
     width: 4,
@@ -545,7 +529,7 @@ const styles = StyleSheet.create({
     width: 28,
     height: 28,
     borderRadius: 14,
-    backgroundColor: Colors.gray50,
+    backgroundColor: c.gray50,
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: Spacing.md,
@@ -555,53 +539,67 @@ const styles = StyleSheet.create({
     marginRight: Spacing.sm,
   },
   title: {
-    ...Typography.body,
-    color: Colors.text,
+    fontSize: 16,
+    fontWeight: '400',
+    color: c.text,
+    fontFamily: FontFamily,
   },
   titleCompleted: {
     textDecorationLine: 'line-through',
-    color: Colors.gray500,
-  },
-  titleParent: {
-    fontWeight: '500',
+    color: c.gray500,
   },
   description: {
-    ...Typography.caption,
-    color: Colors.textTertiary,
+    fontSize: 13,
+    fontWeight: '400',
+    color: c.textTertiary,
     marginTop: 2,
+    fontFamily: FontFamily,
   },
   timingText: {
     fontSize: 11,
-    color: Colors.gray500,
+    color: c.gray500,
     marginTop: 2,
+    fontFamily: FontFamily,
   },
   deadlineTag: {
-    ...Typography.small,
-    color: Colors.textTertiary,
+    fontSize: 11,
+    fontWeight: '400',
+    letterSpacing: 0.2,
+    color: c.textTertiary,
+    fontFamily: FontFamily,
   },
   overdueTagGentle: {
-    ...Typography.small,
-    color: Colors.gray400,
+    fontSize: 11,
+    fontWeight: '400',
+    letterSpacing: 0.2,
+    color: c.gray400,
+    fontFamily: FontFamily,
   },
   completedTag: {
-    ...Typography.small,
-    color: Colors.gray400,
+    fontSize: 11,
+    fontWeight: '400',
+    letterSpacing: 0.2,
+    color: c.gray400,
+    fontFamily: FontFamily,
   },
   deferBadge: {
-    ...Typography.small,
-    color: Colors.gray400,
+    fontSize: 11,
+    fontWeight: '400',
+    letterSpacing: 0.2,
+    color: c.gray400,
     marginLeft: Spacing.xs,
+    fontFamily: FontFamily,
   },
   connectorVertical: {
     position: 'absolute',
     width: 1,
-    backgroundColor: '#D0D0D0',
+    backgroundColor: c.gray400,
   },
   connectorHorizontal: {
     position: 'absolute',
     width: 8,
     height: 1,
-    backgroundColor: '#D0D0D0',
+    backgroundColor: c.gray400,
     opacity: 0.5,
   },
   lockIcon: {

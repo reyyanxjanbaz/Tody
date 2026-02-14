@@ -32,7 +32,8 @@ import Animated, {
   LinearTransition,
 } from 'react-native-reanimated';
 import Icon from 'react-native-vector-icons/Ionicons';
-import { Colors, Spacing, Typography, BorderRadius } from '../utils/colors';
+import { Spacing, Typography, BorderRadius, FontFamily, type ThemeColors } from '../utils/colors';
+import { useTheme } from '../context/ThemeContext';
 import { Priority, EnergyLevel, Category } from '../types';
 import { haptic } from '../utils/haptics';
 import { AnimatedPressable } from './ui';
@@ -105,6 +106,8 @@ export const TaskInput = memo(function TaskInput({
   defaultCategory,
   categories: catList,
 }: TaskInputProps) {
+  const { colors, shadows, isDark } = useTheme();
+  const styles = React.useMemo(() => createStyles(colors), [colors]);
   const [value, setValue] = useState('');
   const [category, setCategory] = useState(defaultCategory || 'personal');
   const [energy, setEnergy] = useState<EnergyLevel>('medium');
@@ -242,14 +245,14 @@ export const TaskInput = memo(function TaskInput({
         <Icon
           name="create-outline"
           size={20}
-          color={value.trim() ? Colors.text : Colors.gray400}
+          color={value.trim() ? colors.text : colors.gray400}
           style={styles.leadingIcon}
         />
         <TextInput
           ref={inputRef}
           style={styles.input}
           placeholder={placeholder || 'What needs doing?'}
-          placeholderTextColor={Colors.gray400}
+          placeholderTextColor={colors.gray400}
           value={value}
           onChangeText={handleTextChange}
           onSubmitEditing={handleSubmit}
@@ -265,7 +268,7 @@ export const TaskInput = memo(function TaskInput({
             hapticStyle={null}
             pressScale={0.9}>
             <View style={styles.submitButton}>
-              <Icon name="arrow-up" size={20} color={Colors.white} />
+              <Icon name="arrow-up" size={20} color={colors.white} />
             </View>
           </AnimatedPressable>
         )}
@@ -314,7 +317,7 @@ export const TaskInput = memo(function TaskInput({
                   <Icon
                     name={showCustomDatePicker ? 'close' : 'add'}
                     size={16}
-                    color={showCustomDatePicker ? Colors.white : Colors.gray500}
+                    color={showCustomDatePicker ? colors.white : colors.gray500}
                   />
                 </Pressable>
                 {deadline != null && (
@@ -325,7 +328,7 @@ export const TaskInput = memo(function TaskInput({
                       setShowDeadlinePicker(false);
                       setShowCustomDatePicker(false);
                     }}>
-                    <Icon name="close-circle" size={20} color={Colors.gray400} />
+                    <Icon name="close-circle" size={20} color={colors.gray400} />
                   </Pressable>
                 )}
               </View>
@@ -337,7 +340,7 @@ export const TaskInput = memo(function TaskInput({
                     display="spinner"
                     onChange={handleCustomDateChange}
                     minimumDate={new Date()}
-                    textColor={Colors.text}
+                    textColor={colors.text}
                     style={styles.datePicker}
                   />
                   <Pressable
@@ -369,18 +372,18 @@ export const TaskInput = memo(function TaskInput({
 
 // ── Styles ──────────────────────────────────────────────────────────────────
 
-const styles = StyleSheet.create({
+const createStyles = (c: ThemeColors) => StyleSheet.create({
   inputRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: Colors.white,
+    backgroundColor: c.white,
     borderRadius: BorderRadius.input,
     marginHorizontal: Spacing.lg,
     marginVertical: Spacing.sm,
     paddingHorizontal: Spacing.md,
     height: 52,
     borderWidth: 1,
-    borderColor: Colors.gray200,
+    borderColor: c.gray200,
   },
   leadingIcon: {
     marginRight: Spacing.sm,
@@ -390,14 +393,15 @@ const styles = StyleSheet.create({
     height: '100%',
     ...Typography.body,
     fontSize: 16,
-    color: Colors.text,
+    color: c.text,
+    fontFamily: FontFamily,
   },
   submitButton: {
     width: 34,
     height: 34,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: Colors.surfaceDark,
+    backgroundColor: c.surfaceDark,
     borderRadius: 17,
     marginLeft: Spacing.sm,
   },
@@ -423,14 +427,14 @@ const styles = StyleSheet.create({
     height: 30,
     borderRadius: 15,
     borderWidth: 1,
-    borderColor: Colors.gray200,
-    backgroundColor: Colors.gray50,
+    borderColor: c.gray200,
+    backgroundColor: c.gray50,
     justifyContent: 'center',
     alignItems: 'center',
   },
   deadlinePlusBtnActive: {
-    backgroundColor: Colors.surfaceDark,
-    borderColor: Colors.surfaceDark,
+    backgroundColor: c.surfaceDark,
+    borderColor: c.surfaceDark,
   },
   deadlineClearBtn: {
     padding: 4,
@@ -450,10 +454,11 @@ const styles = StyleSheet.create({
   datePickerDoneText: {
     fontSize: 16,
     fontWeight: '600',
-    color: Colors.surfaceDark,
+    color: c.surfaceDark,
+    fontFamily: FontFamily,
   },
   drawer: {
-    backgroundColor: Colors.backgroundOffWhite,
+    backgroundColor: c.backgroundOffWhite,
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
     paddingTop: 8,
@@ -471,6 +476,6 @@ const styles = StyleSheet.create({
     width: 36,
     height: 4,
     borderRadius: 2,
-    backgroundColor: Colors.gray200,
+    backgroundColor: c.gray200,
   },
 });

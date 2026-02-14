@@ -2,7 +2,8 @@ import React, { memo } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import Animated, { FadeIn, FadeInDown } from 'react-native-reanimated';
 import Icon from 'react-native-vector-icons/Ionicons';
-import { Colors, Spacing, Typography } from '../utils/colors';
+import { Spacing, Typography, FontFamily, type ThemeColors } from '../utils/colors';
+import { useTheme } from '../context/ThemeContext';
 import { AnimatedPressable } from './ui';
 
 interface EmptyStateProps {
@@ -29,6 +30,9 @@ export const EmptyState = memo(function EmptyState({
   actionLabel,
   onAction,
 }: EmptyStateProps) {
+  const { colors, shadows, isDark } = useTheme();
+  const styles = React.useMemo(() => createStyles(colors), [colors]);
+
   return (
     <Animated.View
       entering={FadeIn.duration(350)}
@@ -37,7 +41,7 @@ export const EmptyState = memo(function EmptyState({
         <Animated.View
           entering={FadeInDown.delay(80).duration(300)}
           style={styles.iconContainer}>
-          <Icon name={icon} size={48} color={iconColor || Colors.gray400} />
+          <Icon name={icon} size={48} color={iconColor || colors.gray400} />
         </Animated.View>
       )}
       <Animated.Text
@@ -66,7 +70,7 @@ export const EmptyState = memo(function EmptyState({
   );
 });
 
-const styles = StyleSheet.create({
+const createStyles = (c: ThemeColors) => StyleSheet.create({
   container: {
     flex: 1,
     justifyContent: 'center',
@@ -83,12 +87,12 @@ const styles = StyleSheet.create({
   },
   title: {
     ...Typography.body,
-    color: Colors.gray500,
+    color: c.gray500,
     textAlign: 'center',
   },
   subtitle: {
     ...Typography.caption,
-    color: Colors.gray400,
+    color: c.gray400,
     textAlign: 'center',
     marginTop: Spacing.sm,
   },
@@ -96,12 +100,13 @@ const styles = StyleSheet.create({
     marginTop: Spacing.lg,
     paddingVertical: Spacing.sm,
     paddingHorizontal: Spacing.xl,
-    backgroundColor: Colors.black,
+    backgroundColor: c.black,
     borderRadius: 6,
   },
   actionText: {
     fontSize: 13,
     fontWeight: '600',
-    color: Colors.white,
+    color: c.white,
+    fontFamily: FontFamily,
   },
 });

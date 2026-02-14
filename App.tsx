@@ -1,10 +1,11 @@
 import React from 'react';
-import { StatusBar, StyleSheet } from 'react-native';
+import { StyleSheet } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { AuthProvider } from './src/context/AuthContext';
 import { TaskProvider } from './src/context/TaskContext';
 import { InboxProvider } from './src/context/InboxContext';
+import { ThemeProvider } from './src/context/ThemeContext';
 import { UndoProvider } from './src/components/UndoToast';
 import { RootNavigator } from './src/navigation/RootNavigator';
 
@@ -12,16 +13,17 @@ function App(): React.JSX.Element {
   return (
     <GestureHandlerRootView style={styles.root}>
       <SafeAreaProvider>
-        <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
-        <AuthProvider>
-          <TaskProvider>
-            <InboxProvider>
-              <UndoProvider>
-                <RootNavigator />
-              </UndoProvider>
-            </InboxProvider>
-          </TaskProvider>
-        </AuthProvider>
+        <ThemeProvider>
+          <AuthProvider>
+            <TaskProvider>
+              <InboxProvider>
+                <UndoProvider>
+                  <RootNavigator />
+                </UndoProvider>
+              </InboxProvider>
+            </TaskProvider>
+          </AuthProvider>
+        </ThemeProvider>
       </SafeAreaProvider>
     </GestureHandlerRootView>
   );

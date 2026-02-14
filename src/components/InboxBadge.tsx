@@ -1,7 +1,8 @@
 import React, { memo } from 'react';
 import { View, Text, Pressable, StyleSheet } from 'react-native';
 import Icon from 'react-native-vector-icons/Ionicons';
-import { Colors, Spacing, Typography } from '../utils/colors';
+import { Spacing, Typography, FontFamily, type ThemeColors } from '../utils/colors';
+import { useTheme } from '../context/ThemeContext';
 import { useInbox } from '../context/InboxContext';
 
 interface InboxBadgeProps {
@@ -9,12 +10,14 @@ interface InboxBadgeProps {
 }
 
 export const InboxBadge = memo(function InboxBadge({ onPress }: InboxBadgeProps) {
+  const { colors, shadows, isDark } = useTheme();
+  const styles = React.useMemo(() => createStyles(colors), [colors]);
   const { inboxCount } = useInbox();
 
   return (
     <Pressable onPress={onPress} hitSlop={8} style={styles.container}>
       <View style={styles.iconContainer}>
-        <Icon name="document-text-outline" size={24} color={Colors.textTertiary} />
+        <Icon name="document-text-outline" size={24} color={colors.textTertiary} />
         {inboxCount > 0 && (
           <View style={styles.badge}>
             <Text style={styles.badgeText}>
@@ -28,7 +31,7 @@ export const InboxBadge = memo(function InboxBadge({ onPress }: InboxBadgeProps)
   );
 });
 
-const styles = StyleSheet.create({
+const createStyles = (c: ThemeColors) => StyleSheet.create({
   container: {
     alignItems: 'center',
     paddingVertical: Spacing.xs,
@@ -43,7 +46,7 @@ const styles = StyleSheet.create({
   label: {
     ...Typography.small,
     fontWeight: '600',
-    color: Colors.textTertiary,
+    color: c.textTertiary,
   },
   badge: {
     position: 'absolute',
@@ -52,17 +55,18 @@ const styles = StyleSheet.create({
     minWidth: 16,
     height: 16,
     borderRadius: 8,
-    backgroundColor: Colors.text,
+    backgroundColor: c.text,
     justifyContent: 'center',
     alignItems: 'center',
     paddingHorizontal: 3,
     borderWidth: 1.5,
-    borderColor: Colors.background,
+    borderColor: c.background,
   },
   badgeText: {
-    color: Colors.white,
+    color: c.white,
     fontSize: 9,
     fontWeight: '700',
     lineHeight: 12,
+    fontFamily: FontFamily,
   },
 });

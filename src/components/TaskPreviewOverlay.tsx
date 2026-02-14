@@ -9,7 +9,8 @@ import {
 } from 'react-native';
 import Icon from 'react-native-vector-icons/Ionicons';
 import { Task, Priority, EnergyLevel } from '../types';
-import { Colors, Spacing, Typography } from '../utils/colors';
+import { Spacing, Typography, FontFamily, type ThemeColors } from '../utils/colors';
+import { useTheme } from '../context/ThemeContext';
 import { formatDeadline } from '../utils/dateUtils';
 
 interface TaskPreviewOverlayProps {
@@ -54,6 +55,9 @@ export const TaskPreviewOverlay = memo(function TaskPreviewOverlay({
 
   const priorityConfig = PRIORITY_CONFIG[task.priority];
   const energyConfig = ENERGY_CONFIG[task.energyLevel];
+  const { colors, shadows, isDark } = useTheme();
+  const styles = React.useMemo(() => createStyles(colors), [colors]);
+
   const subtaskCount = task.childIds?.length ?? 0;
 
   return (
@@ -104,7 +108,7 @@ export const TaskPreviewOverlay = memo(function TaskPreviewOverlay({
             {/* Deadline */}
             {task.deadline && (
               <View style={styles.metaPill}>
-                <Icon name="time-outline" size={12} color={Colors.gray600} />
+                <Icon name="time-outline" size={12} color={colors.gray600} />
                 <Text style={styles.metaText}>
                   {formatDeadline(task.deadline)}
                 </Text>
@@ -115,7 +119,7 @@ export const TaskPreviewOverlay = memo(function TaskPreviewOverlay({
           {/* Subtask count */}
           {subtaskCount > 0 && (
             <View style={styles.subtaskInfo}>
-              <Icon name="git-branch-outline" size={14} color={Colors.gray500} />
+              <Icon name="git-branch-outline" size={14} color={colors.gray500} />
               <Text style={styles.subtaskText}>
                 {subtaskCount} subtask{subtaskCount !== 1 ? 's' : ''}
               </Text>
@@ -125,7 +129,7 @@ export const TaskPreviewOverlay = memo(function TaskPreviewOverlay({
           {/* Estimate info */}
           {task.estimatedMinutes && (
             <View style={styles.subtaskInfo}>
-              <Icon name="hourglass-outline" size={14} color={Colors.gray500} />
+              <Icon name="hourglass-outline" size={14} color={colors.gray500} />
               <Text style={styles.subtaskText}>
                 est. {task.estimatedMinutes} min
               </Text>
@@ -148,7 +152,7 @@ export const TaskPreviewOverlay = memo(function TaskPreviewOverlay({
               style={styles.actionButton}
               onPress={() => { onClose(); onEdit(task); }}
             >
-              <Icon name="create-outline" size={16} color={Colors.white} />
+              <Icon name="create-outline" size={16} color={colors.white} />
               <Text style={styles.actionButtonText}>Edit</Text>
             </Pressable>
             {task.depth < 3 && !task.isCompleted && (
@@ -156,7 +160,7 @@ export const TaskPreviewOverlay = memo(function TaskPreviewOverlay({
                 style={[styles.actionButton, styles.actionButtonSecondary]}
                 onPress={() => { onClose(); onAddSubtask(task); }}
               >
-                <Icon name="git-branch-outline" size={16} color={Colors.black} />
+                <Icon name="git-branch-outline" size={16} color={colors.black} />
                 <Text style={[styles.actionButtonText, styles.actionButtonTextSecondary]}>Subtask</Text>
               </Pressable>
             )}
@@ -174,7 +178,7 @@ export const TaskPreviewOverlay = memo(function TaskPreviewOverlay({
   );
 });
 
-const styles = StyleSheet.create({
+const createStyles = (c: ThemeColors) => StyleSheet.create({
   overlay: {
     flex: 1,
     backgroundColor: 'rgba(255, 255, 255, 0.92)',
@@ -183,9 +187,9 @@ const styles = StyleSheet.create({
   },
   card: {
     width: '85%',
-    backgroundColor: Colors.white,
+    backgroundColor: c.white,
     borderWidth: 2,
-    borderColor: Colors.gray200,
+    borderColor: c.gray200,
     borderRadius: 8,
     padding: 16,
     ...Platform.select({
@@ -211,26 +215,30 @@ const styles = StyleSheet.create({
     color: '#22C55E',
     marginLeft: 4,
     letterSpacing: 0.5,
+    fontFamily: FontFamily,
   },
   title: {
     fontSize: 20,
     fontWeight: '700',
     letterSpacing: -0.3,
-    color: Colors.text,
+    color: c.text,
     marginBottom: 8,
+    fontFamily: FontFamily,
   },
   description: {
     fontSize: 14,
     fontWeight: '400',
-    color: Colors.textSecondary,
+    color: c.textSecondary,
     lineHeight: 20,
     marginBottom: 16,
+    fontFamily: FontFamily,
   },
   noDescription: {
     fontSize: 13,
     fontStyle: 'italic',
-    color: Colors.gray400,
+    color: c.gray400,
     marginBottom: 16,
+    fontFamily: FontFamily,
   },
   metaRow: {
     flexDirection: 'row',
@@ -243,14 +251,15 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 8,
     paddingVertical: 4,
-    backgroundColor: Colors.gray50,
+    backgroundColor: c.gray50,
     borderRadius: 12,
   },
   metaText: {
     fontSize: 11,
     fontWeight: '500',
-    color: Colors.gray600,
+    color: c.gray600,
     marginLeft: 4,
+    fontFamily: FontFamily,
   },
   subtaskInfo: {
     flexDirection: 'row',
@@ -259,8 +268,9 @@ const styles = StyleSheet.create({
   },
   subtaskText: {
     fontSize: 12,
-    color: Colors.gray500,
+    color: c.gray500,
     marginLeft: 6,
+    fontFamily: FontFamily,
   },
   actions: {
     flexDirection: 'row',
@@ -268,7 +278,7 @@ const styles = StyleSheet.create({
     marginTop: 16,
     paddingTop: 16,
     borderTopWidth: 1,
-    borderTopColor: Colors.gray100,
+    borderTopColor: c.gray100,
   },
   actionButton: {
     flex: 1,
@@ -276,26 +286,27 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     height: 40,
-    backgroundColor: Colors.black,
+    backgroundColor: c.black,
     borderRadius: 6,
     gap: 4,
   },
   actionButtonSecondary: {
-    backgroundColor: Colors.white,
+    backgroundColor: c.white,
     borderWidth: 1,
-    borderColor: Colors.black,
+    borderColor: c.black,
   },
   actionButtonDanger: {
-    backgroundColor: Colors.white,
+    backgroundColor: c.white,
     borderWidth: 1,
     borderColor: '#EF4444',
   },
   actionButtonText: {
     fontSize: 13,
     fontWeight: '600',
-    color: Colors.white,
+    color: c.white,
+    fontFamily: FontFamily,
   },
   actionButtonTextSecondary: {
-    color: Colors.black,
+    color: c.black,
   },
 });

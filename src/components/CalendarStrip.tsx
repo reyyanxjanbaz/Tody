@@ -20,7 +20,8 @@ import Animated, {
   runOnJS,
 } from 'react-native-reanimated';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
-import { Colors, Spacing, Typography, BorderRadius } from '../utils/colors';
+import { Spacing, Typography, BorderRadius, FontFamily, type ThemeColors } from '../utils/colors';
+import { useTheme } from '../context/ThemeContext';
 import { SPRING_SNAPPY, TIMING_FADE, PRESS_SCALE } from '../utils/animations';
 import { haptic } from '../utils/haptics';
 import { startOfDay, addDays } from '../utils/dateUtils';
@@ -82,6 +83,9 @@ interface DayCellProps {
 }
 
 const DayCell = memo(function DayCell({ day, isSelected, onSelect }: DayCellProps) {
+  const { colors } = useTheme();
+  const styles = React.useMemo(() => createStyles(colors), [colors]);
+
   const scale = useSharedValue(1);
   const opacity = useSharedValue(1);
 
@@ -149,6 +153,9 @@ export const CalendarStrip = memo(function CalendarStrip({
   selectedDate,
   onDateChange,
 }: CalendarStripProps) {
+  const { colors, shadows, isDark } = useTheme();
+  const styles = React.useMemo(() => createStyles(colors), [colors]);
+
   const scrollRef = useRef<ScrollView>(null);
   const days = useMemo(() => generateDays(), []);
   const itemFullWidth = ITEM_WIDTH + ITEM_MARGIN * 2;
@@ -192,7 +199,7 @@ export const CalendarStrip = memo(function CalendarStrip({
 
 // ── Styles ──────────────────────────────────────────────────────────────────
 
-const styles = StyleSheet.create({
+const createStyles = (c: ThemeColors) => StyleSheet.create({
   container: {
     paddingVertical: Spacing.sm,
   },
@@ -209,28 +216,30 @@ const styles = StyleSheet.create({
     backgroundColor: 'transparent',
   },
   dayCellSelected: {
-    backgroundColor: Colors.text,
+    backgroundColor: c.text,
   },
   dayLabel: {
     fontSize: 11,
     fontWeight: '600',
     letterSpacing: 0.3,
-    color: Colors.textTertiary,
+    color: c.textTertiary,
     marginBottom: Spacing.xs,
+    fontFamily: FontFamily,
   },
   dayLabelSelected: {
-    color: Colors.white,
+    color: c.white,
   },
   dayLabelToday: {
-    color: Colors.textSecondary,
+    color: c.textSecondary,
   },
   dateNum: {
     fontSize: 18,
     fontWeight: '600',
-    color: Colors.text,
+    color: c.text,
+    fontFamily: FontFamily,
   },
   dateNumSelected: {
-    color: Colors.white,
+    color: c.white,
     fontWeight: '700',
   },
   dateNumToday: {
@@ -240,7 +249,7 @@ const styles = StyleSheet.create({
     width: 4,
     height: 4,
     borderRadius: 2,
-    backgroundColor: Colors.text,
+    backgroundColor: c.text,
     marginTop: Spacing.xs,
   },
 });

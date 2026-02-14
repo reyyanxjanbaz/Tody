@@ -14,7 +14,8 @@ import Animated, {
   withSpring,
 } from 'react-native-reanimated';
 import { XPData } from '../../types';
-import { Colors, Spacing, Typography, BorderRadius, Shadows } from '../../utils/colors';
+import { Spacing, Typography, BorderRadius, FontFamily, type ThemeColors } from '../../utils/colors';
+import { useTheme } from '../../context/ThemeContext';
 import { SPRING_SNAPPY } from '../../utils/animations';
 
 interface XPSectionProps {
@@ -23,6 +24,9 @@ interface XPSectionProps {
 
 export const XPSection = memo(function XPSection({ xp }: XPSectionProps) {
   const barWidth = useSharedValue(0);
+  const { colors, shadows, isDark } = useTheme();
+  const styles = React.useMemo(() => createStyles(colors), [colors]);
+
 
   useEffect(() => {
     // Animate from 0 to actual progress on mount
@@ -59,14 +63,14 @@ export const XPSection = memo(function XPSection({ xp }: XPSectionProps) {
   );
 });
 
-const styles = StyleSheet.create({
+const createStyles = (c: ThemeColors) => StyleSheet.create({
   container: {
     marginHorizontal: Spacing.xxl,
     marginBottom: Spacing.xl,
-    backgroundColor: Colors.surface,
+    backgroundColor: c.surface,
     borderRadius: BorderRadius.card,
     padding: Spacing.lg,
-    ...Shadows.subtle,
+    borderWidth: StyleSheet.hairlineWidth, borderColor: c.borderLight,
   },
   levelRow: {
     flexDirection: 'row',
@@ -77,7 +81,7 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: Colors.surfaceDark,
+    backgroundColor: c.surfaceDark,
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: Spacing.md,
@@ -85,7 +89,8 @@ const styles = StyleSheet.create({
   levelNumber: {
     fontSize: 18,
     fontWeight: '800',
-    color: Colors.white,
+    color: c.white,
+    fontFamily: FontFamily,
   },
   levelInfo: {
     flex: 1,
@@ -93,27 +98,29 @@ const styles = StyleSheet.create({
   levelLabel: {
     fontSize: 15,
     fontWeight: '600',
-    color: Colors.text,
+    color: c.text,
+    fontFamily: FontFamily,
   },
   xpText: {
     ...Typography.small,
-    color: Colors.textTertiary,
+    color: c.textTertiary,
     marginTop: 1,
   },
   totalXP: {
     fontSize: 14,
     fontWeight: '600',
-    color: Colors.textSecondary,
+    color: c.textSecondary,
+    fontFamily: FontFamily,
   },
   progressTrack: {
     height: 6,
     borderRadius: 3,
-    backgroundColor: Colors.gray200,
+    backgroundColor: c.gray200,
     overflow: 'hidden',
   },
   progressFill: {
     height: '100%',
     borderRadius: 3,
-    backgroundColor: Colors.surfaceDark,
+    backgroundColor: c.surfaceDark,
   },
 });

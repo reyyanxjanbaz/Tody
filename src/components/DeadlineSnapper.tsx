@@ -8,7 +8,8 @@ import {
   Platform,
 } from 'react-native';
 import Icon from 'react-native-vector-icons/Ionicons';
-import { Colors, Spacing, Typography } from '../utils/colors';
+import { Spacing, Typography, FontFamily, type ThemeColors } from '../utils/colors';
+import { useTheme } from '../context/ThemeContext';
 
 interface DeadlineSnapperProps {
   onSelectDeadline: (timestamp: number) => void;
@@ -33,6 +34,9 @@ export const DeadlineSnapper = memo(function DeadlineSnapper({
   onSelectDeadline,
   currentDeadline,
 }: DeadlineSnapperProps) {
+  const { colors, shadows, isDark } = useTheme();
+  const styles = React.useMemo(() => createStyles(colors), [colors]);
+
   const chips = useMemo((): QuickChip[] => {
     const now = new Date();
 
@@ -176,7 +180,7 @@ export const DeadlineSnapper = memo(function DeadlineSnapper({
               <Icon
                 name={chip.icon}
                 size={13}
-                color={selected ? Colors.white : chip.iconColor}
+                color={selected ? colors.white : chip.iconColor}
                 style={styles.chipIcon}
               />
               <Text
@@ -195,7 +199,7 @@ export const DeadlineSnapper = memo(function DeadlineSnapper({
   );
 });
 
-const styles = StyleSheet.create({
+const createStyles = (c: ThemeColors) => StyleSheet.create({
   container: {
     marginTop: Spacing.sm,
     marginBottom: Spacing.sm,
@@ -204,7 +208,8 @@ const styles = StyleSheet.create({
     ...Typography.sectionHeader,
     fontSize: 10,
     marginBottom: Spacing.sm,
-    color: Colors.gray500,
+    color: c.gray500,
+    fontFamily: FontFamily,
   },
   chipsContainer: {
     flexDirection: 'row',
@@ -216,14 +221,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     height: 28,
     paddingHorizontal: 10,
-    backgroundColor: Colors.white,
+    backgroundColor: c.white,
     borderWidth: 1,
-    borderColor: Colors.black,
+    borderColor: c.black,
     borderRadius: 14,
   },
   chipSelected: {
-    backgroundColor: Colors.black,
-    borderColor: Colors.black,
+    backgroundColor: c.black,
+    borderColor: c.black,
   },
   chipIcon: {
     marginRight: 4,
@@ -231,9 +236,10 @@ const styles = StyleSheet.create({
   chipText: {
     fontSize: 12,
     fontWeight: '500',
-    color: Colors.black,
+    color: c.black,
+    fontFamily: FontFamily,
   },
   chipTextSelected: {
-    color: Colors.white,
+    color: c.white,
   },
 });

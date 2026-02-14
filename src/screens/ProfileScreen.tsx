@@ -35,7 +35,8 @@ import {
   calculateXP,
 } from '../utils/profileStats';
 import { getAvatarUri, saveAvatarUri } from '../utils/storage';
-import { Colors, Spacing, Typography } from '../utils/colors';
+import { Spacing, Typography, FontFamily, type ThemeColors } from '../utils/colors';
+import { useTheme } from '../context/ThemeContext';
 import { haptic } from '../utils/haptics';
 
 type Props = {
@@ -43,6 +44,8 @@ type Props = {
 };
 
 export function ProfileScreen({ navigation }: Props) {
+  const { colors, shadows, isDark } = useTheme();
+  const styles = React.useMemo(() => createStyles(colors), [colors]);
   const insets = useSafeAreaInsets();
   const { user } = useAuth();
   const { tasks, archivedTasks } = useTasks();
@@ -116,7 +119,7 @@ export function ProfileScreen({ navigation }: Props) {
           onPress={handleOpenSettings}
           hapticStyle="light"
           style={styles.settingsRoundButton}>
-          <Icon name="settings-outline" size={18} color={Colors.white} />
+          <Icon name="settings-outline" size={18} color={colors.white} />
         </AnimatedPressable>
       </View>
 
@@ -146,10 +149,10 @@ export function ProfileScreen({ navigation }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (c: ThemeColors) => StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.background,
+    backgroundColor: c.background,
   },
   headerBar: {
     flexDirection: 'row',
@@ -160,17 +163,17 @@ const styles = StyleSheet.create({
   },
   backText: {
     ...Typography.link,
-    color: Colors.textSecondary,
+    color: c.textSecondary,
   },
   headerTitle: {
     ...Typography.bodyMedium,
-    color: Colors.text,
+    color: c.text,
   },
   settingsRoundButton: {
     width: 36,
     height: 36,
     borderRadius: 18,
-    backgroundColor: Colors.surfaceDark,
+    backgroundColor: c.surfaceDark,
     justifyContent: 'center',
     alignItems: 'center',
   },

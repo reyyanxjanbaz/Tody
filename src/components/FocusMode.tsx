@@ -16,7 +16,8 @@ import Animated, {
 } from 'react-native-reanimated';
 import Icon from 'react-native-vector-icons/Ionicons';
 import { Task, Priority } from '../types';
-import { Colors, Spacing, Typography, BorderRadius } from '../utils/colors';
+import { Spacing, Typography, BorderRadius, FontFamily, type ThemeColors } from '../utils/colors';
+import { useTheme } from '../context/ThemeContext';
 import { formatDeadline } from '../utils/dateUtils';
 import { AnimatedPressable } from './ui';
 import { haptic } from '../utils/haptics';
@@ -50,6 +51,8 @@ export const FocusMode = memo(function FocusMode({
     onComplete,
     onExit,
 }: FocusModeProps) {
+  const { colors, shadows, isDark } = useTheme();
+  const styles = React.useMemo(() => createStyles(colors), [colors]);
     const [currentIndex, setCurrentIndex] = useState(0);
     // Direction: 'next' | 'prev' for card transition
     const [direction, setDirection] = useState<'next' | 'prev'>('next');
@@ -215,7 +218,7 @@ export const FocusMode = memo(function FocusMode({
                         {/* Deadline */}
                         {currentTask.deadline && (
                             <View style={styles.deadlineRow}>
-                                <Icon name="time-outline" size={16} color={Colors.gray500} />
+                                <Icon name="time-outline" size={16} color={colors.gray500} />
                                 <Text style={styles.deadlineText}>
                                     {formatDeadline(currentTask.deadline)}
                                 </Text>
@@ -228,7 +231,7 @@ export const FocusMode = memo(function FocusMode({
                                 <Icon
                                     name="hourglass-outline"
                                     size={16}
-                                    color={Colors.gray500}
+                                    color={colors.gray500}
                                 />
                                 <Text style={styles.deadlineText}>
                                     ~{currentTask.estimatedMinutes} min
@@ -245,7 +248,7 @@ export const FocusMode = memo(function FocusMode({
                                 <Icon
                                     name="checkmark-circle-outline"
                                     size={20}
-                                    color={Colors.white}
+                                    color={colors.white}
                                 />
                                 <Text style={styles.completeText}>Mark Complete</Text>
                             </View>
@@ -268,7 +271,7 @@ export const FocusMode = memo(function FocusMode({
                         <Icon
                             name="chevron-back"
                             size={20}
-                            color={currentIndex === 0 ? 'rgba(255,255,255,0.2)' : Colors.white}
+                            color={currentIndex === 0 ? 'rgba(255,255,255,0.2)' : colors.white}
                         />
                     </View>
                 </AnimatedPressable>
@@ -293,7 +296,7 @@ export const FocusMode = memo(function FocusMode({
                             color={
                                 currentIndex >= focusTasks.length - 1
                                     ? 'rgba(255,255,255,0.2)'
-                                    : Colors.white
+                                    : colors.white
                             }
                         />
                     </View>
@@ -311,10 +314,10 @@ export const FocusMode = memo(function FocusMode({
     );
 });
 
-const styles = StyleSheet.create({
+const createStyles = (c: ThemeColors) => StyleSheet.create({
     container: {
         ...StyleSheet.absoluteFillObject,
-        backgroundColor: Colors.surfaceDark,
+        backgroundColor: c.surfaceDark,
         justifyContent: 'center',
         alignItems: 'center',
         paddingHorizontal: 32,
@@ -329,7 +332,8 @@ const styles = StyleSheet.create({
         fontSize: 48,
         fontWeight: '200',
         letterSpacing: -2,
-        color: Colors.white,
+        color: c.white,
+    fontFamily: FontFamily,
     },
     progressDots: {
         flexDirection: 'row',
@@ -344,7 +348,7 @@ const styles = StyleSheet.create({
         backgroundColor: 'rgba(255,255,255,0.2)',
     },
     dotActive: {
-        backgroundColor: Colors.white,
+        backgroundColor: c.white,
         width: 24,
     },
     dotCompleted: {
@@ -371,20 +375,23 @@ const styles = StyleSheet.create({
         fontSize: 12,
         fontWeight: '700',
         letterSpacing: 0.8,
+    fontFamily: FontFamily,
     },
     taskTitle: {
         fontSize: 26,
         fontWeight: '700',
         letterSpacing: -0.5,
-        color: Colors.white,
+        color: c.white,
         lineHeight: 34,
         marginBottom: 12,
+    fontFamily: FontFamily,
     },
     taskDescription: {
         fontSize: 15,
         color: 'rgba(255,255,255,0.7)',
         lineHeight: 22,
         marginBottom: 16,
+    fontFamily: FontFamily,
     },
     deadlineRow: {
         flexDirection: 'row',
@@ -395,12 +402,13 @@ const styles = StyleSheet.create({
     deadlineText: {
         fontSize: 14,
         color: 'rgba(255,255,255,0.5)',
+    fontFamily: FontFamily,
     },
     completeButton: {
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'center',
-        backgroundColor: Colors.white,
+        backgroundColor: c.white,
         height: 52,
         borderRadius: BorderRadius.button,
         marginTop: 28,
@@ -409,7 +417,8 @@ const styles = StyleSheet.create({
     completeText: {
         fontSize: 16,
         fontWeight: '700',
-        color: Colors.surfaceDark,
+        color: c.surfaceDark,
+    fontFamily: FontFamily,
     },
     navigationRow: {
         flexDirection: 'row',
@@ -432,6 +441,7 @@ const styles = StyleSheet.create({
     positionText: {
         fontSize: 13,
         color: 'rgba(255,255,255,0.5)',
+    fontFamily: FontFamily,
     },
     exitButton: {
         position: 'absolute',
@@ -448,6 +458,7 @@ const styles = StyleSheet.create({
         fontSize: 14,
         fontWeight: '600',
         color: 'rgba(255,255,255,0.6)',
+    fontFamily: FontFamily,
     },
     emptyFocusContainer: {
         alignItems: 'center',
@@ -456,11 +467,13 @@ const styles = StyleSheet.create({
     emptyTitle: {
         fontSize: 24,
         fontWeight: '700',
-        color: Colors.white,
+        color: c.white,
+    fontFamily: FontFamily,
     },
     emptySubtitle: {
         fontSize: 14,
         color: 'rgba(255,255,255,0.5)',
         textAlign: 'center',
+    fontFamily: FontFamily,
     },
 });

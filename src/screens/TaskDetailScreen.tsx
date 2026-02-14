@@ -30,7 +30,8 @@ import { RouteProp } from '@react-navigation/native';
 import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import Icon from 'react-native-vector-icons/Ionicons';
 import { useTasks } from '../context/TaskContext';
-import { Colors, Spacing, Typography } from '../utils/colors';
+import { Spacing, Typography, FontFamily, type ThemeColors } from '../utils/colors';
+import { useTheme } from '../context/ThemeContext';
 import { formatMinutes, getElapsedMinutes } from '../utils/timeTracking';
 import { isTaskLocked, getChildren, countDescendants } from '../utils/dependencyChains';
 import { Priority, RootStackParamList, EnergyLevel, Category } from '../types';
@@ -52,6 +53,8 @@ type Props = {
 };
 
 export function TaskDetailScreen({ navigation, route }: Props) {
+  const { colors, shadows, isDark } = useTheme();
+  const styles = React.useMemo(() => createStyles(colors), [colors]);
   const insets = useSafeAreaInsets();
   const {
     tasks, getTask, updateTask, deleteTask, deleteTaskWithCascade,
@@ -270,7 +273,7 @@ export function TaskDetailScreen({ navigation, route }: Props) {
           onChangeText={setTitle}
           onBlur={handleTitleBlur}
           placeholder="Task title"
-          placeholderTextColor={Colors.gray400}
+          placeholderTextColor={colors.gray400}
           multiline
           autoFocus={!task.title}
         />
@@ -282,7 +285,7 @@ export function TaskDetailScreen({ navigation, route }: Props) {
           onChangeText={setDescription}
           onBlur={handleDescriptionBlur}
           placeholder="Add notes..."
-          placeholderTextColor={Colors.gray400}
+          placeholderTextColor={colors.gray400}
           multiline
           textAlignVertical="top"
         />
@@ -322,12 +325,12 @@ export function TaskDetailScreen({ navigation, route }: Props) {
                   <Icon
                     name={showCustomDatePicker ? 'close' : 'add'}
                     size={16}
-                    color={showCustomDatePicker ? Colors.white : Colors.gray500}
+                    color={showCustomDatePicker ? colors.white : colors.gray500}
                   />
                 </Pressable>
                 {deadline != null && (
                   <Pressable style={styles.deadlineClearBtn} onPress={handleClearDeadline}>
-                    <Icon name="close-circle" size={20} color={Colors.gray400} />
+                    <Icon name="close-circle" size={20} color={colors.gray400} />
                   </Pressable>
                 )}
               </View>
@@ -341,7 +344,7 @@ export function TaskDetailScreen({ navigation, route }: Props) {
                     display="spinner"
                     onChange={handleDateChange}
                     minimumDate={new Date()}
-                    textColor={Colors.text}
+                    textColor={colors.text}
                   />
                   <Pressable onPress={() => { setShowCustomDatePicker(false); setShowDeadlinePicker(false); }}>
                     <Text style={styles.donePickerText}>Done</Text>
@@ -372,7 +375,7 @@ export function TaskDetailScreen({ navigation, route }: Props) {
           </View>
         ) : task.isCompleted && task.actualMinutes != null && task.actualMinutes > 0 ? (
           <View style={styles.infoRow}>
-            <Icon name="checkmark-circle" size={16} color={Colors.gray500} />
+            <Icon name="checkmark-circle" size={16} color={colors.gray500} />
             <Text style={styles.infoText}>
               Took {formatMinutes(task.actualMinutes)}
               {task.estimatedMinutes ? ` · est. ${formatMinutes(task.estimatedMinutes)}` : ''}
@@ -382,7 +385,7 @@ export function TaskDetailScreen({ navigation, route }: Props) {
 
         {task.deferCount > 0 && (
           <View style={styles.infoRow}>
-            <Icon name="arrow-redo-outline" size={14} color={Colors.gray400} />
+            <Icon name="arrow-redo-outline" size={14} color={colors.gray400} />
             <Text style={styles.infoText}>
               Deferred {task.deferCount} time{task.deferCount > 1 ? 's' : ''}
             </Text>
@@ -404,12 +407,12 @@ export function TaskDetailScreen({ navigation, route }: Props) {
                   numberOfLines={1}>
                   {child.title}
                 </Text>
-                <Icon name="chevron-forward" size={14} color={Colors.gray400} />
+                <Icon name="chevron-forward" size={14} color={colors.gray400} />
               </Pressable>
             ))}
             {task.depth < 3 && (
               <Pressable style={styles.subtaskAdd} onPress={handleAddSubtask}>
-                <Icon name="add-circle-outline" size={16} color={Colors.gray400} />
+                <Icon name="add-circle-outline" size={16} color={colors.gray400} />
                 <Text style={styles.subtaskAddText}>Add subtask</Text>
               </Pressable>
             )}
@@ -427,7 +430,7 @@ export function TaskDetailScreen({ navigation, route }: Props) {
             <Pressable
               style={styles.actionBtn}
               onPress={() => { haptic('medium'); startTask(task.id); }}>
-              <Icon name="play-outline" size={18} color={Colors.text} />
+              <Icon name="play-outline" size={18} color={colors.text} />
               <Text style={styles.actionText}>Start timer</Text>
             </Pressable>
           )}
@@ -435,7 +438,7 @@ export function TaskDetailScreen({ navigation, route }: Props) {
             <Pressable
               style={styles.actionBtn}
               onPress={() => { haptic('success'); completeTimedTask(task.id); }}>
-              <Icon name="stop-outline" size={18} color={Colors.text} />
+              <Icon name="stop-outline" size={18} color={colors.text} />
               <Text style={styles.actionText}>Complete (stop timer)</Text>
             </Pressable>
           )}
@@ -443,7 +446,7 @@ export function TaskDetailScreen({ navigation, route }: Props) {
             <Icon
               name={task.isCompleted ? 'arrow-undo-outline' : 'checkmark-done-outline'}
               size={18}
-              color={Colors.text}
+              color={colors.text}
             />
             <Text style={styles.actionText}>
               {task.isCompleted ? 'Restore task' : locked ? 'Mark as done (locked)' : 'Mark as done'}
@@ -454,8 +457,8 @@ export function TaskDetailScreen({ navigation, route }: Props) {
             <Pressable
               style={styles.actionBtn}
               onPress={() => navigation.push('TaskDetail', { taskId: task.parentId! })}>
-              <Icon name="arrow-up-outline" size={18} color={Colors.gray500} />
-              <Text style={[styles.actionText, { color: Colors.gray500 }]}>Go to parent task</Text>
+              <Icon name="arrow-up-outline" size={18} color={colors.gray500} />
+              <Text style={[styles.actionText, { color: colors.gray500 }]}>Go to parent task</Text>
             </Pressable>
           )}
         </View>
@@ -466,10 +469,10 @@ export function TaskDetailScreen({ navigation, route }: Props) {
 
 // ── Styles ──────────────────────────────────────────────────────────────────
 
-const styles = StyleSheet.create({
+const createStyles = (c: ThemeColors) => StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.background,
+    backgroundColor: c.background,
   },
   header: {
     flexDirection: 'row',
@@ -480,11 +483,11 @@ const styles = StyleSheet.create({
   },
   backText: {
     ...Typography.link,
-    color: Colors.textSecondary,
+    color: c.textSecondary,
   },
   deleteText: {
     ...Typography.link,
-    color: Colors.gray500,
+    color: c.gray500,
   },
   scrollView: {
     flex: 1,
@@ -500,7 +503,7 @@ const styles = StyleSheet.create({
   },
   emptyText: {
     ...Typography.body,
-    color: Colors.gray500,
+    color: c.gray500,
   },
 
   // Title & Description
@@ -508,14 +511,15 @@ const styles = StyleSheet.create({
     fontSize: 24,
     fontWeight: '700',
     letterSpacing: -0.4,
-    color: Colors.text,
+    color: c.text,
     minHeight: 36,
     padding: 0,
     marginBottom: Spacing.sm,
+    fontFamily: FontFamily,
   },
   descriptionInput: {
     ...Typography.body,
-    color: Colors.textSecondary,
+    color: c.textSecondary,
     minHeight: 44,
     padding: 0,
     marginBottom: Spacing.lg,
@@ -545,14 +549,14 @@ const styles = StyleSheet.create({
     height: 30,
     borderRadius: 15,
     borderWidth: 1,
-    borderColor: Colors.gray200,
-    backgroundColor: Colors.gray50,
+    borderColor: c.gray200,
+    backgroundColor: c.gray50,
     justifyContent: 'center',
     alignItems: 'center',
   },
   deadlinePlusBtnActive: {
-    backgroundColor: Colors.surfaceDark,
-    borderColor: Colors.surfaceDark,
+    backgroundColor: c.surfaceDark,
+    borderColor: c.surfaceDark,
   },
   deadlineClearBtn: {
     padding: 4,
@@ -563,7 +567,7 @@ const styles = StyleSheet.create({
   },
   donePickerText: {
     ...Typography.link,
-    color: Colors.text,
+    color: c.text,
     fontWeight: '600',
     paddingVertical: Spacing.sm,
   },
@@ -577,7 +581,8 @@ const styles = StyleSheet.create({
   },
   infoText: {
     fontSize: 13,
-    color: Colors.gray500,
+    color: c.gray500,
+    fontFamily: FontFamily,
   },
 
   // Subtasks
@@ -591,9 +596,10 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '600',
     letterSpacing: 0.5,
-    color: Colors.gray500,
+    color: c.gray500,
     textTransform: 'uppercase',
     marginBottom: Spacing.sm,
+    fontFamily: FontFamily,
   },
   subtaskRow: {
     flexDirection: 'row',
@@ -606,21 +612,21 @@ const styles = StyleSheet.create({
     height: 8,
     borderRadius: 4,
     borderWidth: 1.5,
-    borderColor: Colors.gray400,
+    borderColor: c.gray400,
     marginRight: Spacing.md,
   },
   subtaskDotDone: {
-    borderColor: Colors.surfaceDark,
-    backgroundColor: Colors.surfaceDark,
+    borderColor: c.surfaceDark,
+    backgroundColor: c.surfaceDark,
   },
   subtaskTitle: {
     ...Typography.body,
-    color: Colors.text,
+    color: c.text,
     flex: 1,
   },
   subtaskTitleDone: {
     textDecorationLine: 'line-through',
-    color: Colors.gray500,
+    color: c.gray500,
   },
   subtaskAdd: {
     flexDirection: 'row',
@@ -630,12 +636,14 @@ const styles = StyleSheet.create({
   },
   subtaskAddText: {
     fontSize: 15,
-    color: Colors.gray400,
+    color: c.gray400,
+    fontFamily: FontFamily,
   },
   lockedHint: {
     fontSize: 12,
-    color: Colors.gray400,
+    color: c.gray400,
     marginTop: 4,
+    fontFamily: FontFamily,
   },
 
   // Actions
@@ -654,6 +662,7 @@ const styles = StyleSheet.create({
   actionText: {
     fontSize: 16,
     fontWeight: '500',
-    color: Colors.text,
+    color: c.text,
+    fontFamily: FontFamily,
   },
 });

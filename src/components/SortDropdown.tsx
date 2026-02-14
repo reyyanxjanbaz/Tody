@@ -8,7 +8,8 @@ import {
 } from 'react-native';
 import Animated, { FadeIn } from 'react-native-reanimated';
 import Icon from 'react-native-vector-icons/Ionicons';
-import { Colors, Spacing, Typography, BorderRadius, Shadows } from '../utils/colors';
+import { Spacing, Typography, BorderRadius, FontFamily, type ThemeColors } from '../utils/colors';
+import { useTheme } from '../context/ThemeContext';
 import { SortOption } from '../types';
 import { haptic } from '../utils/haptics';
 
@@ -35,6 +36,9 @@ export const SortDropdown = memo(function SortDropdown({
   onSelect,
   onClose,
 }: SortDropdownProps) {
+  const { colors, shadows, isDark } = useTheme();
+  const styles = React.useMemo(() => createStyles(colors), [colors]);
+
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
       <Pressable style={styles.overlay} onPress={onClose}>
@@ -54,13 +58,13 @@ export const SortDropdown = memo(function SortDropdown({
                 <Icon
                   name={opt.icon}
                   size={16}
-                  color={isActive ? Colors.text : Colors.gray500}
+                  color={isActive ? colors.text : colors.gray500}
                 />
                 <Text style={[styles.rowText, isActive && styles.rowTextActive]}>
                   {opt.label}
                 </Text>
                 {isActive && (
-                  <Icon name="checkmark" size={18} color={Colors.text} />
+                  <Icon name="checkmark" size={18} color={colors.text} />
                 )}
               </Pressable>
             );
@@ -71,7 +75,7 @@ export const SortDropdown = memo(function SortDropdown({
   );
 });
 
-const styles = StyleSheet.create({
+const createStyles = (c: ThemeColors) => StyleSheet.create({
   overlay: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.35)',
@@ -80,21 +84,21 @@ const styles = StyleSheet.create({
   },
   card: {
     width: '80%',
-    backgroundColor: Colors.white,
+    backgroundColor: c.white,
     borderRadius: BorderRadius.card,
     paddingVertical: Spacing.lg,
     paddingHorizontal: Spacing.lg,
-    ...Shadows.floating,
     borderWidth: 1,
-    borderColor: 'rgba(0,0,0,0.10)',
+    borderColor: c.border,
   },
   title: {
     fontSize: 15,
     fontWeight: '700',
-    color: Colors.text,
+    color: c.text,
     letterSpacing: -0.3,
     marginBottom: Spacing.sm,
     paddingHorizontal: Spacing.sm,
+    fontFamily: FontFamily,
   },
   row: {
     flexDirection: 'row',
@@ -105,16 +109,17 @@ const styles = StyleSheet.create({
     borderRadius: 8,
   },
   rowActive: {
-    backgroundColor: Colors.gray50,
+    backgroundColor: c.gray50,
   },
   rowText: {
     flex: 1,
     fontSize: 14,
     fontWeight: '500',
-    color: Colors.textSecondary,
+    color: c.textSecondary,
+    fontFamily: FontFamily,
   },
   rowTextActive: {
-    color: Colors.text,
+    color: c.text,
     fontWeight: '600',
   },
 });

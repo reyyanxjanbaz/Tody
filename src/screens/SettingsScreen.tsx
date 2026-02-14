@@ -34,7 +34,8 @@ import {
   saveUserPreferences,
   getUserPreferences,
 } from '../utils/storage';
-import { Colors, Spacing, Typography, BorderRadius, Shadows } from '../utils/colors';
+import { Spacing, Typography, BorderRadius, FontFamily, type ThemeColors } from '../utils/colors';
+import { useTheme } from '../context/ThemeContext';
 import { haptic } from '../utils/haptics';
 import { AnimatedPressable } from '../components/ui';
 
@@ -55,6 +56,8 @@ const TIME_FORMATS: UserPreferences['timeFormat'][] = ['12h', '24h'];
 const WEEK_STARTS: UserPreferences['weekStartsOn'][] = ['sunday', 'monday'];
 
 export function SettingsScreen({ navigation }: Props) {
+  const { colors, shadows, isDark, toggleTheme } = useTheme();
+  const styles = React.useMemo(() => createStyles(colors), [colors]);
   const insets = useSafeAreaInsets();
   const { logout } = useAuth();
 
@@ -187,7 +190,7 @@ export function SettingsScreen({ navigation }: Props) {
             <TextInput
               style={styles.input}
               placeholder="Current password"
-              placeholderTextColor={Colors.gray500}
+              placeholderTextColor={colors.gray500}
               value={currentPw}
               onChangeText={setCurrentPw}
               secureTextEntry
@@ -196,7 +199,7 @@ export function SettingsScreen({ navigation }: Props) {
             <TextInput
               style={styles.input}
               placeholder="New password"
-              placeholderTextColor={Colors.gray500}
+              placeholderTextColor={colors.gray500}
               value={newPw}
               onChangeText={setNewPw}
               secureTextEntry
@@ -218,7 +221,7 @@ export function SettingsScreen({ navigation }: Props) {
             onPress={handleLogout}
             hapticStyle="medium"
             style={styles.rowButton}>
-            <Icon name="log-out-outline" size={20} color={Colors.text} />
+            <Icon name="log-out-outline" size={20} color={colors.text} />
             <Text style={styles.rowButtonText}>Log Out</Text>
           </AnimatedPressable>
 
@@ -227,7 +230,7 @@ export function SettingsScreen({ navigation }: Props) {
             onPress={handleDeleteAccount}
             hapticStyle="heavy"
             style={[styles.rowButton, styles.dangerRow]}>
-            <Icon name="trash-outline" size={20} color={Colors.gray800} />
+            <Icon name="trash-outline" size={20} color={colors.gray800} />
             <Text style={[styles.rowButtonText, styles.dangerText]}>
               Delete Account
             </Text>
@@ -243,21 +246,21 @@ export function SettingsScreen({ navigation }: Props) {
           {/* Dark Mode Toggle */}
           <View style={styles.preferenceRow}>
             <View style={styles.prefLabel}>
-              <Icon name="moon-outline" size={18} color={Colors.textSecondary} />
+              <Icon name="moon-outline" size={18} color={colors.textSecondary} />
               <Text style={styles.prefText}>Dark Mode</Text>
             </View>
             <Switch
-              value={prefs.darkMode}
-              onValueChange={v => updatePref('darkMode', v)}
-              trackColor={{ false: Colors.gray200, true: Colors.gray800 }}
-              thumbColor={Colors.white}
+              value={isDark}
+              onValueChange={() => { toggleTheme(); updatePref('darkMode', !isDark); }}
+              trackColor={{ false: colors.gray200, true: colors.gray800 }}
+              thumbColor={colors.white}
             />
           </View>
 
           {/* Date Format */}
           <Pressable onPress={cycleDateFormat} style={styles.preferenceRow}>
             <View style={styles.prefLabel}>
-              <Icon name="calendar-outline" size={18} color={Colors.textSecondary} />
+              <Icon name="calendar-outline" size={18} color={colors.textSecondary} />
               <Text style={styles.prefText}>Date Format</Text>
             </View>
             <Text style={styles.prefValue}>{prefs.dateFormat}</Text>
@@ -266,7 +269,7 @@ export function SettingsScreen({ navigation }: Props) {
           {/* Time Format */}
           <Pressable onPress={cycleTimeFormat} style={styles.preferenceRow}>
             <View style={styles.prefLabel}>
-              <Icon name="time-outline" size={18} color={Colors.textSecondary} />
+              <Icon name="time-outline" size={18} color={colors.textSecondary} />
               <Text style={styles.prefText}>Time Format</Text>
             </View>
             <Text style={styles.prefValue}>{prefs.timeFormat}</Text>
@@ -275,7 +278,7 @@ export function SettingsScreen({ navigation }: Props) {
           {/* Week Starts On */}
           <Pressable onPress={cycleWeekStart} style={styles.preferenceRow}>
             <View style={styles.prefLabel}>
-              <Icon name="grid-outline" size={18} color={Colors.textSecondary} />
+              <Icon name="grid-outline" size={18} color={colors.textSecondary} />
               <Text style={styles.prefText}>Week Starts On</Text>
             </View>
             <Text style={styles.prefValue}>
@@ -288,7 +291,7 @@ export function SettingsScreen({ navigation }: Props) {
             onPress={handleResetPreferences}
             hapticStyle="medium"
             style={[styles.rowButton, { marginTop: Spacing.lg }]}>
-            <Icon name="refresh-outline" size={20} color={Colors.textSecondary} />
+            <Icon name="refresh-outline" size={20} color={colors.textSecondary} />
             <Text style={styles.rowButtonText}>Reset Preferences</Text>
           </AnimatedPressable>
         </Animated.View>
@@ -325,10 +328,10 @@ export function SettingsScreen({ navigation }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (c: ThemeColors) => StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.background,
+    backgroundColor: c.background,
   },
   header: {
     flexDirection: 'row',
@@ -339,7 +342,7 @@ const styles = StyleSheet.create({
   },
   backText: {
     ...Typography.link,
-    color: Colors.textSecondary,
+    color: c.textSecondary,
   },
   headerTitle: {
     ...Typography.heading,
@@ -359,34 +362,35 @@ const styles = StyleSheet.create({
     marginBottom: Spacing.md,
   },
   card: {
-    backgroundColor: Colors.surface,
+    backgroundColor: c.surface,
     borderRadius: BorderRadius.card,
     padding: Spacing.lg,
     marginBottom: Spacing.md,
-    ...Shadows.subtle,
+    borderWidth: StyleSheet.hairlineWidth, borderColor: c.borderLight,
   },
   cardTitle: {
     fontSize: 15,
     fontWeight: '600',
-    color: Colors.text,
+    color: c.text,
     marginBottom: Spacing.md,
+    fontFamily: FontFamily,
   },
   input: {
     height: 48,
     borderRadius: BorderRadius.input,
     paddingHorizontal: Spacing.lg,
-    backgroundColor: Colors.gray100,
+    backgroundColor: c.gray100,
     ...Typography.body,
-    color: Colors.text,
+    color: c.text,
     marginBottom: Spacing.sm,
   },
   pwMessage: {
     ...Typography.small,
-    color: Colors.textSecondary,
+    color: c.textSecondary,
     marginBottom: Spacing.sm,
   },
   actionButton: {
-    backgroundColor: Colors.surfaceDark,
+    backgroundColor: c.surfaceDark,
     paddingVertical: Spacing.md,
     borderRadius: BorderRadius.button,
     alignItems: 'center',
@@ -395,39 +399,41 @@ const styles = StyleSheet.create({
   actionButtonText: {
     fontSize: 14,
     fontWeight: '600',
-    color: Colors.white,
+    color: c.white,
+    fontFamily: FontFamily,
   },
   rowButton: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: Spacing.md,
-    backgroundColor: Colors.surface,
+    backgroundColor: c.surface,
     borderRadius: BorderRadius.card,
     padding: Spacing.lg,
     marginBottom: Spacing.sm,
-    ...Shadows.subtle,
+    borderWidth: StyleSheet.hairlineWidth, borderColor: c.borderLight,
   },
   rowButtonText: {
     fontSize: 15,
     fontWeight: '500',
-    color: Colors.text,
+    color: c.text,
+    fontFamily: FontFamily,
   },
   dangerRow: {
     borderWidth: 1,
-    borderColor: Colors.gray200,
+    borderColor: c.gray200,
   },
   dangerText: {
-    color: Colors.gray800,
+    color: c.gray800,
   },
   preferenceRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    backgroundColor: Colors.surface,
+    backgroundColor: c.surface,
     borderRadius: BorderRadius.card,
     padding: Spacing.lg,
     marginBottom: Spacing.sm,
-    ...Shadows.subtle,
+    borderWidth: StyleSheet.hairlineWidth, borderColor: c.borderLight,
   },
   prefLabel: {
     flexDirection: 'row',
@@ -437,12 +443,14 @@ const styles = StyleSheet.create({
   prefText: {
     fontSize: 15,
     fontWeight: '500',
-    color: Colors.text,
+    color: c.text,
+    fontFamily: FontFamily,
   },
   prefValue: {
     fontSize: 14,
     fontWeight: '600',
-    color: Colors.textSecondary,
+    color: c.textSecondary,
+    fontFamily: FontFamily,
   },
   // Modal
   modalOverlay: {
@@ -453,22 +461,21 @@ const styles = StyleSheet.create({
   },
   modalCard: {
     width: '85%',
-    backgroundColor: Colors.white,
+    backgroundColor: c.white,
     borderRadius: BorderRadius.card,
     paddingVertical: Spacing.xxl,
     paddingHorizontal: Spacing.xxl,
-    ...Shadows.floating,
     borderWidth: 1,
-    borderColor: 'rgba(0,0,0,0.10)',
+    borderColor: c.border,
   },
   modalTitle: {
     ...Typography.bodyMedium,
-    color: Colors.text,
+    color: c.text,
     textAlign: 'center',
   },
   modalSubtitle: {
     ...Typography.caption,
-    color: Colors.textTertiary,
+    color: c.textTertiary,
     textAlign: 'center',
     marginTop: Spacing.sm,
   },
@@ -484,16 +491,16 @@ const styles = StyleSheet.create({
   },
   modalCancelText: {
     ...Typography.body,
-    color: Colors.textTertiary,
+    color: c.textTertiary,
   },
   modalDeleteButton: {
     paddingVertical: Spacing.md,
     paddingHorizontal: Spacing.xxl,
-    backgroundColor: Colors.surfaceDark,
+    backgroundColor: c.surfaceDark,
     borderRadius: BorderRadius.button,
   },
   modalDeleteText: {
     ...Typography.body,
-    color: Colors.white,
+    color: c.white,
   },
 });

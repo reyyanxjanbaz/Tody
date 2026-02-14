@@ -4,7 +4,8 @@
  */
 import React, { memo, useState, useEffect, useRef, useCallback } from 'react';
 import { View, Text, Pressable, StyleSheet } from 'react-native';
-import { Colors, Spacing } from '../utils/colors';
+import { Spacing, FontFamily, type ThemeColors } from '../utils/colors';
+import { useTheme } from '../context/ThemeContext';
 import { getEstimateSuggestion } from '../utils/patternLearning';
 import { formatMinutes } from '../utils/timeTracking';
 
@@ -17,6 +18,8 @@ export const EstimateSuggestion = memo(function EstimateSuggestion({
   taskTitle,
   userEstimateMinutes,
 }: EstimateSuggestionProps) {
+  const { colors, shadows, isDark } = useTheme();
+  const styles = React.useMemo(() => createStyles(colors), [colors]);
   const [suggestion, setSuggestion] = useState<{
     avgMinutes: number;
     sampleSize: number;
@@ -86,9 +89,9 @@ export const EstimateSuggestion = memo(function EstimateSuggestion({
   );
 });
 
-const styles = StyleSheet.create({
+const createStyles = (c: ThemeColors) => StyleSheet.create({
   container: {
-    backgroundColor: '#F5F5F5',
+    backgroundColor: c.surface,
     padding: 8,
     marginHorizontal: Spacing.lg,
     marginTop: 4,
@@ -101,13 +104,15 @@ const styles = StyleSheet.create({
   },
   infoText: {
     fontSize: 11,
-    color: '#9E9E9E',
+    color: c.textTertiary,
     flex: 1,
     marginRight: Spacing.sm,
+    fontFamily: FontFamily,
   },
   dismissText: {
     fontSize: 11,
-    color: '#9E9E9E',
+    color: c.textTertiary,
     padding: 2,
+    fontFamily: FontFamily,
   },
 });

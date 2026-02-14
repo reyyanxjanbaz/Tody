@@ -42,7 +42,8 @@ import {
     countDescendants,
     flattenTasksHierarchically,
 } from '../utils/dependencyChains';
-import { Colors, Spacing, Typography, Shadows, BorderRadius } from '../utils/colors';
+import { Spacing, Typography, BorderRadius, FontFamily, type ThemeColors } from '../utils/colors';
+import { useTheme } from '../context/ThemeContext';
 import { Task, RootStackParamList, Category, SortOption, Priority } from '../types';
 import { haptic } from '../utils/haptics';
 import { startOfDay, endOfDay } from '../utils/dateUtils';
@@ -73,6 +74,8 @@ type Props = {
 };
 
 export function HomeScreen({ navigation }: Props) {
+  const { colors, shadows, isDark } = useTheme();
+  const styles = React.useMemo(() => createStyles(colors), [colors]);
     const insets = useSafeAreaInsets();
     const {
         tasks,
@@ -598,7 +601,7 @@ export function HomeScreen({ navigation }: Props) {
                         : 'Create one or switch tab'
                 }
                 icon={activeCategory === 'overview' ? undefined : (activeCat?.icon as string) ?? 'folder-outline'}
-                iconColor={activeCat?.color ?? Colors.textTertiary}
+                iconColor={activeCat?.color ?? colors.textTertiary}
             />
         );
     }, [activeCount, activeCategory, categories, addTask]);
@@ -633,7 +636,7 @@ export function HomeScreen({ navigation }: Props) {
                         ref={searchInputRef}
                         style={styles.searchInput}
                         placeholder="Search tasks..."
-                        placeholderTextColor={Colors.gray400}
+                        placeholderTextColor={colors.gray400}
                         value={searchQuery}
                         onChangeText={setSearchQuery}
                         autoCorrect={false}
@@ -660,7 +663,7 @@ export function HomeScreen({ navigation }: Props) {
                         onPress={handleOpenSearch}
                         hitSlop={8}
                         style={styles.topSearchButton}>
-                        <Icon name="search-outline" size={26} color={Colors.text} />
+                        <Icon name="search-outline" size={26} color={colors.text} />
                     </AnimatedPressable>
                 </Animated.View>
             )}
@@ -702,9 +705,9 @@ export function HomeScreen({ navigation }: Props) {
                         <RefreshControl
                             refreshing={false}
                             onRefresh={() => setIsFocusMode(true)}
-                            tintColor={Colors.black}
+                            tintColor={colors.black}
                             title="Pull for Focus Mode"
-                            titleColor={Colors.gray400}
+                            titleColor={colors.gray400}
                         />
                     }
                     ListHeaderComponent={
@@ -755,7 +758,7 @@ export function HomeScreen({ navigation }: Props) {
                             onPress={handleOpenArchive}
                             hitSlop={8}
                             style={styles.navButton}>
-                            <Icon name="archive-outline" size={24} color={Colors.textTertiary} />
+                            <Icon name="archive-outline" size={24} color={colors.textTertiary} />
                             <Text style={styles.navButtonText}>Archive</Text>
                         </AnimatedPressable>
 
@@ -763,7 +766,7 @@ export function HomeScreen({ navigation }: Props) {
                             onPress={() => navigation.navigate('Profile')}
                             hitSlop={8}
                             style={styles.navButton}>
-                            <Icon name="person-outline" size={24} color={Colors.textTertiary} />
+                            <Icon name="person-outline" size={24} color={colors.textTertiary} />
                             <Text style={styles.navButtonText}>Profile</Text>
                         </AnimatedPressable>
                     </View>
@@ -894,10 +897,10 @@ export function HomeScreen({ navigation }: Props) {
     );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (c: ThemeColors) => StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: Colors.background,
+        backgroundColor: c.background,
     },
     header: {
         flexDirection: 'row',
@@ -911,11 +914,12 @@ const styles = StyleSheet.create({
         fontSize: 36,
         fontWeight: '800',
         letterSpacing: -1,
-        color: Colors.text,
+        color: c.text,
+    fontFamily: FontFamily,
     },
     headerCount: {
         ...Typography.small,
-        color: Colors.gray400,
+        color: c.gray400,
         marginTop: 2,
     },
     headerActions: {
@@ -932,7 +936,7 @@ const styles = StyleSheet.create({
     headerButtonText: {
         ...Typography.small,
         fontWeight: '600',
-        color: Colors.textTertiary,
+        color: c.textTertiary,
     },
     bottomControlsWrapper: {
         position: 'absolute',
@@ -945,9 +949,9 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         justifyContent: 'space-around',
         alignItems: 'center',
-        backgroundColor: Colors.white,
+        backgroundColor: c.white,
         borderTopWidth: StyleSheet.hairlineWidth,
-        borderTopColor: Colors.border,
+        borderTopColor: c.border,
         paddingTop: Spacing.sm,
         paddingHorizontal: Spacing.md,
     },
@@ -960,7 +964,7 @@ const styles = StyleSheet.create({
     navButtonText: {
         ...Typography.small,
         fontWeight: '600',
-        color: Colors.textTertiary,
+        color: c.textTertiary,
     },
     topSearchButton: {
         padding: Spacing.sm,
@@ -979,13 +983,13 @@ const styles = StyleSheet.create({
         borderColor: 'transparent',
         borderRadius: BorderRadius.input,
         paddingHorizontal: Spacing.lg,
-        backgroundColor: '#F2F2F7',
+        backgroundColor: c.gray50,
         ...Typography.body,
-        color: Colors.text,
+        color: c.text,
     },
     cancelText: {
         ...Typography.link,
-        color: Colors.textSecondary,
+        color: c.textSecondary,
     },
     listContent: {
         paddingBottom: 100,
@@ -998,7 +1002,7 @@ const styles = StyleSheet.create({
         flex: 1,
     },
     archiveButton: {
-        backgroundColor: Colors.surfaceDark,
+        backgroundColor: c.surfaceDark,
         paddingVertical: Spacing.md,
         paddingHorizontal: Spacing.lg,
         marginHorizontal: Spacing.lg,
@@ -1009,7 +1013,8 @@ const styles = StyleSheet.create({
     archiveButtonText: {
         fontSize: 13,
         fontWeight: '700',
-        color: Colors.white,
+        color: c.white,
+    fontFamily: FontFamily,
     },
     modalOverlay: {
         flex: 1,
@@ -1019,22 +1024,21 @@ const styles = StyleSheet.create({
     },
     modalCard: {
         width: '85%',
-        backgroundColor: Colors.white,
+        backgroundColor: c.white,
         borderRadius: BorderRadius.card,
         paddingVertical: Spacing.xxl,
         paddingHorizontal: Spacing.xxl,
-        ...Shadows.floating,
         borderWidth: 1,
-        borderColor: 'rgba(0,0,0,0.10)',
+        borderColor: c.border,
     },
     modalTitle: {
         ...Typography.bodyMedium,
-        color: Colors.text,
+        color: c.text,
         textAlign: 'center',
     },
     modalSubtitle: {
         ...Typography.caption,
-        color: Colors.textTertiary,
+        color: c.textTertiary,
         textAlign: 'center',
         marginTop: Spacing.sm,
     },
@@ -1050,16 +1054,16 @@ const styles = StyleSheet.create({
     },
     modalCancelText: {
         ...Typography.body,
-        color: Colors.textTertiary,
+        color: c.textTertiary,
     },
     modalArchiveButton: {
         paddingVertical: Spacing.md,
         paddingHorizontal: Spacing.xxl,
-        backgroundColor: Colors.surfaceDark,
+        backgroundColor: c.surfaceDark,
         borderRadius: BorderRadius.button,
     },
     modalArchiveText: {
         ...Typography.body,
-        color: Colors.white,
+        color: c.white,
     },
 });

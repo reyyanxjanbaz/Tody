@@ -2,7 +2,8 @@ import React, { memo, useRef } from 'react';
 import { View, Text, Pressable, ScrollView, StyleSheet } from 'react-native';
 import Animated, { LinearTransition, ZoomIn } from 'react-native-reanimated';
 import Icon from 'react-native-vector-icons/Ionicons';
-import { Colors, Spacing, Typography } from '../utils/colors';
+import { Spacing, Typography, FontFamily, type ThemeColors } from '../utils/colors';
+import { useTheme } from '../context/ThemeContext';
 import { Category, SortOption } from '../types';
 import { haptic } from '../utils/haptics';
 
@@ -30,6 +31,9 @@ export const CategoryTabs = memo(function CategoryTabs({
   onSortPress,
 }: TabManagerProps) {
   const scrollRef = useRef<ScrollView>(null);
+
+  const { colors, shadows, isDark } = useTheme();
+  const styles = React.useMemo(() => createStyles(colors), [colors]);
 
   const sorted = [...categories].sort((a, b) => a.order - b.order);
 
@@ -79,10 +83,10 @@ export const CategoryTabs = memo(function CategoryTabs({
         {/* Tab management buttons */}
         <View style={styles.actions}>
           <Pressable onPress={() => { haptic('light'); onAddPress(); }} hitSlop={6} style={styles.actionBtn}>
-            <Icon name="add" size={18} color={Colors.gray500} />
+            <Icon name="add" size={18} color={colors.gray500} />
           </Pressable>
           <Pressable onPress={() => { haptic('light'); onManagePress(); }} hitSlop={6} style={styles.actionBtn}>
-            <Icon name="pencil-outline" size={15} color={Colors.gray500} />
+            <Icon name="pencil-outline" size={15} color={colors.gray500} />
           </Pressable>
           <Pressable
             onPress={() => { haptic('light'); onSortPress(); }}
@@ -92,7 +96,7 @@ export const CategoryTabs = memo(function CategoryTabs({
             <Icon
               name={sortOption === 'default' ? 'swap-vertical-outline' : 'swap-vertical'}
               size={13}
-              color={Colors.white}
+              color={colors.white}
             />
             <Text style={styles.sortFabText}>Sort</Text>
             {sortOption !== 'default' && <View style={styles.sortFabDot} />}
@@ -105,16 +109,16 @@ export const CategoryTabs = memo(function CategoryTabs({
 
 // ── Styles ───────────────────────────────────────────────────────────────────
 
-const styles = StyleSheet.create({
+const createStyles = (c: ThemeColors) => StyleSheet.create({
   container: {
-    backgroundColor: Colors.background,
+    backgroundColor: c.background,
     paddingTop: Spacing.sm,
   },
   row: {
     flexDirection: 'row',
     alignItems: 'center',
     borderBottomWidth: 1,
-    borderBottomColor: Colors.gray100,
+    borderBottomColor: c.gray100,
   },
   tabScroll: {
     paddingLeft: Spacing.lg,
@@ -137,11 +141,12 @@ const styles = StyleSheet.create({
   tabLabel: {
     fontSize: 15,
     fontWeight: '500',
-    color: Colors.gray400,
+    color: c.gray400,
     letterSpacing: -0.3,
+    fontFamily: FontFamily,
   },
   tabLabelActive: {
-    color: Colors.text,
+    color: c.text,
     fontWeight: '700',
   },
   activeIndicator: {
@@ -150,7 +155,7 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     height: 3,
-    backgroundColor: Colors.black,
+    backgroundColor: c.black,
     borderRadius: 1.5,
   },
   actions: {
@@ -172,24 +177,25 @@ const styles = StyleSheet.create({
     gap: 4,
     paddingVertical: 6,
     paddingHorizontal: Spacing.md,
-    backgroundColor: Colors.surfaceDark,
+    backgroundColor: c.surfaceDark,
     borderRadius: 999,
     borderWidth: 1,
-    borderColor: Colors.gray800,
+    borderColor: c.gray800,
   },
   sortFabActive: {
-    backgroundColor: Colors.black,
+    backgroundColor: c.black,
   },
   sortFabText: {
     fontSize: 12,
     fontWeight: '700',
-    color: Colors.white,
+    color: c.white,
     letterSpacing: 0.1,
+    fontFamily: FontFamily,
   },
   sortFabDot: {
     width: 5,
     height: 5,
     borderRadius: 2.5,
-    backgroundColor: Colors.gray200,
+    backgroundColor: c.gray200,
   },
 });

@@ -9,7 +9,8 @@ import React, { memo, useCallback } from 'react';
 import { View, Text, StyleSheet, Image, Pressable, Alert } from 'react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import Icon from 'react-native-vector-icons/Ionicons';
-import { Colors, Spacing, Typography, BorderRadius } from '../../utils/colors';
+import { Spacing, Typography, BorderRadius, FontFamily, type ThemeColors } from '../../utils/colors';
+import { useTheme } from '../../context/ThemeContext';
 import { haptic } from '../../utils/haptics';
 
 interface ProfileHeaderProps {
@@ -27,6 +28,9 @@ export const ProfileHeader = memo(function ProfileHeader({
 }: ProfileHeaderProps) {
   const displayName = email.split('@')[0];
   const initials = displayName.slice(0, 2).toUpperCase();
+  const { colors, shadows, isDark } = useTheme();
+  const styles = React.useMemo(() => createStyles(colors), [colors]);
+
 
   const handleAvatarPress = useCallback(() => {
     haptic('light');
@@ -45,7 +49,7 @@ export const ProfileHeader = memo(function ProfileHeader({
           </View>
         )}
         <View style={styles.editBadge}>
-          <Icon name="camera-outline" size={12} color={Colors.white} />
+          <Icon name="camera-outline" size={12} color={colors.white} />
         </View>
       </Pressable>
 
@@ -62,7 +66,7 @@ export const ProfileHeader = memo(function ProfileHeader({
         <Animated.View
           entering={FadeInDown.delay(160).duration(300)}
           style={styles.streakContainer}>
-          <Icon name="flame-outline" size={18} color={Colors.text} />
+          <Icon name="flame-outline" size={18} color={colors.text} />
           <Text style={styles.streakCount}>{currentStreak}</Text>
           <Text style={styles.streakLabel}>day streak</Text>
         </Animated.View>
@@ -71,7 +75,7 @@ export const ProfileHeader = memo(function ProfileHeader({
   );
 });
 
-const styles = StyleSheet.create({
+const createStyles = (c: ThemeColors) => StyleSheet.create({
   container: {
     alignItems: 'center',
     paddingTop: Spacing.xl,
@@ -85,21 +89,22 @@ const styles = StyleSheet.create({
     width: 80,
     height: 80,
     borderRadius: 40,
-    backgroundColor: Colors.gray100,
+    backgroundColor: c.gray100,
   },
   avatarPlaceholder: {
     width: 80,
     height: 80,
     borderRadius: 40,
-    backgroundColor: Colors.surfaceDark,
+    backgroundColor: c.surfaceDark,
     justifyContent: 'center',
     alignItems: 'center',
   },
   avatarInitials: {
     fontSize: 28,
     fontWeight: '700',
-    color: Colors.white,
+    color: c.white,
     letterSpacing: 1,
+    fontFamily: FontFamily,
   },
   editBadge: {
     position: 'absolute',
@@ -108,11 +113,11 @@ const styles = StyleSheet.create({
     width: 26,
     height: 26,
     borderRadius: 13,
-    backgroundColor: Colors.gray800,
+    backgroundColor: c.gray800,
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 2,
-    borderColor: Colors.white,
+    borderColor: c.white,
   },
   nameSection: {
     alignItems: 'center',
@@ -122,18 +127,19 @@ const styles = StyleSheet.create({
     fontSize: 22,
     fontWeight: '700',
     letterSpacing: -0.3,
-    color: Colors.text,
+    color: c.text,
+    fontFamily: FontFamily,
   },
   emailText: {
     ...Typography.caption,
-    color: Colors.textTertiary,
+    color: c.textTertiary,
     marginTop: 2,
   },
   streakContainer: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: Spacing.xs,
-    backgroundColor: Colors.surface,
+    backgroundColor: c.surface,
     paddingHorizontal: Spacing.lg,
     paddingVertical: Spacing.sm,
     borderRadius: BorderRadius.pill,
@@ -141,10 +147,11 @@ const styles = StyleSheet.create({
   streakCount: {
     fontSize: 16,
     fontWeight: '700',
-    color: Colors.text,
+    color: c.text,
+    fontFamily: FontFamily,
   },
   streakLabel: {
     ...Typography.caption,
-    color: Colors.textSecondary,
+    color: c.textSecondary,
   },
 });

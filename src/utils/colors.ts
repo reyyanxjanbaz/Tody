@@ -1,6 +1,42 @@
-import { StyleSheet, ViewStyle } from 'react-native';
+import { StyleSheet, ViewStyle, Platform } from 'react-native';
 
-export const Colors = {
+// ── Font Family ─────────────────────────────────────────────────────────────
+
+export const FontFamily = Platform.select({
+  ios: 'Times New Roman',
+  android: 'serif',
+  default: 'serif',
+}) as string;
+
+// ── Theme Color Type ────────────────────────────────────────────────────────
+
+export type ThemeColors = {
+  black: string;
+  white: string;
+  gray50: string;
+  gray100: string;
+  gray200: string;
+  gray400: string;
+  gray500: string;
+  gray600: string;
+  gray800: string;
+  background: string;
+  surface: string;
+  text: string;
+  textSecondary: string;
+  textTertiary: string;
+  border: string;
+  borderLight: string;
+  activeState: string;
+  danger: string;
+  surfaceDark: string;
+  surfaceGlass: string;
+  backgroundOffWhite: string;
+};
+
+// ── Light Theme ─────────────────────────────────────────────────────────────
+
+export const LightColors = {
   black: '#000000',
   white: '#FFFFFF',
   gray50: '#F5F5F5',
@@ -28,6 +64,40 @@ export const Colors = {
   backgroundOffWhite: '#F5F5F7',
 } as const;
 
+// ── Dark Theme ──────────────────────────────────────────────────────────────
+
+export const DarkColors = {
+  black: '#000000',
+  white: '#FFFFFF',
+  gray50: '#141414',
+  gray100: '#1C1C1C',
+  gray200: '#262626',
+  gray400: '#555555',
+  gray500: '#777777',
+  gray600: '#999999',
+  gray800: '#CCCCCC',
+
+  // Semantic
+  background: '#000000',
+  surface: '#141414',
+  text: '#E8E8E8',
+  textSecondary: '#9E9E9E',
+  textTertiary: '#5C5C5C',
+  border: '#262626',
+  borderLight: '#1A1A1A',
+  activeState: '#CCCCCC',
+  danger: '#CCCCCC',
+
+  // Dynamic Capsule Theme
+  surfaceDark: '#0A0A0A',
+  surfaceGlass: 'rgba(255,255,255,0.05)',
+  backgroundOffWhite: '#0A0A0A',
+} as const;
+
+// ── Static Colors (backward compat — use useTheme() for dynamic) ────────────
+
+export const Colors = LightColors;
+
 export const Shadows = {
   floating: {
     borderWidth: 1,
@@ -42,6 +112,23 @@ export const Shadows = {
     borderColor: 'rgba(0,0,0,0.08)',
   } as ViewStyle,
 };
+
+export const DarkShadows = {
+  floating: {
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.08)',
+  } as ViewStyle,
+  card: {
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(255,255,255,0.06)',
+  } as ViewStyle,
+  subtle: {
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(255,255,255,0.04)',
+  } as ViewStyle,
+};
+
+export type ThemeShadows = typeof Shadows;
 
 export const BorderRadius = {
   pill: 100,
@@ -67,12 +154,14 @@ export const Typography = StyleSheet.create({
     fontWeight: '700',
     letterSpacing: -0.5,
     color: Colors.text,
+    fontFamily: FontFamily,
   },
   heading: {
     fontSize: 20,
     fontWeight: '600',
     letterSpacing: -0.3,
     color: Colors.text,
+    fontFamily: FontFamily,
   },
   sectionHeader: {
     fontSize: 11,
@@ -80,32 +169,38 @@ export const Typography = StyleSheet.create({
     letterSpacing: 1.5,
     textTransform: 'uppercase',
     color: Colors.gray500,
+    fontFamily: FontFamily,
   },
   body: {
     fontSize: 16,
     fontWeight: '400',
     color: Colors.text,
+    fontFamily: FontFamily,
   },
   bodyMedium: {
     fontSize: 16,
     fontWeight: '500',
     color: Colors.text,
+    fontFamily: FontFamily,
   },
   caption: {
     fontSize: 13,
     fontWeight: '400',
     color: Colors.textSecondary,
+    fontFamily: FontFamily,
   },
   small: {
     fontSize: 11,
     fontWeight: '400',
     letterSpacing: 0.2,
     color: Colors.textTertiary,
+    fontFamily: FontFamily,
   },
   link: {
     fontSize: 14,
     fontWeight: '500',
     color: Colors.textSecondary,
+    fontFamily: FontFamily,
   },
 });
 

@@ -7,7 +7,8 @@ import {
   ScrollView,
 } from 'react-native';
 import Icon from 'react-native-vector-icons/Ionicons';
-import { Colors, Spacing, Typography } from '../utils/colors';
+import { Spacing, Typography, FontFamily, type ThemeColors } from '../utils/colors';
+import { useTheme } from '../context/ThemeContext';
 import { EnergyLevel, Priority } from '../types';
 
 interface TemplateTask {
@@ -88,6 +89,9 @@ export const ZeroStateOnboarding = memo(function ZeroStateOnboarding({
   onSelectTemplate,
   onDismiss,
 }: ZeroStateOnboardingProps) {
+  const { colors, shadows, isDark } = useTheme();
+  const styles = React.useMemo(() => createStyles(colors), [colors]);
+
   const handleSelectTemplate = useCallback(
     (template: Template) => {
       onSelectTemplate(template.tasks);
@@ -102,7 +106,7 @@ export const ZeroStateOnboarding = memo(function ZeroStateOnboarding({
     >
       {/* Welcome illustration area */}
       <View style={styles.welcomeArea}>
-        <Icon name="checkmark-done-outline" size={48} color={Colors.black} />
+        <Icon name="checkmark-done-outline" size={48} color={colors.black} />
         <Text style={styles.welcomeTitle}>Welcome to Tody</Text>
         <Text style={styles.welcomeSubtitle}>
           Start with a template or create from scratch
@@ -124,7 +128,7 @@ export const ZeroStateOnboarding = memo(function ZeroStateOnboarding({
               <Text style={styles.cardTitle}>{template.title}</Text>
               <Text style={styles.cardDescription}>{template.description}</Text>
             </View>
-            <Icon name="arrow-forward" size={16} color={Colors.gray400} />
+            <Icon name="arrow-forward" size={16} color={colors.gray400} />
           </View>
           {/* Preview of tasks */}
           <View style={styles.taskPreview}>
@@ -151,7 +155,7 @@ export const ZeroStateOnboarding = memo(function ZeroStateOnboarding({
   );
 });
 
-const styles = StyleSheet.create({
+const createStyles = (c: ThemeColors) => StyleSheet.create({
   container: {
     alignItems: 'center',
     paddingTop: 40,
@@ -166,19 +170,21 @@ const styles = StyleSheet.create({
     fontSize: 24,
     fontWeight: '800',
     letterSpacing: -0.5,
-    color: Colors.text,
+    color: c.text,
     marginTop: 16,
+    fontFamily: FontFamily,
   },
   welcomeSubtitle: {
     fontSize: 14,
-    color: Colors.gray500,
+    color: c.gray500,
     marginTop: 6,
+    fontFamily: FontFamily,
   },
   card: {
     width: '100%',
-    backgroundColor: Colors.white,
+    backgroundColor: c.white,
     borderWidth: 1,
-    borderColor: Colors.gray200,
+    borderColor: c.gray200,
     borderRadius: 8,
     padding: 16,
     marginBottom: 12,
@@ -201,18 +207,20 @@ const styles = StyleSheet.create({
   cardTitle: {
     fontSize: 16,
     fontWeight: '700',
-    color: Colors.text,
+    color: c.text,
+    fontFamily: FontFamily,
   },
   cardDescription: {
     fontSize: 12,
-    color: Colors.gray500,
+    color: c.gray500,
     marginTop: 2,
+    fontFamily: FontFamily,
   },
   taskPreview: {
     marginTop: 12,
     paddingTop: 10,
     borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: Colors.gray100,
+    borderTopColor: c.gray100,
   },
   previewItem: {
     flexDirection: 'row',
@@ -223,19 +231,21 @@ const styles = StyleSheet.create({
     width: 4,
     height: 4,
     borderRadius: 2,
-    backgroundColor: Colors.gray400,
+    backgroundColor: c.gray400,
     marginRight: 8,
   },
   previewText: {
     fontSize: 12,
-    color: Colors.gray600,
+    color: c.gray600,
     flex: 1,
+    fontFamily: FontFamily,
   },
   moreText: {
     fontSize: 11,
-    color: Colors.gray400,
+    color: c.gray400,
     marginTop: 2,
     marginLeft: 12,
+    fontFamily: FontFamily,
   },
   scratchButton: {
     marginTop: 8,
@@ -244,6 +254,7 @@ const styles = StyleSheet.create({
   scratchText: {
     fontSize: 14,
     fontWeight: '500',
-    color: Colors.textSecondary,
+    color: c.textSecondary,
+    fontFamily: FontFamily,
   },
 });
