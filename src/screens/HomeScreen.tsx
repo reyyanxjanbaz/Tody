@@ -351,10 +351,6 @@ export function HomeScreen({ navigation }: Props) {
         [completeTimedTask],
     );
 
-    const handleOpenStats = useCallback(() => {
-        navigation.navigate('RealityScore');
-    }, [navigation]);
-
     // ── Long-press / Context menu handlers ─────────────────────────────────────
     const handleLongPress = useCallback((task: Task) => {
         setContextMenuTask(task);
@@ -761,14 +757,6 @@ export function HomeScreen({ navigation }: Props) {
                             style={styles.navButton}>
                             <Icon name="archive-outline" size={24} color={Colors.textTertiary} />
                             <Text style={styles.navButtonText}>Archive</Text>
-                        </AnimatedPressable>
-
-                        <AnimatedPressable
-                            onPress={handleOpenStats}
-                            hitSlop={8}
-                            style={styles.navButton}>
-                            <Icon name="stats-chart-outline" size={24} color={Colors.textTertiary} />
-                            <Text style={styles.navButtonText}>Stats</Text>
                         </AnimatedPressable>
 
                         <AnimatedPressable

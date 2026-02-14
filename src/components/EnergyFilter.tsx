@@ -6,18 +6,6 @@ import { Colors, Spacing, Typography } from '../utils/colors';
 import { Category, SortOption } from '../types';
 import { haptic } from '../utils/haptics';
 
-// ── Sort labels ──────────────────────────────────────────────────────────────
-
-const SORT_LABELS: Record<SortOption, string> = {
-  'default': 'Default',
-  'deadline-asc': 'Deadline ↑',
-  'deadline-desc': 'Deadline ↓',
-  'priority-high': 'Priority ↑',
-  'priority-low': 'Priority ↓',
-  'newest': 'Newest',
-  'oldest': 'Oldest',
-};
-
 // ── Props ────────────────────────────────────────────────────────────────────
 
 interface TabManagerProps {
@@ -96,24 +84,21 @@ export const CategoryTabs = memo(function CategoryTabs({
           <Pressable onPress={() => { haptic('light'); onManagePress(); }} hitSlop={6} style={styles.actionBtn}>
             <Icon name="pencil-outline" size={15} color={Colors.gray500} />
           </Pressable>
+          <Pressable
+            onPress={() => { haptic('light'); onSortPress(); }}
+            style={[styles.sortFab, sortOption !== 'default' && styles.sortFabActive]}
+            hitSlop={6}
+          >
+            <Icon
+              name={sortOption === 'default' ? 'swap-vertical-outline' : 'swap-vertical'}
+              size={13}
+              color={Colors.white}
+            />
+            <Text style={styles.sortFabText}>Sort</Text>
+            {sortOption !== 'default' && <View style={styles.sortFabDot} />}
+          </Pressable>
         </View>
       </View>
-
-      {/* Sort bar — sits below tabs */}
-      <Pressable
-        onPress={() => { haptic('light'); onSortPress(); }}
-        style={styles.sortBar}
-        hitSlop={4}
-      >
-        <Icon
-          name={sortOption === 'default' ? 'swap-vertical-outline' : 'swap-vertical'}
-          size={13}
-          color={sortOption === 'default' ? Colors.gray400 : Colors.text}
-        />
-        <Text style={[styles.sortText, sortOption !== 'default' && styles.sortTextActive]}>
-          {sortOption === 'default' ? 'Sort' : SORT_LABELS[sortOption]}
-        </Text>
-      </Pressable>
     </View>
   );
 });
@@ -173,7 +158,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingRight: Spacing.lg,
     paddingBottom: Spacing.md,
-    gap: 2,
+    gap: 4,
   },
   actionBtn: {
     width: 30,
@@ -181,22 +166,30 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  sortBar: {
+  sortFab: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 5,
+    gap: 4,
     paddingVertical: 6,
-    paddingHorizontal: Spacing.lg,
-    backgroundColor: Colors.gray50,
+    paddingHorizontal: Spacing.md,
+    backgroundColor: Colors.surfaceDark,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: Colors.gray800,
   },
-  sortText: {
+  sortFabActive: {
+    backgroundColor: Colors.black,
+  },
+  sortFabText: {
     fontSize: 12,
-    fontWeight: '500',
-    color: Colors.gray400,
+    fontWeight: '700',
+    color: Colors.white,
     letterSpacing: 0.1,
   },
-  sortTextActive: {
-    fontWeight: '700',
-    color: Colors.text,
+  sortFabDot: {
+    width: 5,
+    height: 5,
+    borderRadius: 2.5,
+    backgroundColor: Colors.gray200,
   },
 });

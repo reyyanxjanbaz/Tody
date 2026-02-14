@@ -1,7 +1,7 @@
 /**
  * ProfileScreen – User identity, gamification, calendar & stats.
  *
- * Composes ProfileHeader, XPSection, MonthlyCalendar, and StatsSection
+ * Composes ProfileHeader, XPSection, MonthlyCalendar, and PerformanceFusionSection
  * into a single scrollable page. Protected by auth — if not logged in
  * the RootNavigator would never render this screen anyway, but we
  * double-check just in case.
@@ -29,7 +29,7 @@ import { RootStackParamList } from '../types';
 import { ProfileHeader } from '../components/profile/ProfileHeader';
 import { XPSection } from '../components/profile/XPSection';
 import { MonthlyCalendar } from '../components/profile/MonthlyCalendar';
-import { StatsSection } from '../components/profile/StatsSection';
+import { PerformanceFusionSection } from '../components/profile/PerformanceFusionSection';
 import { AnimatedPressable } from '../components/ui';
 import {
   calculateProfileStats,
@@ -147,8 +147,8 @@ export function ProfileScreen({ navigation }: Props) {
         {/* Monthly Calendar */}
         <MonthlyCalendar tasks={allTasks} />
 
-        {/* Statistics */}
-        <StatsSection stats={profileStats} />
+        {/* Unified analytics narrative: stats + reality score */}
+        <PerformanceFusionSection stats={profileStats} tasks={allTasks} />
       </ScrollView>
     </View>
   );
