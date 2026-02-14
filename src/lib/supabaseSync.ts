@@ -28,6 +28,11 @@ function log(...args: any[]) {
 function logError(...args: any[]) {
   console.error(LOG_PREFIX, ...args);
 }
+function logWarn(...args: any[]) {
+  if (__DEV__) {
+    console.warn(LOG_PREFIX, ...args);
+  }
+}
 
 /** Check whether a string is a valid UUID v4 */
 function isValidUUID(str: string): boolean {
@@ -46,26 +51,61 @@ function isNetworkError(err: unknown): boolean {
   }
   if (typeof err === 'object' && err !== null && 'message' in err) {
     const msg = (err as { message: string }).message;
-    return /network request failed|fetch failed|aborted|timeout|ECONNRESET/i.test(msg);
+    return /network request failed|fetch failed|aborted|timeout|ECONNRESET|TypeError/i.test(msg);
+  }
+  if (typeof err === 'string') {
+    return /network request failed|fetch failed|aborted|timeout/i.test(err);
   }
   return false;
 }
 
 /**
- * Execute `fn` up to MAX_RETRIES times with exponential back-off when it
- * throws a transient network error.  Non-network errors are re-thrown
- * immediately so callers still see e.g. RLS or validation errors.
+ * Check whether a Supabase response error looks like a transient network problem.
+ * The Supabase JS v2 client catches fetch errors internally and returns them
+ * in the { error } field instead of throwing, so withRetry's catch block
+ * never fires for network failures. This helper detects those.
  */
-async function withRetry<T>(label: string, fn: () => PromiseLike<T>): Promise<T> {
+function isResponseNetworkError(error: { message: string; [k: string]: any } | null): boolean {
+  if (!error) return false;
+  return /network request failed|fetch failed|aborted|timeout|TypeError|ECONNRESET|Failed to fetch|Load failed/i.test(
+    error.message,
+  );
+}
+
+/**
+ * Execute `fn` up to MAX_RETRIES times with exponential back-off.
+ *
+ * Handles TWO kinds of transient failure:
+ *   1. The promise rejects (rare with the Supabase client)
+ *   2. The promise resolves but the response contains a network-like error
+ *      (common — the Supabase JS client catches fetch errors internally)
+ */
+async function withRetry<T extends { error?: any }>(
+  label: string,
+  fn: () => PromiseLike<T>,
+): Promise<T> {
   let attempt = 0;
   while (true) {
     try {
-      return await Promise.resolve(fn());
+      const result = await Promise.resolve(fn());
+
+      // Check for network errors returned inside the Supabase response
+      if (result?.error && isResponseNetworkError(result.error)) {
+        attempt++;
+        if (attempt < MAX_RETRIES) {
+          const delay = INITIAL_DELAY_MS * Math.pow(2, attempt - 1);
+          log(`${label}: response network error, retrying in ${delay}ms (attempt ${attempt}/${MAX_RETRIES})`);
+          await new Promise<void>(resolve => setTimeout(resolve, delay));
+          continue;
+        }
+      }
+
+      return result;
     } catch (err) {
       attempt++;
       if (isNetworkError(err) && attempt < MAX_RETRIES) {
         const delay = INITIAL_DELAY_MS * Math.pow(2, attempt - 1);
-        log(`${label}: network error, retrying in ${delay}ms (attempt ${attempt}/${MAX_RETRIES})`);
+        log(`${label}: thrown network error, retrying in ${delay}ms (attempt ${attempt}/${MAX_RETRIES})`);
         await new Promise<void>(resolve => setTimeout(resolve, delay));
       } else {
         throw err;
@@ -414,18 +454,47 @@ export async function pushTasks(
   log(`Pushed ${rows.length} tasks`);
 }
 
-/** Push a single task to Supabase (upsert). Retries on transient network errors. */
-export async function upsertTask(task: Task, userId: string, catMap: CategoryMap): Promise<void> {
-  const row = taskToDbRow(task, userId, catMap);
+/** Push a single task to Supabase (upsert). Retries on transient network errors.
+ *  For child tasks, ensures the parent row exists in the DB first. */
+export async function upsertTask(
+  task: Task,
+  userId: string,
+  catMap: CategoryMap,
+  allTasks?: Task[],
+): Promise<void> {
   try {
+    // If this is a child task, ensure the parent exists in the DB first
+    // so the parent_id FK constraint isn't violated.
+    if (task.parentId && allTasks) {
+      const parent = allTasks.find(t => t.id === task.parentId);
+      if (parent) {
+        const parentRow = taskToDbRow(parent, userId, catMap);
+        const { error: parentErr } = await withRetry('upsertTask:parent', () =>
+          supabase.from('tasks').upsert(parentRow as any, { onConflict: 'id' }),
+        );
+        if (parentErr && !isResponseNetworkError(parentErr)) {
+          logWarn('upsertTask parent pre-sync failed:', parentErr.message);
+        }
+      }
+    }
+
+    const row = taskToDbRow(task, userId, catMap);
     const { error } = await withRetry('upsertTask', () =>
       supabase.from('tasks').upsert(row as any, { onConflict: 'id' }),
     );
     if (error) {
-      logError('upsertTask failed:', error.message);
+      if (isResponseNetworkError(error)) {
+        logWarn('upsertTask: transient network error (will retry on next sync):', error.message);
+      } else {
+        logError('upsertTask failed:', error.message);
+      }
     }
   } catch (e: any) {
-    logError('upsertTask failed after retries:', e?.message ?? e);
+    if (isNetworkError(e)) {
+      logWarn('upsertTask: network unavailable (will retry on next sync):', e?.message ?? e);
+    } else {
+      logError('upsertTask failed:', e?.message ?? e);
+    }
   }
 }
 

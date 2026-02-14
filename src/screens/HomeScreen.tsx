@@ -34,7 +34,7 @@ import { ZeroStateOnboarding } from '../components/ZeroStateOnboarding';
 import { FocusMode } from '../components/FocusMode';
 import { TodayLine } from '../components/TodayLine';
 import { CalendarStrip } from '../components/CalendarStrip';
-import { AnimatedPressable, TodyLogo } from '../components/ui';
+import { AnimatedPressable } from '../components/ui';
 import { useUndo } from '../components/UndoToast';
 import { organizeTasks, searchTasks } from '../utils/taskIntelligence';
 import { isFullyDecayed } from '../utils/decay';
@@ -481,14 +481,52 @@ export function HomeScreen({ navigation }: Props) {
     const renderTaskContent = useCallback(
         (task: Task) => {
             const locked = lockMap.get(task.id) ?? false;
-            const parentTask = task.parentId
-                ? tasks.find(t => t.id === task.parentId)
-                : null;
-            const parentChildIds = parentTask?.childIds ?? [];
-            const isLastChild =
-                parentChildIds.length > 0
-                    ? parentChildIds[parentChildIds.length - 1] === task.id
+            const depth = task.depth ?? 0;
+
+            // Compute isLastChild by sorting siblings the same way the
+            // flattening function does (by createdAt)
+            let isLastChild = false;
+            if (task.parentId) {
+                const parentTask = tasks.find(t => t.id === task.parentId);
+                const siblingIds = parentTask?.childIds ?? [];
+                const siblings = siblingIds
+                    .map(id => tasks.find(t => t.id === id))
+                    .filter((t): t is Task => t != null)
+                    .sort((a, b) => a.createdAt - b.createdAt);
+                isLastChild = siblings.length > 0
+                    ? siblings[siblings.length - 1].id === task.id
                     : false;
+            }
+
+            // Compute ancestor continuation lines:
+            // For each ancestor depth 1..depth-1, check if that ancestor
+            // is NOT the last child of its parent (meaning the vertical
+            // line should continue through this row).
+            const ancestorContinuation: boolean[] = [];
+            if (depth > 1) {
+                let current = task;
+                // Walk up from depth to depth 1
+                for (let d = depth - 1; d >= 1; d--) {
+                    const parent = current.parentId
+                        ? tasks.find(t => t.id === current.parentId)
+                        : null;
+                    if (parent && parent.parentId) {
+                        const grandparent = tasks.find(t => t.id === parent.parentId);
+                        const aunts = (grandparent?.childIds ?? [])
+                            .map(id => tasks.find(t => t.id === id))
+                            .filter((t): t is Task => t != null)
+                            .sort((a, b) => a.createdAt - b.createdAt);
+                        const parentIsLast = aunts.length > 0
+                            ? aunts[aunts.length - 1].id === parent.id
+                            : true;
+                        ancestorContinuation.unshift(!parentIsLast);
+                    } else {
+                        ancestorContinuation.unshift(false);
+                    }
+                    current = parent ?? current;
+                }
+            }
+
             const shouldHighlight =
                 highlightChildrenOf != null &&
                 task.parentId === highlightChildrenOf &&
@@ -507,6 +545,7 @@ export function HomeScreen({ navigation }: Props) {
                             onCompleteTimed={handleCompleteTimedTask}
                             isLocked={locked}
                             isLastChild={isLastChild}
+                            ancestorContinuation={ancestorContinuation}
                             onLongPress={handleLongPress}
                             onAddSubtask={handleAddSubtaskViaSwipe}
                             childHighlight={shouldHighlight}
@@ -663,22 +702,19 @@ export function HomeScreen({ navigation }: Props) {
                 <Animated.View
                     entering={FadeIn.duration(200)}
                     style={styles.header}>
-                    <View style={styles.headerRow}>
-                        <TodyLogo size={48} />
-                        <View style={styles.headerTitleWrap}>
-                            <Text
-                                style={styles.headerTitle}
-                                numberOfLines={1}
-                                adjustsFontSizeToFit
-                                minimumFontScale={0.7}>
-                                {personalTitle}
+                    <View style={styles.headerTitleWrap}>
+                        <Text
+                            style={styles.headerTitle}
+                            numberOfLines={1}
+                            adjustsFontSizeToFit
+                            minimumFontScale={0.7}>
+                            {personalTitle}
+                        </Text>
+                        {activeCount > 0 && (
+                            <Text style={styles.headerCount}>
+                                {activeCount} task{activeCount !== 1 ? 's' : ''}
                             </Text>
-                            {activeCount > 0 && (
-                                <Text style={styles.headerCount}>
-                                    {activeCount} task{activeCount !== 1 ? 's' : ''}
-                                </Text>
-                            )}
-                        </View>
+                        )}
                     </View>
                     <AnimatedPressable
                         onPress={handleOpenSearch}
@@ -935,15 +971,9 @@ const createStyles = (c: ThemeColors) => StyleSheet.create({
         paddingTop: Spacing.xl,
         paddingBottom: Spacing.lg,
     },
-    headerRow: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        flex: 1,
-        marginRight: Spacing.sm,
-        gap: Spacing.md,
-    },
     headerTitleWrap: {
         flex: 1,
+        marginRight: Spacing.sm,
     },
     headerTitle: {
         fontSize: 32,

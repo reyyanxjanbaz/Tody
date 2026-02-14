@@ -68,6 +68,8 @@ interface TaskItemProps {
   onCompleteTimed?: (id: string, adjustedMinutes?: number) => void;
   isLocked?: boolean;
   isLastChild?: boolean;
+  /** For each ancestor depth (0..depth-1), whether a vertical line should continue */
+  ancestorContinuation?: boolean[];
   onLongPress?: (task: Task) => void;
   onAddSubtask?: (task: Task) => void;
   childHighlight?: boolean;
@@ -112,6 +114,7 @@ export const TaskItem = memo(function TaskItem({
   onCompleteTimed,
   isLocked = false,
   isLastChild = false,
+  ancestorContinuation = [],
   onLongPress,
   onAddSubtask,
   childHighlight = false,
@@ -137,7 +140,8 @@ export const TaskItem = memo(function TaskItem({
   const overdueLabel = useMemo(() => formatOverdueGently(task), [task]);
   const isOverdue = task.deadline ? daysFromNow(task.deadline) < 0 : false;
   const isInProgress = !!task.startedAt && !task.isCompleted;
-  const indentation = (task.depth || 0) * 16;
+  const depth = task.depth || 0;
+  const indentation = depth * 20;
   const hasChildren = task.childIds && task.childIds.length > 0;
 
   // ── JS callbacks (run on JS thread via runOnJS) ───────────────────────
@@ -380,23 +384,47 @@ export const TaskItem = memo(function TaskItem({
         {/* Main row */}
         <GestureDetector gesture={composed}>
           <Animated.View style={[styles.container, rowAnimatedStyle]}>
-            <View style={[styles.innerContainer, { paddingLeft: indentation }]}>
+            <View style={[styles.innerContainer, { paddingLeft: Spacing.md + indentation }]}>
+              {/* Ancestor continuation vertical lines */}
+              {depth > 0 && ancestorContinuation.map((shouldContinue, i) => {
+                if (!shouldContinue) return null;
+                const ancestorDepth = i + 1; // depth levels 1..depth-1
+                return (
+                  <View
+                    key={`ancestor-${i}`}
+                    style={[
+                      styles.connectorVertical,
+                      {
+                        left: Spacing.md + (ancestorDepth * 20) - 14,
+                        height: '100%',
+                        top: 0,
+                      },
+                    ]}
+                  />
+                );
+              })}
               {/* Connector lines for subtasks */}
-              {task.depth > 0 && (
+              {depth > 0 && (
                 <View
                   style={[
                     styles.connectorVertical,
                     {
-                      left: indentation - 8,
+                      left: Spacing.md + indentation - 14,
                       height: isLastChild ? '50%' : '100%',
                       top: 0,
                     },
                   ]}
                 />
               )}
-              {task.depth > 0 && (
+              {depth > 0 && (
                 <View
-                  style={[styles.connectorHorizontal, { left: indentation - 8 }]}
+                  style={[
+                    styles.connectorHorizontal,
+                    {
+                      left: Spacing.md + indentation - 14,
+                      width: 14,
+                    },
+                  ]}
                 />
               )}
 
@@ -534,7 +562,6 @@ const createStyles = (c: ThemeColors) => StyleSheet.create({
     alignItems: 'center',
     paddingVertical: Spacing.md + 2,
     paddingRight: Spacing.lg,
-    paddingLeft: Spacing.md,
     minHeight: 56,
   },
   leftActionBg: {
@@ -640,17 +667,14 @@ const createStyles = (c: ThemeColors) => StyleSheet.create({
   },
   connectorVertical: {
     position: 'absolute',
-    width: 1.5,
-    borderRadius: 0.75,
-    backgroundColor: c.gray600,
+    width: 1,
+    backgroundColor: c.gray400,
   },
   connectorHorizontal: {
     position: 'absolute',
-    width: 12,
-    height: 1.5,
-    borderRadius: 0.75,
+    height: 1,
     top: '50%',
-    backgroundColor: c.gray600,
+    backgroundColor: c.gray400,
   },
   lockIcon: {
     width: 14,

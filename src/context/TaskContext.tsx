@@ -329,11 +329,15 @@ export function TaskProvider({ children }: { children: React.ReactNode }) {
     });
 
     // Sync subtask + updated parent to Supabase
+    // Upsert parent first so the FK constraint on parent_id is satisfied
     if (user) {
-      upsertTask(subtask, user.id, catMapRef.current).catch(() => {});
       const parentTask = tasksRef.current.find(t => t.id === parentId);
       if (parentTask) {
-        upsertTask({ ...parentTask, childIds: [...parentTask.childIds, subtask.id], updatedAt: now }, user.id, catMapRef.current).catch(() => {});
+        upsertTask({ ...parentTask, childIds: [...parentTask.childIds, subtask.id], updatedAt: now }, user.id, catMapRef.current)
+          .then(() => upsertTask(subtask, user.id, catMapRef.current))
+          .catch(() => {});
+      } else {
+        upsertTask(subtask, user.id, catMapRef.current, tasksRef.current).catch(() => {});
       }
     }
 
@@ -351,7 +355,7 @@ export function TaskProvider({ children }: { children: React.ReactNode }) {
         }
         // Sync to Supabase
         if (user) {
-          upsertTask(merged, user.id, catMapRef.current).catch(() => {});
+          upsertTask(merged, user.id, catMapRef.current, prev).catch(() => {});
         }
         return merged;
       }),
@@ -379,7 +383,7 @@ export function TaskProvider({ children }: { children: React.ReactNode }) {
       // Sync completed task to Supabase
       const completedTask = updated.find(t => t.id === id);
       if (completedTask && user) {
-        upsertTask(completedTask, user.id, catMapRef.current).catch(() => {});
+        upsertTask(completedTask, user.id, catMapRef.current, updated).catch(() => {});
       }
 
       // Run pattern learning in background
@@ -398,7 +402,7 @@ export function TaskProvider({ children }: { children: React.ReactNode }) {
       prev.map(t => {
         if (t.id !== id) return t;
         const updated = { ...t, startedAt: now, updatedAt: now };
-        if (user) upsertTask(updated, user.id, catMapRef.current).catch(() => {});
+        if (user) upsertTask(updated, user.id, catMapRef.current, prev).catch(() => {});
         return updated;
       }),
     );
@@ -425,7 +429,7 @@ export function TaskProvider({ children }: { children: React.ReactNode }) {
 
       const completedTask = updated.find(t => t.id === id);
       if (completedTask && user) {
-        upsertTask(completedTask, user.id, catMapRef.current).catch(() => {});
+        upsertTask(completedTask, user.id, catMapRef.current, updated).catch(() => {});
       }
       if (completedTask?.actualMinutes && !isTooShort(completedTask.actualMinutes)) {
         const allCompleted = updated.filter(t => t.isCompleted && t.actualMinutes && t.actualMinutes >= 1);
@@ -443,7 +447,7 @@ export function TaskProvider({ children }: { children: React.ReactNode }) {
       prev.map(t => {
         if (t.id !== id) return t;
         const updated = { ...t, isCompleted: false, completedAt: null, updatedAt: now };
-        if (user) upsertTask(updated, user.id, catMapRef.current).catch(() => {});
+        if (user) upsertTask(updated, user.id, catMapRef.current, prev).catch(() => {});
         return updated;
       }),
     );
@@ -465,7 +469,7 @@ export function TaskProvider({ children }: { children: React.ReactNode }) {
           overdueStartDate: null,
           updatedAt: now,
         };
-        if (user) upsertTask(updated, user.id, catMapRef.current).catch(() => {});
+        if (user) upsertTask(updated, user.id, catMapRef.current, prev).catch(() => {});
         return updated;
       }),
     );
@@ -543,7 +547,7 @@ export function TaskProvider({ children }: { children: React.ReactNode }) {
       // Sync restored tasks to Supabase
       if (user) {
         for (const restored of toRestore) {
-          upsertTask(restored, user.id, catMapRef.current).catch(() => {});
+          upsertTask(restored, user.id, catMapRef.current, updated).catch(() => {});
         }
       }
 
@@ -617,7 +621,7 @@ export function TaskProvider({ children }: { children: React.ReactNode }) {
         descendantIds.forEach(did => affectedIds.add(did));
         for (const aid of affectedIds) {
           const t = updated.find(x => x.id === aid);
-          if (t) upsertTask(t, user.id, catMapRef.current).catch(() => {});
+          if (t) upsertTask(t, user.id, catMapRef.current, updated).catch(() => {});
         }
       }
 
@@ -641,7 +645,7 @@ export function TaskProvider({ children }: { children: React.ReactNode }) {
           deadline: todayEnd.getTime(),
           updatedAt: now,
         };
-        if (user) upsertTask(updated, user.id, catMapRef.current).catch(() => {});
+        if (user) upsertTask(updated, user.id, catMapRef.current, prev).catch(() => {});
         return updated;
       }),
     );
@@ -671,7 +675,7 @@ export function TaskProvider({ children }: { children: React.ReactNode }) {
     // Sync archived tasks to Supabase
     if (user) {
       for (const t of archivedItems) {
-        upsertTask(t, user.id, catMapRef.current).catch(() => {});
+        upsertTask(t, user.id, catMapRef.current, tasksRef.current).catch(() => {});
       }
     }
   }, [user]);
