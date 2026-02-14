@@ -19,6 +19,7 @@ import { getMonthCalendarData } from '../../utils/profileStats';
 import { Task } from '../../types';
 import { Colors, Spacing, Typography, BorderRadius, Shadows } from '../../utils/colors';
 import { haptic } from '../../utils/haptics';
+import { useTheme } from '../../context/ThemeContext';
 
 const MONTH_NAMES = [
   'January', 'February', 'March', 'April', 'May', 'June',
@@ -76,6 +77,8 @@ export const MonthlyCalendar = memo(function MonthlyCalendar({
     setMonth(today.getMonth());
   }, [today]);
 
+  const { colors, isDark } = useTheme();
+
   // Build grid cells: offset blanks + day statuses
   const cells: (DayTaskStatus | null)[] = useMemo(() => {
     const blanks: null[] = Array(firstDayOffset).fill(null);
@@ -96,24 +99,24 @@ export const MonthlyCalendar = memo(function MonthlyCalendar({
   return (
     <Animated.View
       entering={FadeInDown.delay(280).duration(350)}
-      style={styles.container}>
+      style={[styles.container, { backgroundColor: colors.card }]}>
       {/* Month Navigation */}
       <View style={styles.navRow}>
         <Pressable onPress={handlePrev} hitSlop={12} style={styles.navArrow}>
-          <Icon name="chevron-back" size={20} color={Colors.text} />
+          <Icon name="chevron-back" size={20} color={colors.text} />
         </Pressable>
         <View style={styles.navCenter}>
-          <Text style={styles.monthTitle}>
+          <Text style={[styles.monthTitle, { color: colors.text }]}>
             {MONTH_NAMES[month]} {year}
           </Text>
           {!isCurrentMonth && (
-            <Pressable onPress={handleToday} style={styles.todayPill}>
-              <Text style={styles.todayPillText}>Today</Text>
+            <Pressable onPress={handleToday} style={[styles.todayPill, { backgroundColor: isDark ? '#F5F5F7' : Colors.surfaceDark }]}>
+              <Text style={[styles.todayPillText, { color: isDark ? '#000' : Colors.white }]}>Today</Text>
             </Pressable>
           )}
         </View>
         <Pressable onPress={handleNext} hitSlop={12} style={styles.navArrow}>
-          <Icon name="chevron-forward" size={20} color={Colors.text} />
+          <Icon name="chevron-forward" size={20} color={colors.text} />
         </Pressable>
       </View>
 
@@ -121,7 +124,7 @@ export const MonthlyCalendar = memo(function MonthlyCalendar({
       <View style={styles.dowRow}>
         {DOW_HEADERS.map((d, i) => (
           <View key={i} style={styles.dowCell}>
-            <Text style={styles.dowText}>{d}</Text>
+            <Text style={[styles.dowText, { color: colors.textTertiary }]}>{d}</Text>
           </View>
         ))}
       </View>
@@ -149,7 +152,7 @@ export const MonthlyCalendar = memo(function MonthlyCalendar({
                   ]}>
                   <Text
                     style={[
-                      styles.dayNumber,
+                      styles.dayNumber, { color: colors.text },
                       isToday && styles.todayNumber,
                     ]}>
                     {dayNum}

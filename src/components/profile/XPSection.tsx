@@ -16,6 +16,7 @@ import Animated, {
 import { XPData } from '../../types';
 import { Colors, Spacing, Typography, BorderRadius, Shadows } from '../../utils/colors';
 import { SPRING_SNAPPY } from '../../utils/animations';
+import { useTheme } from '../../context/ThemeContext';
 
 interface XPSectionProps {
   xp: XPData;
@@ -23,9 +24,9 @@ interface XPSectionProps {
 
 export const XPSection = memo(function XPSection({ xp }: XPSectionProps) {
   const barWidth = useSharedValue(0);
+  const { colors, isDark } = useTheme();
 
   useEffect(() => {
-    // Animate from 0 to actual progress on mount
     barWidth.value = withSpring(xp.progressPercent, SPRING_SNAPPY);
   }, [xp.progressPercent, barWidth]);
 
@@ -36,24 +37,22 @@ export const XPSection = memo(function XPSection({ xp }: XPSectionProps) {
   return (
     <Animated.View
       entering={FadeInDown.delay(200).duration(350)}
-      style={styles.container}>
-      {/* Level Badge */}
+      style={[styles.container, { backgroundColor: colors.card }]}>
       <View style={styles.levelRow}>
-        <View style={styles.levelBadge}>
-          <Text style={styles.levelNumber}>{xp.level}</Text>
+        <View style={[styles.levelBadge, { backgroundColor: isDark ? '#F5F5F7' : Colors.surfaceDark }]}>
+          <Text style={[styles.levelNumber, { color: isDark ? '#000' : Colors.white }]}>{xp.level}</Text>
         </View>
         <View style={styles.levelInfo}>
-          <Text style={styles.levelLabel}>Level {xp.level}</Text>
-          <Text style={styles.xpText}>
+          <Text style={[styles.levelLabel, { color: colors.text }]}>Level {xp.level}</Text>
+          <Text style={[styles.xpText, { color: colors.textTertiary }]}>
             {xp.xpInCurrentLevel} / {xp.xpForNextLevel} XP
           </Text>
         </View>
-        <Text style={styles.totalXP}>{xp.totalXP} XP</Text>
+        <Text style={[styles.totalXP, { color: colors.textSecondary }]}>{xp.totalXP} XP</Text>
       </View>
 
-      {/* Progress Bar */}
-      <View style={styles.progressTrack}>
-        <Animated.View style={[styles.progressFill, barStyle]} />
+      <View style={[styles.progressTrack, { backgroundColor: isDark ? '#333' : Colors.gray200 }]}>
+        <Animated.View style={[styles.progressFill, { backgroundColor: isDark ? '#F5F5F7' : Colors.surfaceDark }, barStyle]} />
       </View>
     </Animated.View>
   );

@@ -1,8 +1,9 @@
 import React, { memo } from 'react';
 import { View, Text, Pressable, StyleSheet } from 'react-native';
 import Icon from 'react-native-vector-icons/Ionicons';
-import { Colors, Spacing, Typography } from '../utils/colors';
+import { Spacing, Typography } from '../utils/colors';
 import { useInbox } from '../context/InboxContext';
+import { useTheme } from '../context/ThemeContext';
 
 interface InboxBadgeProps {
   onPress: () => void;
@@ -10,20 +11,21 @@ interface InboxBadgeProps {
 
 export const InboxBadge = memo(function InboxBadge({ onPress }: InboxBadgeProps) {
   const { inboxCount } = useInbox();
+  const { colors } = useTheme();
 
   return (
     <Pressable onPress={onPress} hitSlop={8} style={styles.container}>
       <View style={styles.iconContainer}>
-        <Icon name="document-text-outline" size={24} color={Colors.textTertiary} />
+        <Icon name="document-text-outline" size={24} color={colors.textTertiary} />
         {inboxCount > 0 && (
-          <View style={styles.badge}>
-            <Text style={styles.badgeText}>
+          <View style={[styles.badge, { backgroundColor: colors.text, borderColor: colors.background }]}>
+            <Text style={[styles.badgeText, { color: colors.background }]}>
               {inboxCount > 99 ? '99+' : inboxCount}
             </Text>
           </View>
         )}
       </View>
-      <Text style={styles.label}>Memos</Text>
+      <Text style={[styles.label, { color: colors.textTertiary }]}>Memos</Text>
     </Pressable>
   );
 });
@@ -43,7 +45,6 @@ const styles = StyleSheet.create({
   label: {
     ...Typography.small,
     fontWeight: '600',
-    color: Colors.textTertiary,
   },
   badge: {
     position: 'absolute',
@@ -52,15 +53,12 @@ const styles = StyleSheet.create({
     minWidth: 16,
     height: 16,
     borderRadius: 8,
-    backgroundColor: Colors.text,
     justifyContent: 'center',
     alignItems: 'center',
     paddingHorizontal: 3,
     borderWidth: 1.5,
-    borderColor: Colors.background,
   },
   badgeText: {
-    color: Colors.white,
     fontSize: 9,
     fontWeight: '700',
     lineHeight: 12,

@@ -37,6 +37,7 @@ import {
 import { Colors, Spacing, Typography, BorderRadius, Shadows } from '../utils/colors';
 import { haptic } from '../utils/haptics';
 import { AnimatedPressable } from '../components/ui';
+import { useTheme } from '../context/ThemeContext';
 
 type Props = {
   navigation: NativeStackNavigationProp<RootStackParamList, 'Settings'>;
@@ -161,14 +162,16 @@ export function SettingsScreen({ navigation }: Props) {
     updatePref('weekStartsOn', WEEK_STARTS[(idx + 1) % WEEK_STARTS.length]);
   }, [prefs.weekStartsOn, updatePref]);
 
+  const { colors, isDark, setDarkMode } = useTheme();
+
   return (
-    <View style={[styles.container, { paddingTop: insets.top }]}>
+    <View style={[styles.container, { backgroundColor: colors.background, paddingTop: insets.top }]}>
       {/* Header */}
       <View style={styles.header}>
         <Pressable onPress={handleBack} hitSlop={12}>
-          <Text style={styles.backText}>← Profile</Text>
+          <Text style={[styles.backText, { color: colors.textSecondary }]}>← Profile</Text>
         </Pressable>
-        <Text style={styles.headerTitle}>Settings</Text>
+        <Text style={[styles.headerTitle, { color: colors.text }]}>Settings</Text>
         <View style={styles.headerSpacer} />
       </View>
 
@@ -179,37 +182,37 @@ export function SettingsScreen({ navigation }: Props) {
 
         {/* ═══════ ACCOUNT SECTION ═══════════════════════════════════════════ */}
         <Animated.View entering={FadeInDown.duration(350)}>
-          <Text style={styles.sectionTitle}>ACCOUNT</Text>
+          <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>ACCOUNT</Text>
 
           {/* Change Password */}
-          <View style={styles.card}>
-            <Text style={styles.cardTitle}>Change Password</Text>
+          <View style={[styles.card, { backgroundColor: colors.card }]}>
+            <Text style={[styles.cardTitle, { color: colors.text }]}>Change Password</Text>
             <TextInput
-              style={styles.input}
+              style={[styles.input, { backgroundColor: colors.inputBackground, color: colors.text }]}
               placeholder="Current password"
-              placeholderTextColor={Colors.gray500}
+              placeholderTextColor={colors.textTertiary}
               value={currentPw}
               onChangeText={setCurrentPw}
               secureTextEntry
               textContentType="password"
             />
             <TextInput
-              style={styles.input}
+              style={[styles.input, { backgroundColor: colors.inputBackground, color: colors.text }]}
               placeholder="New password"
-              placeholderTextColor={Colors.gray500}
+              placeholderTextColor={colors.textTertiary}
               value={newPw}
               onChangeText={setNewPw}
               secureTextEntry
               textContentType="newPassword"
             />
             {pwMessage ? (
-              <Text style={styles.pwMessage}>{pwMessage}</Text>
+              <Text style={[styles.pwMessage, { color: colors.textSecondary }]}>{pwMessage}</Text>
             ) : null}
             <AnimatedPressable
               onPress={handleChangePassword}
               hapticStyle="light"
-              style={styles.actionButton}>
-              <Text style={styles.actionButtonText}>Update Password</Text>
+              style={[styles.actionButton, { backgroundColor: isDark ? '#F5F5F7' : Colors.surfaceDark }]}>
+              <Text style={[styles.actionButtonText, { color: isDark ? '#000' : Colors.white }]}>Update Password</Text>
             </AnimatedPressable>
           </View>
 
@@ -217,18 +220,18 @@ export function SettingsScreen({ navigation }: Props) {
           <AnimatedPressable
             onPress={handleLogout}
             hapticStyle="medium"
-            style={styles.rowButton}>
-            <Icon name="log-out-outline" size={20} color={Colors.text} />
-            <Text style={styles.rowButtonText}>Log Out</Text>
+            style={[styles.rowButton, { backgroundColor: colors.card }]}>
+            <Icon name="log-out-outline" size={20} color={colors.text} />
+            <Text style={[styles.rowButtonText, { color: colors.text }]}>Log Out</Text>
           </AnimatedPressable>
 
           {/* Delete Account */}
           <AnimatedPressable
             onPress={handleDeleteAccount}
             hapticStyle="heavy"
-            style={[styles.rowButton, styles.dangerRow]}>
-            <Icon name="trash-outline" size={20} color={Colors.gray800} />
-            <Text style={[styles.rowButtonText, styles.dangerText]}>
+            style={[styles.rowButton, styles.dangerRow, { backgroundColor: colors.card, borderColor: isDark ? '#333' : Colors.gray200 }]}>
+            <Icon name="trash-outline" size={20} color={isDark ? '#FF6B6B' : Colors.gray800} />
+            <Text style={[styles.rowButtonText, { color: isDark ? '#FF6B6B' : Colors.gray800 }]}>
               Delete Account
             </Text>
           </AnimatedPressable>
@@ -236,49 +239,49 @@ export function SettingsScreen({ navigation }: Props) {
 
         {/* ═══════ PREFERENCES SECTION ═══════════════════════════════════════ */}
         <Animated.View entering={FadeInDown.delay(120).duration(350)}>
-          <Text style={[styles.sectionTitle, { marginTop: Spacing.xxxl }]}>
+          <Text style={[styles.sectionTitle, { marginTop: Spacing.xxxl, color: colors.textSecondary }]}>
             PREFERENCES
           </Text>
 
           {/* Dark Mode Toggle */}
-          <View style={styles.preferenceRow}>
+          <View style={[styles.preferenceRow, { backgroundColor: colors.card }]}>
             <View style={styles.prefLabel}>
-              <Icon name="moon-outline" size={18} color={Colors.textSecondary} />
-              <Text style={styles.prefText}>Dark Mode</Text>
+              <Icon name="moon-outline" size={18} color={colors.textSecondary} />
+              <Text style={[styles.prefText, { color: colors.text }]}>Dark Mode</Text>
             </View>
             <Switch
-              value={prefs.darkMode}
-              onValueChange={v => updatePref('darkMode', v)}
-              trackColor={{ false: Colors.gray200, true: Colors.gray800 }}
+              value={isDark}
+              onValueChange={v => { setDarkMode(v); updatePref('darkMode', v); }}
+              trackColor={{ false: Colors.gray200, true: '#555' }}
               thumbColor={Colors.white}
             />
           </View>
 
           {/* Date Format */}
-          <Pressable onPress={cycleDateFormat} style={styles.preferenceRow}>
+          <Pressable onPress={cycleDateFormat} style={[styles.preferenceRow, { backgroundColor: colors.card }]}>
             <View style={styles.prefLabel}>
-              <Icon name="calendar-outline" size={18} color={Colors.textSecondary} />
-              <Text style={styles.prefText}>Date Format</Text>
+              <Icon name="calendar-outline" size={18} color={colors.textSecondary} />
+              <Text style={[styles.prefText, { color: colors.text }]}>Date Format</Text>
             </View>
-            <Text style={styles.prefValue}>{prefs.dateFormat}</Text>
+            <Text style={[styles.prefValue, { color: colors.textSecondary }]}>{prefs.dateFormat}</Text>
           </Pressable>
 
           {/* Time Format */}
-          <Pressable onPress={cycleTimeFormat} style={styles.preferenceRow}>
+          <Pressable onPress={cycleTimeFormat} style={[styles.preferenceRow, { backgroundColor: colors.card }]}>
             <View style={styles.prefLabel}>
-              <Icon name="time-outline" size={18} color={Colors.textSecondary} />
-              <Text style={styles.prefText}>Time Format</Text>
+              <Icon name="time-outline" size={18} color={colors.textSecondary} />
+              <Text style={[styles.prefText, { color: colors.text }]}>Time Format</Text>
             </View>
-            <Text style={styles.prefValue}>{prefs.timeFormat}</Text>
+            <Text style={[styles.prefValue, { color: colors.textSecondary }]}>{prefs.timeFormat}</Text>
           </Pressable>
 
           {/* Week Starts On */}
-          <Pressable onPress={cycleWeekStart} style={styles.preferenceRow}>
+          <Pressable onPress={cycleWeekStart} style={[styles.preferenceRow, { backgroundColor: colors.card }]}>
             <View style={styles.prefLabel}>
-              <Icon name="grid-outline" size={18} color={Colors.textSecondary} />
-              <Text style={styles.prefText}>Week Starts On</Text>
+              <Icon name="grid-outline" size={18} color={colors.textSecondary} />
+              <Text style={[styles.prefText, { color: colors.text }]}>Week Starts On</Text>
             </View>
-            <Text style={styles.prefValue}>
+            <Text style={[styles.prefValue, { color: colors.textSecondary }]}>
               {prefs.weekStartsOn === 'sunday' ? 'Sunday' : 'Monday'}
             </Text>
           </Pressable>
@@ -287,9 +290,9 @@ export function SettingsScreen({ navigation }: Props) {
           <AnimatedPressable
             onPress={handleResetPreferences}
             hapticStyle="medium"
-            style={[styles.rowButton, { marginTop: Spacing.lg }]}>
-            <Icon name="refresh-outline" size={20} color={Colors.textSecondary} />
-            <Text style={styles.rowButtonText}>Reset Preferences</Text>
+            style={[styles.rowButton, { marginTop: Spacing.lg, backgroundColor: colors.card }]}>
+            <Icon name="refresh-outline" size={20} color={colors.textSecondary} />
+            <Text style={[styles.rowButtonText, { color: colors.text }]}>Reset Preferences</Text>
           </AnimatedPressable>
         </Animated.View>
       </ScrollView>
@@ -300,22 +303,22 @@ export function SettingsScreen({ navigation }: Props) {
         transparent
         animationType="fade"
         onRequestClose={() => setShowDeleteModal(false)}>
-        <View style={styles.modalOverlay}>
-          <Animated.View entering={FadeIn.duration(250)} style={styles.modalCard}>
-            <Text style={styles.modalTitle}>Delete Account?</Text>
-            <Text style={styles.modalSubtitle}>
+        <View style={[styles.modalOverlay, { backgroundColor: colors.modalOverlay }]}>
+          <Animated.View entering={FadeIn.duration(250)} style={[styles.modalCard, { backgroundColor: colors.modalBg, borderColor: isDark ? '#333' : 'rgba(0,0,0,0.10)' }]}>
+            <Text style={[styles.modalTitle, { color: colors.text }]}>Delete Account?</Text>
+            <Text style={[styles.modalSubtitle, { color: colors.textTertiary }]}>
               This action cannot be undone. All your data will be permanently removed.
             </Text>
             <View style={styles.modalActions}>
               <Pressable
                 style={styles.modalCancelButton}
                 onPress={() => setShowDeleteModal(false)}>
-                <Text style={styles.modalCancelText}>Cancel</Text>
+                <Text style={[styles.modalCancelText, { color: colors.textTertiary }]}>Cancel</Text>
               </Pressable>
               <Pressable
-                style={styles.modalDeleteButton}
+                style={[styles.modalDeleteButton, { backgroundColor: '#EF4444' }]}
                 onPress={confirmDeleteAccount}>
-                <Text style={styles.modalDeleteText}>Delete</Text>
+                <Text style={[styles.modalDeleteText, { color: '#fff' }]}>Delete</Text>
               </Pressable>
             </View>
           </Animated.View>

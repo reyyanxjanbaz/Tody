@@ -46,6 +46,7 @@ import {
   TimeQuickPick,
 } from './ParameterPills';
 import { CategoryPill } from './CategoryPill';
+import { useTheme } from '../context/ThemeContext';
 
 // ── Props ───────────────────────────────────────────────────────────────────
 
@@ -228,28 +229,30 @@ export const TaskInput = memo(function TaskInput({
 
   // ── Render ────────────────────────────────────────────────────────────
 
+  const { colors, isDark } = useTheme();
+
   return (
-    <Animated.View layout={LinearTransition.duration(200)} style={[showPills && styles.drawer]}>
+    <Animated.View layout={LinearTransition.duration(200)} style={[showPills && styles.drawer, showPills && { backgroundColor: isDark ? colors.surface : Colors.backgroundOffWhite }]}>
       {/* Drawer handle */}
       {showPills && (
         <View style={styles.drawerHandleRow}>
-          <View style={styles.drawerHandle} />
+          <View style={[styles.drawerHandle, { backgroundColor: isDark ? '#555' : Colors.gray200 }]} />
         </View>
       )}
 
       {/* Text input row */}
-      <View style={styles.inputRow}>
+      <View style={[styles.inputRow, { backgroundColor: isDark ? colors.inputBackground : Colors.white, borderColor: isDark ? '#333' : Colors.gray200 }]}>
         <Icon
           name="create-outline"
           size={20}
-          color={value.trim() ? Colors.text : Colors.gray400}
+          color={value.trim() ? colors.text : colors.textTertiary}
           style={styles.leadingIcon}
         />
         <TextInput
           ref={inputRef}
-          style={styles.input}
+          style={[styles.input, { color: colors.text }]}
           placeholder={placeholder || 'What needs doing?'}
-          placeholderTextColor={Colors.gray400}
+          placeholderTextColor={colors.textTertiary}
           value={value}
           onChangeText={handleTextChange}
           onSubmitEditing={handleSubmit}
@@ -264,8 +267,8 @@ export const TaskInput = memo(function TaskInput({
             onPress={() => { haptic('light'); handleSubmit(); }}
             hapticStyle={null}
             pressScale={0.9}>
-            <View style={styles.submitButton}>
-              <Icon name="arrow-up" size={20} color={Colors.white} />
+            <View style={[styles.submitButton, { backgroundColor: isDark ? '#F5F5F7' : Colors.surfaceDark }]}>
+              <Icon name="arrow-up" size={20} color={isDark ? '#000' : Colors.white} />
             </View>
           </AnimatedPressable>
         )}
@@ -337,7 +340,7 @@ export const TaskInput = memo(function TaskInput({
                     display="spinner"
                     onChange={handleCustomDateChange}
                     minimumDate={new Date()}
-                    textColor={Colors.text}
+                    textColor={colors.text}
                     style={styles.datePicker}
                   />
                   <Pressable
@@ -346,7 +349,7 @@ export const TaskInput = memo(function TaskInput({
                       setShowCustomDatePicker(false);
                       setShowDeadlinePicker(false);
                     }}>
-                    <Text style={styles.datePickerDoneText}>Done</Text>
+                    <Text style={[styles.datePickerDoneText, { color: isDark ? '#0A84FF' : Colors.surfaceDark }]}>Done</Text>
                   </Pressable>
                 </Animated.View>
               )}

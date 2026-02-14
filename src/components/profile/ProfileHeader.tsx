@@ -11,6 +11,7 @@ import Animated, { FadeInDown } from 'react-native-reanimated';
 import Icon from 'react-native-vector-icons/Ionicons';
 import { Colors, Spacing, Typography, BorderRadius } from '../../utils/colors';
 import { haptic } from '../../utils/haptics';
+import { useTheme } from '../../context/ThemeContext';
 
 interface ProfileHeaderProps {
   email: string;
@@ -33,6 +34,8 @@ export const ProfileHeader = memo(function ProfileHeader({
     onChangeAvatar();
   }, [onChangeAvatar]);
 
+  const { colors, isDark } = useTheme();
+
   return (
     <Animated.View entering={FadeInDown.duration(400)} style={styles.container}>
       {/* Avatar */}
@@ -40,11 +43,11 @@ export const ProfileHeader = memo(function ProfileHeader({
         {avatarUri ? (
           <Image source={{ uri: avatarUri }} style={styles.avatar} />
         ) : (
-          <View style={styles.avatarPlaceholder}>
-            <Text style={styles.avatarInitials}>{initials}</Text>
+          <View style={[styles.avatarPlaceholder, { backgroundColor: isDark ? '#F5F5F7' : Colors.surfaceDark }]}>
+            <Text style={[styles.avatarInitials, { color: isDark ? '#000' : Colors.white }]}>{initials}</Text>
           </View>
         )}
-        <View style={styles.editBadge}>
+        <View style={[styles.editBadge, { borderColor: colors.background }]}>
           <Icon name="camera-outline" size={12} color={Colors.white} />
         </View>
       </Pressable>
@@ -53,18 +56,18 @@ export const ProfileHeader = memo(function ProfileHeader({
       <Animated.View
         entering={FadeInDown.delay(80).duration(350)}
         style={styles.nameSection}>
-        <Text style={styles.displayName}>{displayName}</Text>
-        <Text style={styles.emailText}>{email}</Text>
+        <Text style={[styles.displayName, { color: colors.text }]}>{displayName}</Text>
+        <Text style={[styles.emailText, { color: colors.textTertiary }]}>{email}</Text>
       </Animated.View>
 
       {/* Streak */}
       {currentStreak > 0 && (
         <Animated.View
           entering={FadeInDown.delay(160).duration(300)}
-          style={styles.streakContainer}>
-          <Icon name="flame-outline" size={18} color={Colors.text} />
-          <Text style={styles.streakCount}>{currentStreak}</Text>
-          <Text style={styles.streakLabel}>day streak</Text>
+          style={[styles.streakContainer, { backgroundColor: colors.card }]}>
+          <Icon name="flame-outline" size={18} color={colors.text} />
+          <Text style={[styles.streakCount, { color: colors.text }]}>{currentStreak}</Text>
+          <Text style={[styles.streakLabel, { color: colors.textSecondary }]}>day streak</Text>
         </Animated.View>
       )}
     </Animated.View>

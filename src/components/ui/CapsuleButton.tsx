@@ -54,9 +54,6 @@ export const CapsuleButton = memo(function CapsuleButton({
         .onFinalize((_e, success) => {
             'worklet';
             scale.value = withSpring(1, SPRING_SNAPPY);
-            if (success) {
-                import('react-native-reanimated').then(({ runOnJS: rjs }) => { });
-            }
         });
 
     // We use a simpler approach: Pressable with animated style

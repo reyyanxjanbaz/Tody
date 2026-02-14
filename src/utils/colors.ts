@@ -1,4 +1,7 @@
 import { StyleSheet, ViewStyle } from 'react-native';
+import { Platform } from 'react-native';
+
+export const FontFamily = Platform.OS === 'ios' ? 'System' : 'Roboto';
 
 export const Colors = {
   black: '#000000',
@@ -27,6 +30,97 @@ export const Colors = {
   surfaceGlass: 'rgba(255,255,255,0.1)',
   backgroundOffWhite: '#F5F5F7',
 } as const;
+
+// ── Theme Colors Type ──────────────────────────────────────────────────────
+
+export type ThemeColors = {
+  black: string;
+  white: string;
+  gray50: string;
+  gray100: string;
+  gray200: string;
+  gray400: string;
+  gray500: string;
+  gray600: string;
+  gray800: string;
+  background: string;
+  surface: string;
+  text: string;
+  textSecondary: string;
+  textTertiary: string;
+  border: string;
+  borderLight: string;
+  activeState: string;
+  danger: string;
+  surfaceDark: string;
+  surfaceGlass: string;
+  backgroundOffWhite: string;
+  // Dark-mode specific
+  card: string;
+  inputBackground: string;
+  navBar: string;
+  navBarBorder: string;
+  calendarSelected: string;
+  calendarSelectedText: string;
+  todayDot: string;
+  separator: string;
+  checkboxBg: string;
+  swipeActionBg: string;
+  modalBg: string;
+  modalOverlay: string;
+};
+
+export const LightTheme: ThemeColors = {
+  ...Colors,
+  card: '#FFFFFF',
+  inputBackground: '#F2F2F7',
+  navBar: '#FFFFFF',
+  navBarBorder: Colors.border,
+  calendarSelected: Colors.text,
+  calendarSelectedText: '#FFFFFF',
+  todayDot: '#000000',
+  separator: 'rgba(0,0,0,0.12)',
+  checkboxBg: Colors.gray50,
+  swipeActionBg: Colors.gray800,
+  modalBg: '#FFFFFF',
+  modalOverlay: 'rgba(0,0,0,0.4)',
+};
+
+export const DarkTheme: ThemeColors = {
+  black: '#000000',
+  white: '#FFFFFF',
+  gray50: '#1C1C1E',
+  gray100: '#2C2C2E',
+  gray200: '#3A3A3C',
+  gray400: '#636366',
+  gray500: '#8E8E93',
+  gray600: '#AEAEB2',
+  gray800: '#D1D1D6',
+  background: '#000000',
+  surface: '#1C1C1E',
+  text: '#F5F5F7',
+  textSecondary: '#C7C7CC',
+  textTertiary: '#8E8E93',
+  border: '#2C2C2E',
+  borderLight: '#1C1C1E',
+  activeState: '#D1D1D6',
+  danger: '#FF6B6B',
+  surfaceDark: '#F5F5F7',
+  surfaceGlass: 'rgba(255,255,255,0.08)',
+  backgroundOffWhite: '#1C1C1E',
+  card: '#1C1C1E',
+  inputBackground: '#1C1C1E',
+  navBar: '#0A0A0A',
+  navBarBorder: '#2C2C2E',
+  calendarSelected: '#F5F5F7',
+  calendarSelectedText: '#000000',
+  todayDot: '#F5F5F7',
+  separator: 'rgba(255,255,255,0.08)',
+  checkboxBg: '#2C2C2E',
+  swipeActionBg: '#2C2C2E',
+  modalBg: '#1C1C1E',
+  modalOverlay: 'rgba(0,0,0,0.7)',
+};
 
 export const Shadows = {
   floating: {

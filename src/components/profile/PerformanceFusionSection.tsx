@@ -10,6 +10,7 @@ import {
 } from '../../utils/statsCalculation';
 import { formatMinutes } from '../../utils/timeTracking';
 import { Colors, Spacing, Typography, BorderRadius, Shadows } from '../../utils/colors';
+import { useTheme } from '../../context/ThemeContext';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const CHART_PADDING = 6; // half of dot size, so edge dots aren't clipped
@@ -87,11 +88,13 @@ export const PerformanceFusionSection = memo(function PerformanceFusionSection({
     },
   ];
 
+  const { colors, isDark } = useTheme();
+
   return (
     <Animated.View
       entering={FadeInDown.delay(320).duration(350)}
       style={styles.container}>
-      <Text style={styles.sectionTitle}>PERFORMANCE STORY</Text>
+      <Text style={[styles.sectionTitle, { color: colors.textTertiary }]}>PERFORMANCE STORY</Text>
 
       <View style={styles.heroCard}>
         <View style={styles.heroTopRow}>

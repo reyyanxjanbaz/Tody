@@ -164,7 +164,7 @@ export interface Category {
   order: number;
 }
 
-export type SortOption = 'default' | 'deadline-asc' | 'deadline-desc' | 'priority-high' | 'priority-low' | 'newest' | 'oldest';
+export type SortOption = 'default' | 'smart' | 'deadline-asc' | 'deadline-desc' | 'priority-high' | 'priority-low' | 'newest' | 'oldest';
 
 export const DEFAULT_CATEGORIES: Category[] = [
   { id: 'overview', name: 'Overview', icon: 'grid-outline', color: '#000000', isDefault: true, order: 0 },

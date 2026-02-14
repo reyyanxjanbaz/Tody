@@ -3,6 +3,7 @@ import { View, Text, Pressable, ScrollView, StyleSheet } from 'react-native';
 import Animated, { LinearTransition, ZoomIn } from 'react-native-reanimated';
 import Icon from 'react-native-vector-icons/Ionicons';
 import { Colors, Spacing, Typography } from '../utils/colors';
+import { useTheme } from '../context/ThemeContext';
 import { Category, SortOption } from '../types';
 import { haptic } from '../utils/haptics';
 
@@ -30,13 +31,14 @@ export const CategoryTabs = memo(function CategoryTabs({
   onSortPress,
 }: TabManagerProps) {
   const scrollRef = useRef<ScrollView>(null);
+  const { colors, isDark } = useTheme();
 
   const sorted = [...categories].sort((a, b) => a.order - b.order);
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { backgroundColor: colors.background }]}>
       {/* Tab row */}
-      <View style={styles.row}>
+      <View style={[styles.row, { borderBottomColor: colors.border }]}>
         <ScrollView
           ref={scrollRef}
           horizontal
@@ -60,14 +62,14 @@ export const CategoryTabs = memo(function CategoryTabs({
                   {cat.id !== 'overview' && (
                     <View style={[styles.colorDot, { backgroundColor: cat.color }]} />
                   )}
-                  <Text style={[styles.tabLabel, isActive && styles.tabLabelActive]}>
+                  <Text style={[styles.tabLabel, { color: colors.textTertiary }, isActive && { color: colors.text, fontWeight: '700' }]}>
                     {cat.name}
                   </Text>
                   {isActive && (
                     <Animated.View
                       layout={LinearTransition.springify().damping(20).stiffness(300)}
                       entering={ZoomIn.duration(200)}
-                      style={[styles.activeIndicator, cat.id !== 'overview' && { backgroundColor: cat.color }]}
+                      style={[styles.activeIndicator, { backgroundColor: isDark ? colors.text : Colors.black }, cat.id !== 'overview' && { backgroundColor: cat.color }]}
                     />
                   )}
                 </View>
@@ -79,22 +81,22 @@ export const CategoryTabs = memo(function CategoryTabs({
         {/* Tab management buttons */}
         <View style={styles.actions}>
           <Pressable onPress={() => { haptic('light'); onAddPress(); }} hitSlop={6} style={styles.actionBtn}>
-            <Icon name="add" size={18} color={Colors.gray500} />
+            <Icon name="add" size={18} color={colors.textTertiary} />
           </Pressable>
           <Pressable onPress={() => { haptic('light'); onManagePress(); }} hitSlop={6} style={styles.actionBtn}>
-            <Icon name="pencil-outline" size={15} color={Colors.gray500} />
+            <Icon name="pencil-outline" size={15} color={colors.textTertiary} />
           </Pressable>
           <Pressable
             onPress={() => { haptic('light'); onSortPress(); }}
-            style={[styles.sortFab, sortOption !== 'default' && styles.sortFabActive]}
+            style={[styles.sortFab, { backgroundColor: isDark ? colors.gray200 : Colors.surfaceDark, borderColor: isDark ? colors.gray400 : Colors.gray800 }, sortOption !== 'default' && { backgroundColor: isDark ? colors.text : Colors.black }]}
             hitSlop={6}
           >
             <Icon
               name={sortOption === 'default' ? 'swap-vertical-outline' : 'swap-vertical'}
               size={13}
-              color={Colors.white}
+              color={isDark ? Colors.black : Colors.white}
             />
-            <Text style={styles.sortFabText}>Sort</Text>
+            <Text style={[styles.sortFabText, { color: isDark ? Colors.black : Colors.white }]}>Sort</Text>
             {sortOption !== 'default' && <View style={styles.sortFabDot} />}
           </Pressable>
         </View>
@@ -107,14 +109,12 @@ export const CategoryTabs = memo(function CategoryTabs({
 
 const styles = StyleSheet.create({
   container: {
-    backgroundColor: Colors.background,
     paddingTop: Spacing.sm,
   },
   row: {
     flexDirection: 'row',
     alignItems: 'center',
     borderBottomWidth: 1,
-    borderBottomColor: Colors.gray100,
   },
   tabScroll: {
     paddingLeft: Spacing.lg,
@@ -137,12 +137,7 @@ const styles = StyleSheet.create({
   tabLabel: {
     fontSize: 15,
     fontWeight: '500',
-    color: Colors.gray400,
     letterSpacing: -0.3,
-  },
-  tabLabelActive: {
-    color: Colors.text,
-    fontWeight: '700',
   },
   activeIndicator: {
     position: 'absolute',
@@ -150,7 +145,6 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     height: 3,
-    backgroundColor: Colors.black,
     borderRadius: 1.5,
   },
   actions: {
@@ -172,18 +166,12 @@ const styles = StyleSheet.create({
     gap: 4,
     paddingVertical: 6,
     paddingHorizontal: Spacing.md,
-    backgroundColor: Colors.surfaceDark,
     borderRadius: 999,
     borderWidth: 1,
-    borderColor: Colors.gray800,
-  },
-  sortFabActive: {
-    backgroundColor: Colors.black,
   },
   sortFabText: {
     fontSize: 12,
     fontWeight: '700',
-    color: Colors.white,
     letterSpacing: 0.1,
   },
   sortFabDot: {

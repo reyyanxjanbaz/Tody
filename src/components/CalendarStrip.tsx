@@ -21,6 +21,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { Colors, Spacing, Typography, BorderRadius } from '../utils/colors';
+import { useTheme } from '../context/ThemeContext';
 import { SPRING_SNAPPY, TIMING_FADE, PRESS_SCALE } from '../utils/animations';
 import { haptic } from '../utils/haptics';
 import { startOfDay, addDays } from '../utils/dateUtils';
@@ -79,9 +80,10 @@ interface DayCellProps {
   day: CalendarDay;
   isSelected: boolean;
   onSelect: (ts: number) => void;
+  themeColors: ReturnType<typeof useTheme>['colors'];
 }
 
-const DayCell = memo(function DayCell({ day, isSelected, onSelect }: DayCellProps) {
+const DayCell = memo(function DayCell({ day, isSelected, onSelect, themeColors }: DayCellProps) {
   const scale = useSharedValue(1);
   const opacity = useSharedValue(1);
 
@@ -115,15 +117,16 @@ const DayCell = memo(function DayCell({ day, isSelected, onSelect }: DayCellProp
       <Animated.View
         style={[
           styles.dayCell,
-          isSelected && styles.dayCellSelected,
+          isSelected && [styles.dayCellSelected, { backgroundColor: themeColors.calendarSelected }],
           animatedStyle,
         ]}
       >
         <Text
           style={[
             styles.dayLabel,
-            isSelected && styles.dayLabelSelected,
-            day.isToday && !isSelected && styles.dayLabelToday,
+            { color: themeColors.textTertiary },
+            isSelected && { color: themeColors.calendarSelectedText },
+            day.isToday && !isSelected && { color: themeColors.textSecondary },
           ]}
         >
           {day.dayLabel}
@@ -131,13 +134,14 @@ const DayCell = memo(function DayCell({ day, isSelected, onSelect }: DayCellProp
         <Text
           style={[
             styles.dateNum,
-            isSelected && styles.dateNumSelected,
-            day.isToday && !isSelected && styles.dateNumToday,
+            { color: themeColors.text },
+            isSelected && { color: themeColors.calendarSelectedText, fontWeight: '700' },
+            day.isToday && !isSelected && { fontWeight: '700' },
           ]}
         >
           {day.dateNum}
         </Text>
-        {day.isToday && !isSelected && <View style={styles.todayDot} />}
+        {day.isToday && !isSelected && <View style={[styles.todayDot, { backgroundColor: themeColors.todayDot }]} />}
       </Animated.View>
     </GestureDetector>
   );
@@ -152,6 +156,7 @@ export const CalendarStrip = memo(function CalendarStrip({
   const scrollRef = useRef<ScrollView>(null);
   const days = useMemo(() => generateDays(), []);
   const itemFullWidth = ITEM_WIDTH + ITEM_MARGIN * 2;
+  const { colors } = useTheme();
 
   // Scroll to today on mount
   useEffect(() => {
@@ -170,7 +175,7 @@ export const CalendarStrip = memo(function CalendarStrip({
   );
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { backgroundColor: colors.background }]}>
       <ScrollView
         ref={scrollRef}
         horizontal
@@ -183,6 +188,7 @@ export const CalendarStrip = memo(function CalendarStrip({
             day={day}
             isSelected={day.timestamp === selectedDate}
             onSelect={handleSelect}
+            themeColors={colors}
           />
         ))}
       </ScrollView>
@@ -209,38 +215,22 @@ const styles = StyleSheet.create({
     backgroundColor: 'transparent',
   },
   dayCellSelected: {
-    backgroundColor: Colors.text,
+    // backgroundColor applied inline via themeColors
   },
   dayLabel: {
     fontSize: 11,
     fontWeight: '600',
     letterSpacing: 0.3,
-    color: Colors.textTertiary,
     marginBottom: Spacing.xs,
-  },
-  dayLabelSelected: {
-    color: Colors.white,
-  },
-  dayLabelToday: {
-    color: Colors.textSecondary,
   },
   dateNum: {
     fontSize: 18,
     fontWeight: '600',
-    color: Colors.text,
-  },
-  dateNumSelected: {
-    color: Colors.white,
-    fontWeight: '700',
-  },
-  dateNumToday: {
-    fontWeight: '700',
   },
   todayDot: {
     width: 4,
     height: 4,
     borderRadius: 2,
-    backgroundColor: Colors.text,
     marginTop: Spacing.xs,
   },
 });

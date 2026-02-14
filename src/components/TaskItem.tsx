@@ -37,8 +37,10 @@ import Animated, {
   LinearTransition,
 } from 'react-native-reanimated';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
-import { Task, Priority } from '../types';
+import Icon from 'react-native-vector-icons/Ionicons';
+import { Task, Priority, EnergyLevel } from '../types';
 import { Colors, Spacing, Typography, Shadows, BorderRadius } from '../utils/colors';
+import { useTheme } from '../context/ThemeContext';
 import { formatDeadline, formatCompletedDate, daysFromNow } from '../utils/dateUtils';
 import { formatOverdueGently } from '../utils/decay';
 import { formatMinutes, getElapsedMinutes, isUnreasonableDuration } from '../utils/timeTracking';
@@ -81,6 +83,21 @@ const PRIORITY_COLORS: Record<Priority, string> = {
   none: 'transparent',
 };
 
+// ── Energy & Priority Icons ─────────────────────────────────────────────────
+
+const ENERGY_ICONS: Record<EnergyLevel, { name: string; color: string; darkColor: string }> = {
+  high: { name: 'flash', color: '#F59E0B', darkColor: '#FBBF24' },
+  medium: { name: 'flash-outline', color: '#8B8B8B', darkColor: '#A0A0A0' },
+  low: { name: 'moon-outline', color: '#93C5FD', darkColor: '#60A5FA' },
+};
+
+const PRIORITY_ICONS: Record<Priority, { name: string; color: string; darkColor: string } | null> = {
+  high: { name: 'flag', color: '#EF4444', darkColor: '#F87171' },
+  medium: { name: 'flag', color: '#F59E0B', darkColor: '#FBBF24' },
+  low: { name: 'flag-outline', color: '#93C5FD', darkColor: '#60A5FA' },
+  none: null,
+};
+
 // ── Dashed Line ─────────────────────────────────────────────────────────────
 
 const DASH_WIDTH = 4;
@@ -90,11 +107,11 @@ const SCREEN_WIDTH = Dimensions.get('window').width;
 const SEPARATOR_INSET = 24;
 const DASH_COUNT = Math.ceil((SCREEN_WIDTH - SEPARATOR_INSET * 2) / (DASH_WIDTH + DASH_GAP));
 
-const DashedSeparator = memo(function DashedSeparator() {
+const DashedSeparator = memo(function DashedSeparator({ isDark }: { isDark?: boolean }) {
   return (
     <View style={styles.dashedSeparator}>
       {Array.from({ length: DASH_COUNT }, (_, i) => (
-        <View key={i} style={styles.dash} />
+        <View key={i} style={[styles.dash, isDark && { backgroundColor: 'rgba(255,255,255,0.08)' }]} />
       ))}
     </View>
   );
@@ -117,6 +134,9 @@ export const TaskItem = memo(function TaskItem({
   childHighlight = false,
   checkedOverride,
 }: TaskItemProps) {
+  // ── Theme ─────────────────────────────────────────────────────────────
+  const { colors, isDark } = useTheme();
+
   // ── Shared values ─────────────────────────────────────────────────────
   const translateX = useSharedValue(0);
   const pressScale = useSharedValue(1);
@@ -354,18 +374,18 @@ export const TaskItem = memo(function TaskItem({
       entering={FadeIn.duration(250)}
       exiting={FadeOut.duration(200)}
       layout={LinearTransition.duration(250)}
-      style={styles.outerContainer}
+      style={[styles.outerContainer, { backgroundColor: colors.card }]}
     >
       <View>
         {/* Left action background (revealed on swipe right) */}
-        <Animated.View style={[styles.leftActionBg, leftActionBgAnimatedStyle]}>
+        <Animated.View style={[styles.leftActionBg, { backgroundColor: colors.swipeActionBg }, leftActionBgAnimatedStyle]}>
           <Animated.Text style={[styles.swipeActionText, leftActionStyle]}>
             {leftLabel}
           </Animated.Text>
         </Animated.View>
 
         {/* Right action background (revealed on swipe left) */}
-        <Animated.View style={[styles.rightActionBg, rightActionBgAnimatedStyle]}>
+        <Animated.View style={[styles.rightActionBg, { backgroundColor: colors.surfaceDark }, rightActionBgAnimatedStyle]}>
           <Animated.Text style={[styles.swipeActionText, rightActionStyle]}>
             {rightLabel}
           </Animated.Text>
@@ -373,7 +393,7 @@ export const TaskItem = memo(function TaskItem({
 
         {/* Main row */}
         <GestureDetector gesture={composed}>
-          <Animated.View style={[styles.container, rowAnimatedStyle]}>
+          <Animated.View style={[styles.container, { backgroundColor: colors.card }, rowAnimatedStyle]}>
             <View style={[styles.innerContainer, { paddingLeft: indentation }]}>
               {/* Connector lines for subtasks */}
               {task.depth > 0 && (
@@ -384,21 +404,41 @@ export const TaskItem = memo(function TaskItem({
                       left: indentation - 8,
                       height: isLastChild ? '50%' : '100%',
                       top: 0,
+                      backgroundColor: isDark ? '#3A3A3C' : '#D0D0D0',
                     },
                   ]}
                 />
               )}
               {task.depth > 0 && (
                 <View
-                  style={[styles.connectorHorizontal, { left: indentation - 8 }]}
+                  style={[styles.connectorHorizontal, { left: indentation - 8, backgroundColor: isDark ? '#3A3A3C' : '#D0D0D0' }]}
                 />
               )}
+
+              {/* Energy & Priority icons */}
+              <View style={styles.iconColumn}>
+                {PRIORITY_ICONS[task.priority] && (
+                  <Icon
+                    name={PRIORITY_ICONS[task.priority]!.name}
+                    size={12}
+                    color={isDark ? PRIORITY_ICONS[task.priority]!.darkColor : PRIORITY_ICONS[task.priority]!.color}
+                  />
+                )}
+                <Icon
+                  name={ENERGY_ICONS[task.energyLevel].name}
+                  size={12}
+                  color={isDark ? ENERGY_ICONS[task.energyLevel].darkColor : ENERGY_ICONS[task.energyLevel].color}
+                />
+              </View>
 
               {/* Priority indicator bar */}
               <View
                 style={[
                   styles.priorityBar,
-                  { backgroundColor: PRIORITY_COLORS[task.priority] },
+                  { backgroundColor: isDark
+                    ? (task.priority === 'high' ? '#F5F5F7' : task.priority === 'medium' ? '#8E8E93' : task.priority === 'low' ? '#3A3A3C' : 'transparent')
+                    : PRIORITY_COLORS[task.priority]
+                  },
                 ]}
               />
 
@@ -410,7 +450,7 @@ export const TaskItem = memo(function TaskItem({
               )}
 
               {/* Animated Checkbox */}
-              <View style={styles.checkboxContainer}>
+              <View style={[styles.checkboxContainer, { backgroundColor: colors.checkboxBg }]}>
                 <AnimatedCheckbox
                   checked={checkedOverride !== undefined ? checkedOverride : task.isCompleted}
                   locked={isLocked}
@@ -424,8 +464,9 @@ export const TaskItem = memo(function TaskItem({
                 <Text
                   style={[
                     styles.title,
+                    { color: colors.text },
                     energyStyle,
-                    task.isCompleted && styles.titleCompleted,
+                    task.isCompleted && [styles.titleCompleted, { color: colors.textTertiary }],
                     hasChildren && styles.titleParent,
                   ]}
                   numberOfLines={1}
@@ -433,22 +474,22 @@ export const TaskItem = memo(function TaskItem({
                   {task.title}
                 </Text>
                 {task.description ? (
-                  <Text style={styles.description} numberOfLines={1}>
+                  <Text style={[styles.description, { color: colors.textTertiary }]} numberOfLines={1}>
                     {task.description}
                   </Text>
                 ) : null}
                 {isInProgress && task.startedAt ? (
-                  <Text style={styles.timingText}>
+                  <Text style={[styles.timingText, { color: colors.textTertiary }]}>
                     ● Started {formatMinutes(getElapsedMinutes(task.startedAt))} ago
                     {task.estimatedMinutes ? ` · est. ${formatMinutes(task.estimatedMinutes)}` : ''}
                   </Text>
                 ) : task.isCompleted && task.actualMinutes != null && task.actualMinutes > 0 ? (
-                  <Text style={styles.timingText}>
+                  <Text style={[styles.timingText, { color: colors.textTertiary }]}>
                     Took {formatMinutes(task.actualMinutes)}
                     {task.estimatedMinutes ? ` · est. ${formatMinutes(task.estimatedMinutes)}` : ''}
                   </Text>
                 ) : task.estimatedMinutes ? (
-                  <Text style={styles.timingText}>
+                  <Text style={[styles.timingText, { color: colors.textTertiary }]}>
                     est. {formatMinutes(task.estimatedMinutes)}
                   </Text>
                 ) : null}
@@ -456,24 +497,24 @@ export const TaskItem = memo(function TaskItem({
 
               {/* Deadline / Status */}
               {task.isCompleted && task.completedAt ? (
-                <Text style={styles.completedTag}>
+                <Text style={[styles.completedTag, { color: colors.textTertiary }]}>
                   {formatCompletedDate(task.completedAt)}
                 </Text>
               ) : isOverdue && overdueLabel ? (
-                <Text style={styles.overdueTagGentle}>{overdueLabel}</Text>
+                <Text style={[styles.overdueTagGentle, { color: colors.textTertiary }]}>{overdueLabel}</Text>
               ) : task.deadline ? (
-                <Text style={styles.deadlineTag}>{formatDeadline(task.deadline)}</Text>
+                <Text style={[styles.deadlineTag, { color: colors.textTertiary }]}>{formatDeadline(task.deadline)}</Text>
               ) : null}
 
               {/* Defer count */}
               {task.deferCount > 0 && !task.isCompleted ? (
-                <Text style={styles.deferBadge}>{task.deferCount}×</Text>
+                <Text style={[styles.deferBadge, { color: colors.textTertiary }]}>{task.deferCount}×</Text>
               ) : null}
             </View>
           </Animated.View>
         </GestureDetector>
 
-        <DashedSeparator />
+        <DashedSeparator isDark={isDark} />
       </View>
     </Animated.View>
   );
@@ -485,7 +526,6 @@ const styles = StyleSheet.create({
   outerContainer: {
     position: 'relative',
     overflow: 'visible',
-    backgroundColor: Colors.white,
   },
   dashedSeparator: {
     flexDirection: 'row',
@@ -502,7 +542,6 @@ const styles = StyleSheet.create({
     borderRadius: 0.5,
   },
   container: {
-    backgroundColor: Colors.white,
     zIndex: 1,
   },
   innerContainer: {
@@ -510,12 +549,18 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: Spacing.md + 2,
     paddingRight: Spacing.lg,
-    paddingLeft: Spacing.md,
+    paddingLeft: Spacing.sm,
     minHeight: 56,
+  },
+  iconColumn: {
+    width: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 3,
+    marginRight: 6,
   },
   leftActionBg: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: Colors.gray800,
     justifyContent: 'center',
     alignItems: 'flex-start',
     paddingLeft: 24,
@@ -523,7 +568,6 @@ const styles = StyleSheet.create({
   },
   rightActionBg: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: Colors.surfaceDark,
     justifyContent: 'center',
     alignItems: 'flex-end',
     paddingRight: 24,
@@ -536,16 +580,15 @@ const styles = StyleSheet.create({
     letterSpacing: 1.5,
   },
   priorityBar: {
-    width: 4,
+    width: 3,
     alignSelf: 'stretch',
     marginRight: Spacing.sm,
-    borderRadius: 2,
+    borderRadius: 1.5,
   },
   checkboxContainer: {
     width: 28,
     height: 28,
     borderRadius: 14,
-    backgroundColor: Colors.gray50,
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: Spacing.md,
@@ -555,53 +598,54 @@ const styles = StyleSheet.create({
     marginRight: Spacing.sm,
   },
   title: {
-    ...Typography.body,
-    color: Colors.text,
+    fontSize: 17,
+    fontWeight: '400',
+    letterSpacing: -0.2,
   },
   titleCompleted: {
     textDecorationLine: 'line-through',
-    color: Colors.gray500,
   },
   titleParent: {
     fontWeight: '500',
   },
   description: {
-    ...Typography.caption,
-    color: Colors.textTertiary,
+    fontSize: 13,
+    fontWeight: '400',
     marginTop: 2,
   },
   timingText: {
     fontSize: 11,
-    color: Colors.gray500,
     marginTop: 2,
   },
   deadlineTag: {
-    ...Typography.small,
-    color: Colors.textTertiary,
+    fontSize: 11,
+    fontWeight: '400',
+    letterSpacing: 0.2,
   },
   overdueTagGentle: {
-    ...Typography.small,
-    color: Colors.gray400,
+    fontSize: 11,
+    fontWeight: '400',
+    letterSpacing: 0.2,
   },
   completedTag: {
-    ...Typography.small,
-    color: Colors.gray400,
+    fontSize: 11,
+    fontWeight: '400',
+    letterSpacing: 0.2,
   },
   deferBadge: {
-    ...Typography.small,
-    color: Colors.gray400,
+    fontSize: 11,
+    fontWeight: '400',
+    letterSpacing: 0.2,
     marginLeft: Spacing.xs,
   },
   connectorVertical: {
     position: 'absolute',
     width: 1,
-    backgroundColor: '#D0D0D0',
   },
   connectorHorizontal: {
     position: 'absolute',
     width: 8,
     height: 1,
-    backgroundColor: '#D0D0D0',
     opacity: 0.5,
   },
   lockIcon: {

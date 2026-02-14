@@ -16,6 +16,7 @@ import { EmptyState } from '../components/EmptyState';
 import { SectionHeader } from '../components/SectionHeader';
 import { Colors, Spacing, Typography, Shadows, BorderRadius } from '../utils/colors';
 import { Task, RootStackParamList } from '../types';
+import { useTheme } from '../context/ThemeContext';
 
 type Props = {
   navigation: NativeStackNavigationProp<RootStackParamList, 'Archive'>;
@@ -116,17 +117,19 @@ export function ArchiveScreen({ navigation }: Props) {
 
   const keyExtractor = useCallback((item: Task) => item.id, []);
 
+  const { colors, isDark } = useTheme();
+
   return (
-    <View style={[styles.container, { paddingTop: insets.top }]}>
+    <View style={[styles.container, { backgroundColor: colors.background, paddingTop: insets.top }]}>
       {/* Header */}
       <View style={styles.header}>
         <Pressable onPress={handleBack} hitSlop={12}>
-          <Text style={styles.backText}>← Back</Text>
+          <Text style={[styles.backText, { color: colors.textSecondary }]}>← Back</Text>
         </Pressable>
         <View style={styles.headerRight}>
-          <Text style={styles.headerTitle}>Archive</Text>
+          <Text style={[styles.headerTitle, { color: colors.text }]}>Archive</Text>
           {(totalCompleted > 0 || archivedTasks.length > 0) && (
-            <Text style={styles.headerCount}>
+            <Text style={[styles.headerCount, { color: colors.textTertiary }]}>
               {totalCompleted + archivedTasks.length} items
             </Text>
           )}
@@ -136,9 +139,9 @@ export function ArchiveScreen({ navigation }: Props) {
       {/* Search */}
       <View style={styles.searchContainer}>
         <TextInput
-          style={styles.searchInput}
+          style={[styles.searchInput, { backgroundColor: colors.inputBackground, color: colors.text }]}
           placeholder="Search archived tasks..."
-          placeholderTextColor={Colors.gray400}
+          placeholderTextColor={colors.textTertiary}
           value={searchQuery}
           onChangeText={setSearchQuery}
           autoCorrect={false}
@@ -176,9 +179,9 @@ export function ArchiveScreen({ navigation }: Props) {
 
       {/* Footer: account info + sign out */}
       <View style={[styles.footer, { paddingBottom: insets.bottom + Spacing.md }]}>
-        <Text style={styles.footerEmail}>{user?.email}</Text>
+        <Text style={[styles.footerEmail, { color: colors.textTertiary }]}>{user?.email}</Text>
         <Pressable onPress={handleLogout} hitSlop={8}>
-          <Text style={styles.signOutText}>Sign out</Text>
+          <Text style={[styles.signOutText, { color: colors.textSecondary }]}>Sign out</Text>
         </Pressable>
       </View>
     </View>

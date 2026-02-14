@@ -5,23 +5,38 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { AuthProvider } from './src/context/AuthContext';
 import { TaskProvider } from './src/context/TaskContext';
 import { InboxProvider } from './src/context/InboxContext';
+import { ThemeProvider, useTheme } from './src/context/ThemeContext';
 import { UndoProvider } from './src/components/UndoToast';
 import { RootNavigator } from './src/navigation/RootNavigator';
+
+function AppContent(): React.JSX.Element {
+  const { isDark, colors } = useTheme();
+  return (
+    <>
+      <StatusBar
+        barStyle={isDark ? 'light-content' : 'dark-content'}
+        backgroundColor={colors.background}
+      />
+      <AuthProvider>
+        <TaskProvider>
+          <InboxProvider>
+            <UndoProvider>
+              <RootNavigator />
+            </UndoProvider>
+          </InboxProvider>
+        </TaskProvider>
+      </AuthProvider>
+    </>
+  );
+}
 
 function App(): React.JSX.Element {
   return (
     <GestureHandlerRootView style={styles.root}>
       <SafeAreaProvider>
-        <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
-        <AuthProvider>
-          <TaskProvider>
-            <InboxProvider>
-              <UndoProvider>
-                <RootNavigator />
-              </UndoProvider>
-            </InboxProvider>
-          </TaskProvider>
-        </AuthProvider>
+        <ThemeProvider>
+          <AppContent />
+        </ThemeProvider>
       </SafeAreaProvider>
     </GestureHandlerRootView>
   );

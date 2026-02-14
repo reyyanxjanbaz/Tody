@@ -44,6 +44,7 @@ import {
   TimeQuickPick,
 } from '../components/ParameterPills';
 import { CategoryPill } from '../components/CategoryPill';
+import { useTheme } from '../context/ThemeContext';
 
 
 type Props = {
@@ -288,7 +289,7 @@ export function TaskDetailScreen({ navigation, route }: Props) {
         />
 
         {/* ── Parameter Pills ───────────────────────────────────── */}
-        <View style={styles.pillSection}>
+        <View style={[styles.pillSection, { borderTopColor: borderColor }]}>
           <ScrollView
             horizontal
             showsHorizontalScrollIndicator={false}
@@ -391,8 +392,8 @@ export function TaskDetailScreen({ navigation, route }: Props) {
 
         {/* ── Subtasks ──────────────────────────────────────────── */}
         {(children.length > 0 || task.depth < 3) && (
-          <View style={styles.subtaskSection}>
-            <Text style={styles.sectionLabel}>Subtasks</Text>
+          <View style={[styles.subtaskSection, { borderTopColor: borderColor }]}>
+            <Text style={[styles.sectionLabel, { color: colors.textTertiary }]}>Subtasks</Text>
             {children.map(child => (
               <Pressable
                 key={child.id}
@@ -400,11 +401,11 @@ export function TaskDetailScreen({ navigation, route }: Props) {
                 onPress={() => navigation.push('TaskDetail', { taskId: child.id })}>
                 <View style={[styles.subtaskDot, child.isCompleted && styles.subtaskDotDone]} />
                 <Text
-                  style={[styles.subtaskTitle, child.isCompleted && styles.subtaskTitleDone]}
+                  style={[styles.subtaskTitle, { color: colors.text }, child.isCompleted && styles.subtaskTitleDone]}
                   numberOfLines={1}>
                   {child.title}
                 </Text>
-                <Icon name="chevron-forward" size={14} color={Colors.gray400} />
+                <Icon name="chevron-forward" size={14} color={colors.textTertiary} />
               </Pressable>
             ))}
             {task.depth < 3 && (
@@ -422,30 +423,30 @@ export function TaskDetailScreen({ navigation, route }: Props) {
         )}
 
         {/* ── Actions ───────────────────────────────────────────── */}
-        <View style={styles.actionsSection}>
+        <View style={[styles.actionsSection, { borderTopColor: borderColor }]}>
           {!task.isCompleted && !task.startedAt && (
             <Pressable
               style={styles.actionBtn}
               onPress={() => { haptic('medium'); startTask(task.id); }}>
-              <Icon name="play-outline" size={18} color={Colors.text} />
-              <Text style={styles.actionText}>Start timer</Text>
+              <Icon name="play-outline" size={18} color={colors.text} />
+              <Text style={[styles.actionText, { color: colors.text }]}>Start timer</Text>
             </Pressable>
           )}
           {!task.isCompleted && task.startedAt && (
             <Pressable
               style={styles.actionBtn}
               onPress={() => { haptic('success'); completeTimedTask(task.id); }}>
-              <Icon name="stop-outline" size={18} color={Colors.text} />
-              <Text style={styles.actionText}>Complete (stop timer)</Text>
+              <Icon name="stop-outline" size={18} color={colors.text} />
+              <Text style={[styles.actionText, { color: colors.text }]}>Complete (stop timer)</Text>
             </Pressable>
           )}
           <Pressable style={styles.actionBtn} onPress={handleToggleComplete}>
             <Icon
               name={task.isCompleted ? 'arrow-undo-outline' : 'checkmark-done-outline'}
               size={18}
-              color={Colors.text}
+              color={colors.text}
             />
-            <Text style={styles.actionText}>
+            <Text style={[styles.actionText, { color: colors.text }]}>
               {task.isCompleted ? 'Restore task' : locked ? 'Mark as done (locked)' : 'Mark as done'}
             </Text>
           </Pressable>
@@ -454,8 +455,8 @@ export function TaskDetailScreen({ navigation, route }: Props) {
             <Pressable
               style={styles.actionBtn}
               onPress={() => navigation.push('TaskDetail', { taskId: task.parentId! })}>
-              <Icon name="arrow-up-outline" size={18} color={Colors.gray500} />
-              <Text style={[styles.actionText, { color: Colors.gray500 }]}>Go to parent task</Text>
+              <Icon name="arrow-up-outline" size={18} color={colors.textSecondary} />
+              <Text style={[styles.actionText, { color: colors.textSecondary }]}>Go to parent task</Text>
             </Pressable>
           )}
         </View>

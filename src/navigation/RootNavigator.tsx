@@ -14,6 +14,7 @@ import { ProfileScreen } from '../screens/ProfileScreen';
 import { SettingsScreen } from '../screens/SettingsScreen';
 import { RootStackParamList } from '../types';
 import { Colors } from '../utils/colors';
+import { useTheme } from '../context/ThemeContext';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
@@ -49,11 +50,12 @@ const DETAIL_SCREEN_OPTIONS = {
 
 export function RootNavigator() {
   const { user, isLoading } = useAuth();
+  const { colors } = useTheme();
 
   if (isLoading) {
     return (
-      <View style={styles.loading}>
-        <ActivityIndicator color={Colors.black} size="small" />
+      <View style={[styles.loading, { backgroundColor: colors.background }]}>
+        <ActivityIndicator color={colors.text} size="small" />
       </View>
     );
   }

@@ -37,6 +37,7 @@ import {
 import { getAvatarUri, saveAvatarUri } from '../utils/storage';
 import { Colors, Spacing, Typography } from '../utils/colors';
 import { haptic } from '../utils/haptics';
+import { useTheme } from '../context/ThemeContext';
 
 type Props = {
   navigation: NativeStackNavigationProp<RootStackParamList, 'Profile'>;
@@ -104,19 +105,21 @@ export function ProfileScreen({ navigation }: Props) {
 
   if (!user) return null;
 
+  const { colors, isDark } = useTheme();
+
   return (
-    <View style={[styles.container, { paddingTop: insets.top }]}>
+    <View style={[styles.container, { backgroundColor: colors.background, paddingTop: insets.top }]}>
       {/* Header bar */}
       <View style={styles.headerBar}>
         <AnimatedPressable onPress={handleBack} hitSlop={12}>
-          <Text style={styles.backText}>← Back</Text>
+          <Text style={[styles.backText, { color: colors.textSecondary }]}>← Back</Text>
         </AnimatedPressable>
-        <Text style={styles.headerTitle}>Profile</Text>
+        <Text style={[styles.headerTitle, { color: colors.text }]}>Profile</Text>
         <AnimatedPressable
           onPress={handleOpenSettings}
           hapticStyle="light"
-          style={styles.settingsRoundButton}>
-          <Icon name="settings-outline" size={18} color={Colors.white} />
+          style={[styles.settingsRoundButton, { backgroundColor: isDark ? '#F5F5F7' : Colors.surfaceDark }]}>
+          <Icon name="settings-outline" size={18} color={isDark ? '#000' : Colors.white} />
         </AnimatedPressable>
       </View>
 
