@@ -659,15 +659,12 @@ export function HomeScreen({ navigation }: Props) {
                             </Text>
                         )}
                     </View>
-                    <View style={styles.headerRight}>
-                        <Text style={styles.focusHint}>↓ focus</Text>
-                        <AnimatedPressable
-                            onPress={handleOpenSearch}
-                            hitSlop={8}
-                            style={styles.topSearchButton}>
-                            <Icon name="search-outline" size={26} color={colors.text} />
-                        </AnimatedPressable>
-                    </View>
+                    <AnimatedPressable
+                        onPress={handleOpenSearch}
+                        hitSlop={8}
+                        style={styles.topSearchButton}>
+                        <Icon name="search-outline" size={26} color={colors.text} />
+                    </AnimatedPressable>
                 </Animated.View>
             )}
 
@@ -731,6 +728,7 @@ export function HomeScreen({ navigation }: Props) {
                                 sortOption={activeSortOption}
                                 onSortPress={() => setShowSortDropdown(true)}
                             />
+                            <Text style={styles.focusHint}>swipe down focus mode</Text>
                         </View>
                     }
                     ListEmptyComponent={ListEmpty}
@@ -972,18 +970,19 @@ const createStyles = (c: ThemeColors) => StyleSheet.create({
     topSearchButton: {
         padding: Spacing.sm,
     },
-    headerRight: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: Spacing.sm,
-        paddingBottom: 4,
-    },
     focusHint: {
-        fontSize: 11,
+        fontSize: 12,
         fontWeight: '500',
-        color: c.gray400,
-        letterSpacing: 0.3,
+        color: c.textTertiary,
+        letterSpacing: 0.6,
         fontFamily: FontFamily,
+        textAlign: 'center',
+        paddingTop: 4,
+        paddingBottom: 0,
+        marginBottom: -10,
+        marginTop: 0,
+        textDecorationLine: 'underline',
+        opacity: 0.8,
     },
     searchHeader: {
         flexDirection: 'row',
