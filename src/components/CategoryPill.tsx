@@ -88,15 +88,15 @@ export const CategoryPill = memo(function CategoryPill({
                   onPress={() => handleSelect(cat.id)}
                 >
                   <View style={[styles.dropdownDot, { backgroundColor: cat.color }]} />
-                  <Icon name={cat.icon} size={16} color={isSelected ? cat.color : colors.textSecondary} />
+                  <Icon name={cat.icon} size={16} color={isSelected ? (isDark ? '#ffffff' : '#000000') : colors.textSecondary} />
                   <Text style={[
                     styles.dropdownLabel,
-                    isSelected && { color: cat.color, fontWeight: '700' },
+                    isSelected && { color: isDark ? '#ffffff' : '#000000', fontWeight: '700' },
                   ]}>
                     {cat.name}
                   </Text>
                   {isSelected && (
-                    <Icon name="checkmark" size={18} color={cat.color} style={styles.checkmark} />
+                    <Icon name="checkmark" size={18} color={isDark ? '#ffffff' : '#000000'} style={styles.checkmark} />
                   )}
                 </Pressable>
               );
@@ -167,7 +167,7 @@ const createStyles = (c: ThemeColors, isDark: boolean) => StyleSheet.create({
     borderRadius: 10,
   },
   dropdownItemSelected: {
-    backgroundColor: isDark ? c.gray200 : c.gray50,
+    backgroundColor: isDark ? '#1a1a1a' : '#f0f0f0',
   },
   dropdownDot: {
     width: 8,

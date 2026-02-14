@@ -30,7 +30,7 @@ import { RouteProp } from '@react-navigation/native';
 import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import Icon from 'react-native-vector-icons/Ionicons';
 import { useTasks } from '../context/TaskContext';
-import { Spacing, Typography, FontFamily, type ThemeColors } from '../utils/colors';
+import { Spacing, Typography, FontFamily, BorderRadius, type ThemeColors } from '../utils/colors';
 import { useTheme } from '../context/ThemeContext';
 import { formatMinutes, getElapsedMinutes } from '../utils/timeTracking';
 import { isTaskLocked, getChildren, countDescendants } from '../utils/dependencyChains';
@@ -248,22 +248,25 @@ export function TaskDetailScreen({ navigation, route }: Props) {
     navigation.goBack();
   };
 
+  const handleDone = () => {
+    if (title.trim() && title !== task.title) {
+      updateTask(task.id, { title: title.trim() });
+    }
+    if (description !== task.description) {
+      updateTask(task.id, { description });
+    }
+    navigation.navigate('Home');
+  };
+
   // ── Render ───────────────────────────────────────────────────────────────
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
       {/* Header */}
-      <View style={styles.header}>
-        <Pressable onPress={handleBack} hitSlop={12}>
-          <Text style={styles.backText}>← Back</Text>
-        </Pressable>
-        <Pressable onPress={handleDelete} hitSlop={8}>
-          <Text style={styles.deleteText}>Delete</Text>
-        </Pressable>
-      </View>
+      <View style={styles.header} />
 
       <ScrollView
         style={styles.scrollView}
-        contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 40 }]}
+        contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 140 }]}
         keyboardShouldPersistTaps="handled">
 
         {/* ── Title ─────────────────────────────────────────────── */}
@@ -471,6 +474,20 @@ export function TaskDetailScreen({ navigation, route }: Props) {
           )}
         </View>
       </ScrollView>
+
+      {/* Bottom Action Bar */}
+      <View style={[styles.bottomActionBar, { paddingBottom: insets.bottom + Spacing.lg }]}>
+        <Pressable
+          style={styles.bottomButtons}
+          onPress={handleDone}>
+          <Icon name="chevron-back" size={24} color={colors.text} />
+        </Pressable>
+        <Pressable
+          style={styles.bottomButtons}
+          onPress={handleDelete}>
+          <Icon name="trash-outline" size={20} color={colors.text} />
+        </Pressable>
+      </View>
     </View>
   );
 }
@@ -484,7 +501,7 @@ const createStyles = (c: ThemeColors) => StyleSheet.create({
   },
   header: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
+    justifyContent: 'flex-start',
     alignItems: 'center',
     paddingHorizontal: Spacing.xxl,
     paddingVertical: Spacing.lg,
@@ -492,6 +509,11 @@ const createStyles = (c: ThemeColors) => StyleSheet.create({
   backText: {
     ...Typography.link,
     color: c.textSecondary,
+  },
+  doneText: {
+    ...Typography.link,
+    color: c.text,
+    fontWeight: '600',
   },
   deleteText: {
     ...Typography.link,
@@ -503,6 +525,35 @@ const createStyles = (c: ThemeColors) => StyleSheet.create({
   content: {
     paddingHorizontal: Spacing.xxl,
     paddingTop: Spacing.sm,
+  },
+
+  // Bottom Action Bar
+  bottomActionBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: Spacing.xxl,
+    paddingHorizontal: Spacing.xxl,
+    paddingTop: Spacing.lg,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: c.border,
+    backgroundColor: c.background,
+    flexShrink: 0,
+  },
+  bottomButtons: {
+    width: 52,
+    height: 52,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: c.surface,
+    borderRadius: BorderRadius.card,
+    borderWidth: 1,
+    borderColor: c.border,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 2,
   },
   emptyContainer: {
     flex: 1,

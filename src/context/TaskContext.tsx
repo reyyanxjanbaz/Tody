@@ -19,6 +19,18 @@ import { initializeOverdueDates, isFullyDecayed } from '../utils/decay';
 import { calculateActualMinutes, isTooShort } from '../utils/timeTracking';
 import { updatePatternsOnCompletion } from '../utils/patternLearning';
 import { getAllDescendantIds } from '../utils/dependencyChains';
+import {
+  fetchCategories as fetchDbCategories,
+  fetchTasks as fetchDbTasks,
+  pushTasks,
+  pushCategories,
+  upsertTask,
+  upsertCategory,
+  deleteTaskFromDb,
+  deleteTasksFromDb,
+  buildCategoryMap,
+  CategoryMap,
+} from '../lib/supabaseSync';
 
 // Enable LayoutAnimation on Android
 if (Platform.OS === 'android') {
@@ -60,6 +72,24 @@ interface TaskContextType {
 
 const TaskContext = createContext<TaskContextType | undefined>(undefined);
 
+// ── Merge helper — combines local and DB task lists ─────────────────────────
+
+function mergeTaskLists(local: Task[], remote: Task[]): Task[] {
+  const merged = new Map<string, Task>();
+  // Start with local tasks
+  for (const t of local) {
+    merged.set(t.id, t);
+  }
+  // Remote wins if its updatedAt is newer
+  for (const t of remote) {
+    const existing = merged.get(t.id);
+    if (!existing || t.updatedAt > existing.updatedAt) {
+      merged.set(t.id, t);
+    }
+  }
+  return Array.from(merged.values());
+}
+
 // ── Provider ─────────────────────────────────────────────────────────────────
 
 export function TaskProvider({ children }: { children: React.ReactNode }) {
@@ -71,11 +101,13 @@ export function TaskProvider({ children }: { children: React.ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
   const tasksRef = useRef(tasks);
   tasksRef.current = tasks;
+  const catMapRef = useRef<CategoryMap>({ toUUID: {}, toLocal: {} });
+  const hasSyncedRef = useRef(false);
 
   // Debounced persist
   const persistTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Load from disk on mount
+  // Load from disk on mount, then sync with Supabase
   useEffect(() => {
     (async () => {
       try {
@@ -112,6 +144,43 @@ export function TaskProvider({ children }: { children: React.ReactNode }) {
       }
     })();
   }, []);
+
+  // ── Supabase sync: push local data on login / pull on subsequent launches ─
+  useEffect(() => {
+    if (!user || isLoading || hasSyncedRef.current) return;
+    hasSyncedRef.current = true;
+
+    (async () => {
+      try {
+        // 1. Push local categories to Supabase
+        await pushCategories(categories, user.id);
+
+        // 2. Build category map
+        const dbCats = await fetchDbCategories();
+        const localCats = categories.length > 0 ? categories : DEFAULT_CATEGORIES;
+        catMapRef.current = buildCategoryMap(localCats, dbCats as any);
+
+        // 3. Fetch existing tasks from DB
+        const { active: dbActive, archived: dbArchived } = await fetchDbTasks(catMapRef.current);
+
+        // 4. Merge: if DB has tasks, merge with local (DB wins on conflicts by updatedAt)
+        if (dbActive.length > 0 || dbArchived.length > 0) {
+          setTasks(prev => mergeTaskLists(prev, dbActive));
+          setArchivedTasks(prev => mergeTaskLists(prev, dbArchived));
+        }
+
+        // 5. Push any local-only tasks to Supabase
+        const allLocal = [...tasksRef.current, ...archivedTasks];
+        if (allLocal.length > 0) {
+          await pushTasks(allLocal, user.id, catMapRef.current);
+        }
+
+        console.log('[TaskContext] Supabase sync complete');
+      } catch (e) {
+        console.error('[TaskContext] Supabase sync error:', e);
+      }
+    })();
+  }, [user, isLoading]);
 
   // Persist with 300ms debounce on every change
   useEffect(() => {
@@ -199,6 +268,12 @@ export function TaskProvider({ children }: { children: React.ReactNode }) {
 
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
     setTasks(prev => [task, ...prev]);
+
+    // Sync to Supabase (fire-and-forget)
+    if (user) {
+      upsertTask(task, user.id, catMapRef.current).catch(() => {});
+    }
+
     return task;
   }, [user]);
 
@@ -252,6 +327,16 @@ export function TaskProvider({ children }: { children: React.ReactNode }) {
       updated.splice(insertIndex, 0, subtask);
       return updated;
     });
+
+    // Sync subtask + updated parent to Supabase
+    if (user) {
+      upsertTask(subtask, user.id, catMapRef.current).catch(() => {});
+      const parentTask = tasksRef.current.find(t => t.id === parentId);
+      if (parentTask) {
+        upsertTask({ ...parentTask, childIds: [...parentTask.childIds, subtask.id], updatedAt: now }, user.id, catMapRef.current).catch(() => {});
+      }
+    }
+
     return subtask;
   }, [user]);
 
@@ -264,10 +349,14 @@ export function TaskProvider({ children }: { children: React.ReactNode }) {
         if (updates.deadline !== undefined && updates.deadline !== t.deadline) {
           merged.overdueStartDate = null;
         }
+        // Sync to Supabase
+        if (user) {
+          upsertTask(merged, user.id, catMapRef.current).catch(() => {});
+        }
         return merged;
       }),
     );
-  }, []);
+  }, [user]);
 
   const completeTask = useCallback((id: string) => {
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
@@ -287,8 +376,13 @@ export function TaskProvider({ children }: { children: React.ReactNode }) {
         };
       });
 
-      // Run pattern learning in background
+      // Sync completed task to Supabase
       const completedTask = updated.find(t => t.id === id);
+      if (completedTask && user) {
+        upsertTask(completedTask, user.id, catMapRef.current).catch(() => {});
+      }
+
+      // Run pattern learning in background
       if (completedTask?.actualMinutes && !isTooShort(completedTask.actualMinutes)) {
         const allCompleted = updated.filter(t => t.isCompleted && t.actualMinutes && t.actualMinutes >= 1);
         updatePatternsOnCompletion(completedTask, allCompleted).catch(() => { });
@@ -296,18 +390,19 @@ export function TaskProvider({ children }: { children: React.ReactNode }) {
 
       return updated;
     });
-  }, []);
+  }, [user]);
 
   const startTask = useCallback((id: string) => {
     const now = Date.now();
     setTasks(prev =>
-      prev.map(t =>
-        t.id === id
-          ? { ...t, startedAt: now, updatedAt: now }
-          : t,
-      ),
+      prev.map(t => {
+        if (t.id !== id) return t;
+        const updated = { ...t, startedAt: now, updatedAt: now };
+        if (user) upsertTask(updated, user.id, catMapRef.current).catch(() => {});
+        return updated;
+      }),
     );
-  }, []);
+  }, [user]);
 
   const completeTimedTask = useCallback((id: string, adjustedMinutes?: number) => {
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
@@ -329,6 +424,9 @@ export function TaskProvider({ children }: { children: React.ReactNode }) {
       });
 
       const completedTask = updated.find(t => t.id === id);
+      if (completedTask && user) {
+        upsertTask(completedTask, user.id, catMapRef.current).catch(() => {});
+      }
       if (completedTask?.actualMinutes && !isTooShort(completedTask.actualMinutes)) {
         const allCompleted = updated.filter(t => t.isCompleted && t.actualMinutes && t.actualMinutes >= 1);
         updatePatternsOnCompletion(completedTask, allCompleted).catch(() => { });
@@ -336,38 +434,42 @@ export function TaskProvider({ children }: { children: React.ReactNode }) {
 
       return updated;
     });
-  }, []);
+  }, [user]);
 
   const uncompleteTask = useCallback((id: string) => {
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    const now = Date.now();
     setTasks(prev =>
-      prev.map(t =>
-        t.id === id
-          ? { ...t, isCompleted: false, completedAt: null, updatedAt: Date.now() }
-          : t,
-      ),
+      prev.map(t => {
+        if (t.id !== id) return t;
+        const updated = { ...t, isCompleted: false, completedAt: null, updatedAt: now };
+        if (user) upsertTask(updated, user.id, catMapRef.current).catch(() => {});
+        return updated;
+      }),
     );
-  }, []);
+  }, [user]);
 
   const deferTask = useCallback((id: string) => {
     const tomorrow = new Date();
     tomorrow.setDate(tomorrow.getDate() + 1);
     tomorrow.setHours(23, 59, 59, 999);
+    const now = Date.now();
 
     setTasks(prev =>
-      prev.map(t =>
-        t.id === id
-          ? {
-            ...t,
-            deadline: tomorrow.getTime(),
-            deferCount: t.deferCount + 1,
-            overdueStartDate: null,
-            updatedAt: Date.now(),
-          }
-          : t,
-      ),
+      prev.map(t => {
+        if (t.id !== id) return t;
+        const updated = {
+          ...t,
+          deadline: tomorrow.getTime(),
+          deferCount: t.deferCount + 1,
+          overdueStartDate: null,
+          updatedAt: now,
+        };
+        if (user) upsertTask(updated, user.id, catMapRef.current).catch(() => {});
+        return updated;
+      }),
     );
-  }, []);
+  }, [user]);
 
   const deleteTask = useCallback((id: string) => {
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
@@ -382,10 +484,17 @@ export function TaskProvider({ children }: { children: React.ReactNode }) {
             ? { ...t, childIds: t.childIds.filter(cid => cid !== id), updatedAt: Date.now() }
             : t,
         );
+        // Sync parent update
+        if (user) {
+          const parent = updated.find(t => t.id === task.parentId);
+          if (parent) upsertTask(parent, user.id, catMapRef.current).catch(() => {});
+        }
       }
+      // Delete from Supabase
+      if (user) deleteTaskFromDb(id).catch(() => {});
       return updated.filter(t => t.id !== id);
     });
-  }, []);
+  }, [user]);
 
   const deleteTaskWithCascade = useCallback((id: string) => {
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
@@ -402,10 +511,16 @@ export function TaskProvider({ children }: { children: React.ReactNode }) {
             ? { ...t, childIds: t.childIds.filter(cid => cid !== id), updatedAt: Date.now() }
             : t,
         );
+        if (user) {
+          const parent = updated.find(t => t.id === task.parentId);
+          if (parent) upsertTask(parent, user.id, catMapRef.current).catch(() => {});
+        }
       }
+      // Delete all from Supabase
+      if (user) deleteTasksFromDb(Array.from(idsToRemove)).catch(() => {});
       return updated.filter(t => !idsToRemove.has(t.id));
     });
-  }, []);
+  }, [user]);
 
   // Restore previously deleted/completed tasks from snapshots (for Undo)
   const restoreTasks = useCallback((snapshots: Task[]) => {
@@ -424,9 +539,17 @@ export function TaskProvider({ children }: { children: React.ReactNode }) {
           );
         }
       }
+
+      // Sync restored tasks to Supabase
+      if (user) {
+        for (const restored of toRestore) {
+          upsertTask(restored, user.id, catMapRef.current).catch(() => {});
+        }
+      }
+
       return updated;
     });
-  }, []);
+  }, [user]);
 
   const moveTaskToParent = useCallback((taskId: string, newParentId: string | null) => {
     const now = Date.now();
@@ -485,9 +608,22 @@ export function TaskProvider({ children }: { children: React.ReactNode }) {
         });
       }
 
+      // Sync all affected tasks to Supabase
+      if (user) {
+        const affectedIds = new Set([taskId]);
+        if (task.parentId) affectedIds.add(task.parentId);
+        if (newParentId) affectedIds.add(newParentId);
+        const descendantIds = getAllDescendantIds(taskId, updated);
+        descendantIds.forEach(did => affectedIds.add(did));
+        for (const aid of affectedIds) {
+          const t = updated.find(x => x.id === aid);
+          if (t) upsertTask(t, user.id, catMapRef.current).catch(() => {});
+        }
+      }
+
       return updated;
     });
-  }, []);
+  }, [user]);
 
   const reviveTask = useCallback((id: string) => {
     const now = Date.now();
@@ -496,19 +632,20 @@ export function TaskProvider({ children }: { children: React.ReactNode }) {
 
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
     setTasks(prev =>
-      prev.map(t =>
-        t.id === id
-          ? {
-            ...t,
-            overdueStartDate: null,
-            revivedAt: now,
-            deadline: todayEnd.getTime(),
-            updatedAt: now,
-          }
-          : t,
-      ),
+      prev.map(t => {
+        if (t.id !== id) return t;
+        const updated = {
+          ...t,
+          overdueStartDate: null,
+          revivedAt: now,
+          deadline: todayEnd.getTime(),
+          updatedAt: now,
+        };
+        if (user) upsertTask(updated, user.id, catMapRef.current).catch(() => {});
+        return updated;
+      }),
     );
-  }, []);
+  }, [user]);
 
   const getFullyDecayedTasks = useCallback((): Task[] => {
     return tasksRef.current.filter(t => isFullyDecayed(t));
@@ -530,7 +667,14 @@ export function TaskProvider({ children }: { children: React.ReactNode }) {
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
     setTasks(prev => prev.filter(t => !isFullyDecayed(t)));
     setArchivedTasks(prev => [...archivedItems, ...prev]);
-  }, []);
+
+    // Sync archived tasks to Supabase
+    if (user) {
+      for (const t of archivedItems) {
+        upsertTask(t, user.id, catMapRef.current).catch(() => {});
+      }
+    }
+  }, [user]);
 
   const getTask = useCallback((id: string): Task | undefined => {
     return tasksRef.current.find(t => t.id === id);
@@ -548,12 +692,23 @@ export function TaskProvider({ children }: { children: React.ReactNode }) {
       order: categories.length,
     };
     setCategories(prev => [...prev, newCat]);
+    // Sync to Supabase
+    if (user) {
+      upsertCategory(newCat, user.id).catch(() => {});
+    }
     return newCat;
-  }, [categories.length]);
+  }, [categories.length, user]);
 
   const updateCategory = useCallback((id: string, updates: Partial<Category>) => {
-    setCategories(prev => prev.map(c => c.id === id ? { ...c, ...updates } : c));
-  }, []);
+    setCategories(prev => {
+      const updated = prev.map(c => c.id === id ? { ...c, ...updates } : c);
+      const cat = updated.find(c => c.id === id);
+      if (cat && user) {
+        upsertCategory(cat, user.id).catch(() => {});
+      }
+      return updated;
+    });
+  }, [user]);
 
   const deleteCategory = useCallback((id: string) => {
     setCategories(prev => prev.filter(c => c.id !== id));
