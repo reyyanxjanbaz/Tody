@@ -411,7 +411,7 @@ export const TaskItem = memo(function TaskItem({
               {/* Lock icon */}
               {isLocked && (
                 <View style={styles.lockIcon}>
-                  <Text style={styles.lockIconText}>🔒</Text>
+                  <Icon name="lock-closed" size={11} color={colors.gray500} />
                 </View>
               )}
 
@@ -642,7 +642,7 @@ const createStyles = (c: ThemeColors) => StyleSheet.create({
     position: 'absolute',
     width: 1.5,
     borderRadius: 0.75,
-    backgroundColor: c.gray400,
+    backgroundColor: c.gray600,
   },
   connectorHorizontal: {
     position: 'absolute',
@@ -650,17 +650,13 @@ const createStyles = (c: ThemeColors) => StyleSheet.create({
     height: 1.5,
     borderRadius: 0.75,
     top: '50%',
-    backgroundColor: c.gray400,
+    backgroundColor: c.gray600,
   },
   lockIcon: {
-    width: 12,
-    height: 12,
+    width: 14,
+    height: 14,
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 4,
-  },
-  lockIconText: {
-    fontSize: 10,
-    lineHeight: 12,
   },
 });

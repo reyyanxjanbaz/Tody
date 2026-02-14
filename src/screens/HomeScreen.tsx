@@ -659,12 +659,15 @@ export function HomeScreen({ navigation }: Props) {
                             </Text>
                         )}
                     </View>
-                    <AnimatedPressable
-                        onPress={handleOpenSearch}
-                        hitSlop={8}
-                        style={styles.topSearchButton}>
-                        <Icon name="search-outline" size={26} color={colors.text} />
-                    </AnimatedPressable>
+                    <View style={styles.headerRight}>
+                        <Text style={styles.focusHint}>↓ focus</Text>
+                        <AnimatedPressable
+                            onPress={handleOpenSearch}
+                            hitSlop={8}
+                            style={styles.topSearchButton}>
+                            <Icon name="search-outline" size={26} color={colors.text} />
+                        </AnimatedPressable>
+                    </View>
                 </Animated.View>
             )}
 
@@ -968,6 +971,19 @@ const createStyles = (c: ThemeColors) => StyleSheet.create({
     },
     topSearchButton: {
         padding: Spacing.sm,
+    },
+    headerRight: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: Spacing.sm,
+        paddingBottom: 4,
+    },
+    focusHint: {
+        fontSize: 11,
+        fontWeight: '500',
+        color: c.gray400,
+        letterSpacing: 0.3,
+        fontFamily: FontFamily,
     },
     searchHeader: {
         flexDirection: 'row',

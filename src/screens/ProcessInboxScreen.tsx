@@ -543,7 +543,7 @@ export function ProcessInboxScreen({ navigation }: Props) {
                 mode="datetime"
                 display="spinner"
                 onChange={handleDateChange}
-                textColor={colors.black}
+                textColor={colors.text}
               />
               <Pressable onPress={handleConfirmDate} style={styles.dateConfirmButton}>
                 <Text style={styles.dateConfirmText}>Confirm</Text>
@@ -757,7 +757,7 @@ const createStyles = (c: ThemeColors) => StyleSheet.create({
     borderRadius: 14,
     paddingVertical: Spacing.xxl,
     paddingHorizontal: Spacing.xxl,
-    backgroundColor: c.white,
+    backgroundColor: c.background,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: c.border,
   },
@@ -792,16 +792,16 @@ const createStyles = (c: ThemeColors) => StyleSheet.create({
   },
   bentoCard: {
     borderRadius: BorderRadius.card,
-    backgroundColor: c.white,
+    backgroundColor: c.background,
     padding: Spacing.lg,
     justifyContent: 'space-between',
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: c.border,
   },
   bentoCardSelected: {
-    borderColor: c.surfaceDark,
+    borderColor: c.text,
     borderWidth: 2,
-    backgroundColor: c.white,
+    backgroundColor: c.background,
   },
   bentoText: {
     fontSize: 14,
@@ -989,7 +989,7 @@ const createStyles = (c: ThemeColors) => StyleSheet.create({
     flex: 1,
   },
   modalContent: {
-    backgroundColor: c.white,
+    backgroundColor: c.background,
     borderTopLeftRadius: BorderRadius.card,
     borderTopRightRadius: BorderRadius.card,
     paddingHorizontal: Spacing.xxl,
