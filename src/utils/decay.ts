@@ -3,41 +3,11 @@ import { startOfDay } from './dateUtils';
 
 const DECAY_DAYS = 7;
 const MIN_OPACITY = 0.3;
-const DECAY_PER_DAY = (1.0 - MIN_OPACITY) / DECAY_DAYS; // ~0.1 per day
-
-/**
- * Calculates the visual opacity of a task based on how long it's been overdue.
- * Tasks decay from 1.0 → 0.3 over 7 days past their deadline.
- */
-export function getTaskOpacity(task: Task): number {
-  if (!task.deadline || task.completedAt || task.isCompleted) {
-    return 1.0;
-  }
-
-  const now = Date.now();
-  const deadlineTime = task.deadline;
-
-  // Not overdue yet
-  if (now <= deadlineTime) {
-    return 1.0;
-  }
-
-  const overdueStart = task.overdueStartDate || deadlineTime;
-  const msSinceOverdue = now - overdueStart;
-  const daysSinceOverdue = Math.floor(msSinceOverdue / (1000 * 60 * 60 * 24));
-
-  if (daysSinceOverdue >= DECAY_DAYS) {
-    return MIN_OPACITY;
-  }
-
-  // Linear decay: 1.0 → 0.3 over 7 days
-  return Math.max(MIN_OPACITY, 1.0 - daysSinceOverdue * DECAY_PER_DAY);
-}
 
 /**
  * Returns the number of days a task has been overdue (0 if not overdue).
  */
-export function getDaysOverdue(task: Task): number {
+function getDaysOverdue(task: Task): number {
   if (!task.deadline || task.completedAt || task.isCompleted) {
     return 0;
   }

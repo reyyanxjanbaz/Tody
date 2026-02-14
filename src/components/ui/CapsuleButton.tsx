@@ -4,6 +4,7 @@ import Animated, {
     useSharedValue,
     useAnimatedStyle,
     withSpring,
+    runOnJS,
 } from 'react-native-reanimated';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { BorderRadius, FontFamily, type ThemeColors } from '../../utils/colors';
@@ -35,7 +36,7 @@ export const CapsuleButton = memo(function CapsuleButton({
     textStyle,
 }: CapsuleButtonProps) {
     const scale = useSharedValue(1);
-  const { colors, shadows, isDark } = useTheme();
+  const { colors } = useTheme();
   const styles = React.useMemo(() => createStyles(colors), [colors]);
   const variantStyles = React.useMemo(() => getVariantStyles(colors), [colors]);
   const variantLabelStyles = React.useMemo(() => getVariantLabelStyles(colors), [colors]);
@@ -57,11 +58,10 @@ export const CapsuleButton = memo(function CapsuleButton({
             'worklet';
             scale.value = withSpring(1, SPRING_SNAPPY);
             if (success) {
-                import('react-native-reanimated').then(({ runOnJS: rjs }) => { });
+                runOnJS(handlePress)();
             }
         });
 
-    // We use a simpler approach: Pressable with animated style
     const animatedStyle = useAnimatedStyle(() => ({
         transform: [{ scale: scale.value }],
     }));
@@ -86,7 +86,6 @@ export const CapsuleButton = memo(function CapsuleButton({
         <GestureDetector gesture={tap}>
             <Animated.View
                 style={[containerStyle, animatedStyle]}
-                onTouchEnd={handlePress}
             >
                 {icon && icon}
                 <Text style={labelStyle}>{label}</Text>

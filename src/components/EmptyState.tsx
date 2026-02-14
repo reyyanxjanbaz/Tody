@@ -30,7 +30,7 @@ export const EmptyState = memo(function EmptyState({
   actionLabel,
   onAction,
 }: EmptyStateProps) {
-  const { colors, shadows, isDark } = useTheme();
+  const { colors } = useTheme();
   const styles = React.useMemo(() => createStyles(colors), [colors]);
 
   return (

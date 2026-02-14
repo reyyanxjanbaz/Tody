@@ -10,7 +10,7 @@ interface InboxBadgeProps {
 }
 
 export const InboxBadge = memo(function InboxBadge({ onPress }: InboxBadgeProps) {
-  const { colors, shadows, isDark } = useTheme();
+  const { colors } = useTheme();
   const styles = React.useMemo(() => createStyles(colors), [colors]);
   const { inboxCount } = useInbox();
 

@@ -34,7 +34,7 @@ export const ManageCategoriesModal = memo(function ManageCategoriesModal({
 }: ManageCategoriesModalProps) {
   // Sort for display (by order)
   const sorted = [...categories].sort((a, b) => a.order - b.order);
-  const { colors, shadows, isDark } = useTheme();
+  const { colors } = useTheme();
   const styles = React.useMemo(() => createStyles(colors), [colors]);
 
   // Movable = exclude overview
@@ -171,7 +171,7 @@ const createStyles = (c: ThemeColors) => StyleSheet.create({
   },
   card: {
     width: '88%',
-    backgroundColor: c.white,
+    backgroundColor: c.surface,
     borderRadius: BorderRadius.card,
     paddingVertical: Spacing.xxl,
     paddingHorizontal: Spacing.xl,

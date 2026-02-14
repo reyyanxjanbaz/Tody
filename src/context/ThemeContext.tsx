@@ -15,7 +15,7 @@ import React, {
   useCallback,
   useMemo,
 } from 'react';
-import { useColorScheme, StatusBar } from 'react-native';
+import { StatusBar } from 'react-native';
 import {
   LightColors,
   DarkColors,

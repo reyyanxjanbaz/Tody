@@ -12,7 +12,7 @@ import { daysFromNow } from './dateUtils';
  *
  * Defer penalty: Each defer reduces score by 5% (capped at 30% reduction).
  */
-export function computeUrgencyScore(task: Task): number {
+function computeUrgencyScore(task: Task): number {
   let score = 0;
 
   // --- Deadline proximity (weight: 0.40) ---
@@ -54,7 +54,7 @@ export function computeUrgencyScore(task: Task): number {
 /**
  * Determines which temporal section a task belongs to.
  */
-export function computeSection(task: Task): Section {
+function computeSection(task: Task): Section {
   if (!task.deadline) { return 'someday'; }
 
   const days = daysFromNow(task.deadline);
@@ -261,12 +261,4 @@ export function computeSmartSortScore(task: Task): number {
   }
 
   return Math.min(1, Math.max(0, score));
-}
-
-/**
- * smartSort — the "Smart" sort comparator.
- * Higher score = should appear first.
- */
-export function smartSortComparator(a: Task, b: Task): number {
-  return computeSmartSortScore(b) - computeSmartSortScore(a);
 }

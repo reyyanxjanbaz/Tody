@@ -1,7 +1,7 @@
 import { Task } from '../types';
 
 /** Maximum depth for subtask nesting */
-export const MAX_DEPTH = 3;
+const MAX_DEPTH = 3;
 
 /**
  * Whether a task is locked (has incomplete children).
@@ -16,7 +16,7 @@ export function isTaskLocked(task: Task, allTasks: Task[]): boolean {
 /**
  * Get all descendant tasks recursively.
  */
-export function getAllDescendants(taskId: string, allTasks: Task[]): Task[] {
+function getAllDescendants(taskId: string, allTasks: Task[]): Task[] {
   const task = allTasks.find(t => t.id === taskId);
   const childIds = task?.childIds ?? [];
   if (!task || childIds.length === 0) return [];
@@ -44,42 +44,6 @@ export function getAllDescendantIds(taskId: string, allTasks: Task[]): string[] 
 export function getChildren(task: Task, allTasks: Task[]): Task[] {
   const childIds = task.childIds ?? [];
   return allTasks.filter(t => childIds.includes(t.id));
-}
-
-/**
- * Get parent task of a task.
- */
-export function getParent(task: Task, allTasks: Task[]): Task | undefined {
-  if (!task.parentId) return undefined;
-  return allTasks.find(t => t.id === task.parentId);
-}
-
-/**
- * Check if setting `candidateParentId` as parent of `taskId` would create a circular dependency.
- */
-export function wouldCreateCircular(
-  taskId: string,
-  candidateParentId: string,
-  allTasks: Task[],
-): boolean {
-  if (taskId === candidateParentId) return true;
-  const descendantIds = getAllDescendantIds(taskId, allTasks);
-  return descendantIds.includes(candidateParentId);
-}
-
-/**
- * Get valid parent tasks for a given task (for "Move to..." menu).
- * Valid parents: any task at depth < MAX_DEPTH, excluding self and descendants.
- */
-export function getValidParents(taskId: string, allTasks: Task[]): Task[] {
-  const descendantIds = getAllDescendantIds(taskId, allTasks);
-  return allTasks.filter(
-    t =>
-      t.id !== taskId &&
-      !descendantIds.includes(t.id) &&
-      (t.depth ?? 0) < MAX_DEPTH &&
-      !t.isCompleted,
-  );
 }
 
 /**

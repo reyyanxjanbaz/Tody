@@ -5,7 +5,6 @@ import {
   Pressable,
   StyleSheet,
   ScrollView,
-  Platform,
 } from 'react-native';
 import Icon from 'react-native-vector-icons/Ionicons';
 import { Spacing, Typography, FontFamily, type ThemeColors } from '../utils/colors';
@@ -34,7 +33,7 @@ export const DeadlineSnapper = memo(function DeadlineSnapper({
   onSelectDeadline,
   currentDeadline,
 }: DeadlineSnapperProps) {
-  const { colors, shadows, isDark } = useTheme();
+  const { colors } = useTheme();
   const styles = React.useMemo(() => createStyles(colors), [colors]);
 
   const chips = useMemo((): QuickChip[] => {

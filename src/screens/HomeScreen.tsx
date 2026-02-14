@@ -67,6 +67,8 @@ interface TaskListItem {
 
 type ListItem = SectionHeaderItem | TodayLineItem | TaskListItem;
 
+const PRIORITY_ORDER: Record<Priority, number> = { high: 0, medium: 1, low: 2, none: 3 };
+
 // ── Component ─────────────────────────────────────────────────────────────────
 
 type Props = {
@@ -74,7 +76,7 @@ type Props = {
 };
 
 export function HomeScreen({ navigation }: Props) {
-  const { colors, shadows, isDark } = useTheme();
+  const { colors } = useTheme();
   const styles = React.useMemo(() => createStyles(colors), [colors]);
     const insets = useSafeAreaInsets();
     const {
@@ -195,7 +197,6 @@ export function HomeScreen({ navigation }: Props) {
     }, [tasksForDisplay]);
 
     // ── Sort comparator ──────────────────────────────────────────────────────
-    const PRIORITY_ORDER: Record<Priority, number> = { high: 0, medium: 1, low: 2, none: 3 };
     const getSortComparator = useCallback((option: SortOption) => {
         switch (option) {
             case 'deadline-asc':
@@ -922,22 +923,6 @@ const createStyles = (c: ThemeColors) => StyleSheet.create({
         ...Typography.small,
         color: c.gray400,
         marginTop: 2,
-    },
-    headerActions: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: Spacing.lg,
-        paddingBottom: 4,
-    },
-    headerButton: {
-        alignItems: 'center',
-        gap: 2,
-        paddingVertical: Spacing.xs,
-    },
-    headerButtonText: {
-        ...Typography.small,
-        fontWeight: '600',
-        color: c.textTertiary,
     },
     bottomControlsWrapper: {
         position: 'absolute',

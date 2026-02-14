@@ -36,8 +36,8 @@ export const MonthlyCalendar = memo(function MonthlyCalendar({
   tasks,
 }: MonthlyCalendarProps) {
   const today = new Date();
-  const { colors, shadows, isDark } = useTheme();
-  const styles = React.useMemo(() => createStyles(colors), [colors]);
+  const { colors, isDark } = useTheme();
+  const styles = React.useMemo(() => createStyles(colors, isDark), [colors, isDark]);
   const [year, setYear] = useState(today.getFullYear());
   const [month, setMonth] = useState(today.getMonth());
 
@@ -188,7 +188,7 @@ export const MonthlyCalendar = memo(function MonthlyCalendar({
 
 const CELL_SIZE = 40;
 
-const createStyles = (c: ThemeColors) => StyleSheet.create({
+const createStyles = (c: ThemeColors, isDark: boolean) => StyleSheet.create({
   container: {
     marginHorizontal: Spacing.xxl,
     marginBottom: Spacing.xl,
@@ -261,7 +261,7 @@ const createStyles = (c: ThemeColors) => StyleSheet.create({
     alignItems: 'center',
   },
   todayCircle: {
-    backgroundColor: c.surfaceDark,
+    backgroundColor: isDark ? c.white : c.surfaceDark,
   },
   dayNumber: {
     fontSize: 14,
@@ -270,14 +270,14 @@ const createStyles = (c: ThemeColors) => StyleSheet.create({
     fontFamily: FontFamily,
   },
   todayNumber: {
-    color: c.white,
+    color: isDark ? c.black : c.white,
     fontWeight: '700',
   },
   dotFilled: {
     width: 5,
     height: 5,
     borderRadius: 2.5,
-    backgroundColor: c.surfaceDark,
+    backgroundColor: isDark ? c.white : c.surfaceDark,
     marginTop: 2,
   },
   dotOutline: {

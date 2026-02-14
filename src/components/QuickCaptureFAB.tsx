@@ -27,7 +27,7 @@ import { haptic } from '../utils/haptics';
 import { SPRING_SNAPPY, PRESS_SCALE } from '../utils/animations';
 
 export const QuickCaptureFAB = memo(function QuickCaptureFAB() {
-  const { colors, shadows, isDark } = useTheme();
+  const { colors } = useTheme();
   const styles = React.useMemo(() => createStyles(colors), [colors]);
   const insets = useSafeAreaInsets();
   const { captureTask } = useInbox();

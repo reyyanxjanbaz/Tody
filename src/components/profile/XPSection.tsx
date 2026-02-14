@@ -24,8 +24,8 @@ interface XPSectionProps {
 
 export const XPSection = memo(function XPSection({ xp }: XPSectionProps) {
   const barWidth = useSharedValue(0);
-  const { colors, shadows, isDark } = useTheme();
-  const styles = React.useMemo(() => createStyles(colors), [colors]);
+  const { colors, isDark } = useTheme();
+  const styles = React.useMemo(() => createStyles(colors, isDark), [colors, isDark]);
 
 
   useEffect(() => {
@@ -63,7 +63,7 @@ export const XPSection = memo(function XPSection({ xp }: XPSectionProps) {
   );
 });
 
-const createStyles = (c: ThemeColors) => StyleSheet.create({
+const createStyles = (c: ThemeColors, isDark: boolean) => StyleSheet.create({
   container: {
     marginHorizontal: Spacing.xxl,
     marginBottom: Spacing.xl,
@@ -121,6 +121,6 @@ const createStyles = (c: ThemeColors) => StyleSheet.create({
   progressFill: {
     height: '100%',
     borderRadius: 3,
-    backgroundColor: c.surfaceDark,
+    backgroundColor: isDark ? c.white : c.surfaceDark,
   },
 });

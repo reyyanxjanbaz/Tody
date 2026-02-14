@@ -29,7 +29,7 @@ const STOP_WORDS = new Set([
 /**
  * Extract meaningful keywords from a task title.
  */
-export function extractKeywords(title: string): string[] {
+function extractKeywords(title: string): string[] {
   return title
     .toLowerCase()
     .replace(/[^a-z0-9\s]/g, '')
@@ -41,7 +41,7 @@ export function extractKeywords(title: string): string[] {
  * Calculate keyword similarity between two sets of keywords.
  * Returns a score from 0 to 1.
  */
-export function keywordSimilarity(a: string[], b: string[]): number {
+function keywordSimilarity(a: string[], b: string[]): number {
   if (a.length === 0 || b.length === 0) { return 0; }
   const setA = new Set(a);
   const setB = new Set(b);
@@ -53,7 +53,7 @@ export function keywordSimilarity(a: string[], b: string[]): number {
 /**
  * Load task patterns from storage.
  */
-export async function loadPatterns(): Promise<TaskPattern[]> {
+async function loadPatterns(): Promise<TaskPattern[]> {
   try {
     const data = await AsyncStorage.getItem(PATTERNS_KEY);
     return data ? JSON.parse(data) : [];
@@ -65,7 +65,7 @@ export async function loadPatterns(): Promise<TaskPattern[]> {
 /**
  * Save task patterns to storage.
  */
-export async function savePatterns(patterns: TaskPattern[]): Promise<void> {
+async function savePatterns(patterns: TaskPattern[]): Promise<void> {
   await AsyncStorage.setItem(PATTERNS_KEY, JSON.stringify(patterns));
 }
 
@@ -73,7 +73,7 @@ export async function savePatterns(patterns: TaskPattern[]): Promise<void> {
  * Find matching pattern for given keywords.
  * Requires at least 70% similarity.
  */
-export function findMatchingPattern(
+function findMatchingPattern(
   keywords: string[],
   patterns: TaskPattern[],
 ): TaskPattern | null {
@@ -192,18 +192,4 @@ export async function getEstimateSuggestion(
   }
 
   return null;
-}
-
-/**
- * Clean up old patterns not used in 90 days.
- * Call this periodically (e.g., daily).
- */
-export async function cleanupOldPatterns(): Promise<void> {
-  const patterns = await loadPatterns();
-  // Since we don't track last-used date, keep patterns with higher sample sizes
-  // and remove small ones (likely stale)
-  const filtered = patterns.filter(p => p.sampleSize >= 3);
-  if (filtered.length !== patterns.length) {
-    await savePatterns(filtered);
-  }
 }

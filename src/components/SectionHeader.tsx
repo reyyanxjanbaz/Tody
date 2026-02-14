@@ -13,7 +13,7 @@ export const SectionHeader = memo(function SectionHeader({
   title,
   count,
 }: SectionHeaderProps) {
-  const { colors, shadows, isDark } = useTheme();
+  const { colors } = useTheme();
   const styles = React.useMemo(() => createStyles(colors), [colors]);
 
   return (

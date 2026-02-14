@@ -46,7 +46,7 @@ export const Button = memo(function Button({
   style,
   textStyle,
 }: ButtonProps) {
-  const { colors, shadows, isDark } = useTheme();
+  const { colors } = useTheme();
   const styles = React.useMemo(() => createStyles(colors), [colors]);
 
   const isDisabled = disabled || loading;

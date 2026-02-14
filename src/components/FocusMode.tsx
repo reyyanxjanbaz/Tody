@@ -3,9 +3,7 @@ import { View, Text, StyleSheet, Dimensions } from 'react-native';
 import Animated, {
     useSharedValue,
     useAnimatedStyle,
-    withTiming,
     withSpring,
-    withSequence,
     FadeIn,
     FadeInDown,
     FadeOut,
@@ -51,7 +49,7 @@ export const FocusMode = memo(function FocusMode({
     onComplete,
     onExit,
 }: FocusModeProps) {
-  const { colors, shadows, isDark } = useTheme();
+    const { colors } = useTheme();
   const styles = React.useMemo(() => createStyles(colors), [colors]);
     const [currentIndex, setCurrentIndex] = useState(0);
     // Direction: 'next' | 'prev' for card transition
@@ -465,6 +463,8 @@ const createStyles = (c: ThemeColors) => StyleSheet.create({
     fontFamily: FontFamily,
     },
     emptyFocusContainer: {
+        flex: 1,
+        justifyContent: 'center',
         alignItems: 'center',
         gap: 12,
     },

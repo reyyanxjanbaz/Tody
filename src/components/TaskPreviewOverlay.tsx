@@ -55,8 +55,8 @@ export const TaskPreviewOverlay = memo(function TaskPreviewOverlay({
 
   const priorityConfig = PRIORITY_CONFIG[task.priority];
   const energyConfig = ENERGY_CONFIG[task.energyLevel];
-  const { colors, shadows, isDark } = useTheme();
-  const styles = React.useMemo(() => createStyles(colors), [colors]);
+  const { colors, isDark } = useTheme();
+  const styles = React.useMemo(() => createStyles(colors, isDark), [colors, isDark]);
 
   const subtaskCount = task.childIds?.length ?? 0;
 
@@ -178,16 +178,16 @@ export const TaskPreviewOverlay = memo(function TaskPreviewOverlay({
   );
 });
 
-const createStyles = (c: ThemeColors) => StyleSheet.create({
+const createStyles = (c: ThemeColors, isDark: boolean) => StyleSheet.create({
   overlay: {
     flex: 1,
-    backgroundColor: 'rgba(255, 255, 255, 0.92)',
+    backgroundColor: isDark ? 'rgba(0,0,0,0.88)' : 'rgba(255,255,255,0.92)',
     justifyContent: 'center',
     alignItems: 'center',
   },
   card: {
     width: '85%',
-    backgroundColor: c.white,
+    backgroundColor: c.surface,
     borderWidth: 2,
     borderColor: c.gray200,
     borderRadius: 8,
@@ -286,27 +286,27 @@ const createStyles = (c: ThemeColors) => StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     height: 40,
-    backgroundColor: c.black,
+    backgroundColor: c.text,
     borderRadius: 6,
     gap: 4,
   },
   actionButtonSecondary: {
-    backgroundColor: c.white,
+    backgroundColor: c.background,
     borderWidth: 1,
-    borderColor: c.black,
+    borderColor: c.text,
   },
   actionButtonDanger: {
-    backgroundColor: c.white,
+    backgroundColor: c.background,
     borderWidth: 1,
     borderColor: '#EF4444',
   },
   actionButtonText: {
     fontSize: 13,
     fontWeight: '600',
-    color: c.white,
+    color: c.background,
     fontFamily: FontFamily,
   },
   actionButtonTextSecondary: {
-    color: c.black,
+    color: c.text,
   },
 });

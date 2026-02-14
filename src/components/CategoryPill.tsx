@@ -1,5 +1,5 @@
 import React, { memo, useState, useCallback } from 'react';
-import { Pressable, Text, View, StyleSheet, Modal, FlatList } from 'react-native';
+import { Pressable, Text, View, StyleSheet, Modal } from 'react-native';
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
@@ -23,7 +23,7 @@ export const CategoryPill = memo(function CategoryPill({
   categories,
   onChange,
 }: CategoryPillProps) {
-  const { colors, shadows, isDark } = useTheme();
+  const { colors } = useTheme();
   const styles = React.useMemo(() => createStyles(colors), [colors]);
   const [showDropdown, setShowDropdown] = useState(false);
   const scale = useSharedValue(1);

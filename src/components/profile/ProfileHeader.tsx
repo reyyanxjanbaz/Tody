@@ -6,7 +6,7 @@
  */
 
 import React, { memo, useCallback } from 'react';
-import { View, Text, StyleSheet, Image, Pressable, Alert } from 'react-native';
+import { View, Text, StyleSheet, Image, Pressable } from 'react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import Icon from 'react-native-vector-icons/Ionicons';
 import { Spacing, Typography, BorderRadius, FontFamily, type ThemeColors } from '../../utils/colors';
@@ -28,8 +28,8 @@ export const ProfileHeader = memo(function ProfileHeader({
 }: ProfileHeaderProps) {
   const displayName = email.split('@')[0];
   const initials = displayName.slice(0, 2).toUpperCase();
-  const { colors, shadows, isDark } = useTheme();
-  const styles = React.useMemo(() => createStyles(colors), [colors]);
+  const { colors, isDark } = useTheme();
+  const styles = React.useMemo(() => createStyles(colors, isDark), [colors, isDark]);
 
 
   const handleAvatarPress = useCallback(() => {
@@ -49,7 +49,7 @@ export const ProfileHeader = memo(function ProfileHeader({
           </View>
         )}
         <View style={styles.editBadge}>
-          <Icon name="camera-outline" size={12} color={colors.white} />
+          <Icon name="camera-outline" size={12} color={isDark ? colors.black : colors.white} />
         </View>
       </Pressable>
 
@@ -75,7 +75,7 @@ export const ProfileHeader = memo(function ProfileHeader({
   );
 });
 
-const createStyles = (c: ThemeColors) => StyleSheet.create({
+const createStyles = (c: ThemeColors, isDark: boolean) => StyleSheet.create({
   container: {
     alignItems: 'center',
     paddingTop: Spacing.xl,
@@ -117,7 +117,7 @@ const createStyles = (c: ThemeColors) => StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 2,
-    borderColor: c.white,
+    borderColor: isDark ? c.background : c.white,
   },
   nameSection: {
     alignItems: 'center',

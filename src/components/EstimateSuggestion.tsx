@@ -18,7 +18,7 @@ export const EstimateSuggestion = memo(function EstimateSuggestion({
   taskTitle,
   userEstimateMinutes,
 }: EstimateSuggestionProps) {
-  const { colors, shadows, isDark } = useTheme();
+  const { colors } = useTheme();
   const styles = React.useMemo(() => createStyles(colors), [colors]);
   const [suggestion, setSuggestion] = useState<{
     avgMinutes: number;

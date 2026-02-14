@@ -89,7 +89,7 @@ export const ZeroStateOnboarding = memo(function ZeroStateOnboarding({
   onSelectTemplate,
   onDismiss,
 }: ZeroStateOnboardingProps) {
-  const { colors, shadows, isDark } = useTheme();
+  const { colors } = useTheme();
   const styles = React.useMemo(() => createStyles(colors), [colors]);
 
   const handleSelectTemplate = useCallback(
@@ -106,7 +106,7 @@ export const ZeroStateOnboarding = memo(function ZeroStateOnboarding({
     >
       {/* Welcome illustration area */}
       <View style={styles.welcomeArea}>
-        <Icon name="checkmark-done-outline" size={48} color={colors.black} />
+        <Icon name="checkmark-done-outline" size={48} color={colors.text} />
         <Text style={styles.welcomeTitle}>Welcome to Tody</Text>
         <Text style={styles.welcomeSubtitle}>
           Start with a template or create from scratch
@@ -182,7 +182,7 @@ const createStyles = (c: ThemeColors) => StyleSheet.create({
   },
   card: {
     width: '100%',
-    backgroundColor: c.white,
+    backgroundColor: c.surface,
     borderWidth: 1,
     borderColor: c.gray200,
     borderRadius: 8,

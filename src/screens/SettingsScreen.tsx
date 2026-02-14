@@ -8,7 +8,7 @@
  * Follows the same ScrollView + section pattern as RealityScoreScreen.
  */
 
-import React, { useState, useCallback, useMemo } from 'react';
+import React, { useState, useCallback } from 'react';
 import {
   View,
   Text,
@@ -57,7 +57,7 @@ const TIME_FORMATS: UserPreferences['timeFormat'][] = ['12h', '24h'];
 const WEEK_STARTS: UserPreferences['weekStartsOn'][] = ['sunday', 'monday'];
 
 export function SettingsScreen({ navigation }: Props) {
-  const { colors, shadows, isDark, toggleTheme } = useTheme();
+  const { colors, isDark, toggleTheme } = useTheme();
   const styles = React.useMemo(() => createStyles(colors), [colors]);
   const insets = useSafeAreaInsets();
   const { logout } = useAuth();

@@ -94,13 +94,11 @@ export function InboxProvider({ children }: { children: React.ReactNode }) {
     return task;
   }, []);
 
-  const deleteInboxTask = useCallback((id: string) => {
-    setInboxTasks(prev => prev.filter(t => t.id !== id));
-  }, []);
-
   const removeInboxTask = useCallback((id: string) => {
     setInboxTasks(prev => prev.filter(t => t.id !== id));
   }, []);
+
+  const deleteInboxTask = removeInboxTask;
 
   const getInboxTask = useCallback((id: string): InboxTask | undefined => {
     return tasksRef.current.find(t => t.id === id);

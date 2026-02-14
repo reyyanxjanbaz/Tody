@@ -17,7 +17,6 @@ import Animated, {
     withSpring,
     withTiming,
     withSequence,
-    withDelay,
     interpolate,
     interpolateColor,
     Extrapolation,
@@ -26,7 +25,7 @@ import Animated, {
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { SPRING_SNAPPY, SPRING_BOUNCY } from '../../utils/animations';
 import { haptic } from '../../utils/haptics';
-import { FontFamily, type ThemeColors } from '../../utils/colors';
+import { type ThemeColors } from '../../utils/colors';
 import { useTheme } from '../../context/ThemeContext';
 
 interface AnimatedCheckboxProps {
@@ -42,7 +41,7 @@ export function AnimatedCheckbox({
     onToggle,
     size = 20,
 }: AnimatedCheckboxProps) {
-    const { colors, shadows, isDark } = useTheme();
+    const { colors, isDark } = useTheme();
     const progress = useSharedValue(checked ? 1 : 0);
     const shakeX = useSharedValue(0);
     const pressScale = useSharedValue(1);

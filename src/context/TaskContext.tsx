@@ -7,7 +7,7 @@ import React, {
   useRef,
 } from 'react';
 import { LayoutAnimation, Platform, UIManager } from 'react-native';
-import { Task, Priority, EnergyLevel, Category, DEFAULT_CATEGORIES } from '../types';
+import { Task, Category, DEFAULT_CATEGORIES } from '../types';
 import {
   saveTasks, getTasks, saveArchivedTasks, getArchivedTasks,
   saveCategories, getCategories, saveActiveCategory, getActiveCategory,
@@ -18,7 +18,7 @@ import { parseTaskInput } from '../utils/taskParser';
 import { initializeOverdueDates, isFullyDecayed } from '../utils/decay';
 import { calculateActualMinutes, isTooShort } from '../utils/timeTracking';
 import { updatePatternsOnCompletion } from '../utils/patternLearning';
-import { getAllDescendantIds, isTaskLocked } from '../utils/dependencyChains';
+import { getAllDescendantIds } from '../utils/dependencyChains';
 
 // Enable LayoutAnimation on Android
 if (Platform.OS === 'android') {

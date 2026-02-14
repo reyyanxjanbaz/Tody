@@ -24,7 +24,7 @@ export const TaskContextMenu = memo(function TaskContextMenu({
   onDelete,
   canAddSubtask,
 }: TaskContextMenuProps) {
-  const { colors, shadows, isDark } = useTheme();
+  const { colors } = useTheme();
   const styles = React.useMemo(() => createStyles(colors), [colors]);
 
   const handleAddSubtask = useCallback(() => {

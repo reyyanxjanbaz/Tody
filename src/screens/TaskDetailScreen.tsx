@@ -34,7 +34,7 @@ import { Spacing, Typography, FontFamily, type ThemeColors } from '../utils/colo
 import { useTheme } from '../context/ThemeContext';
 import { formatMinutes, getElapsedMinutes } from '../utils/timeTracking';
 import { isTaskLocked, getChildren, countDescendants } from '../utils/dependencyChains';
-import { Priority, RootStackParamList, EnergyLevel, Category } from '../types';
+import { Priority, RootStackParamList, EnergyLevel } from '../types';
 import { DeadlineSnapper } from '../components/DeadlineSnapper';
 import { haptic } from '../utils/haptics';
 import {
@@ -53,7 +53,7 @@ type Props = {
 };
 
 export function TaskDetailScreen({ navigation, route }: Props) {
-  const { colors, shadows, isDark } = useTheme();
+  const { colors } = useTheme();
   const styles = React.useMemo(() => createStyles(colors), [colors]);
   const insets = useSafeAreaInsets();
   const {
@@ -308,7 +308,7 @@ export function TaskDetailScreen({ navigation, route }: Props) {
 
           {/* Time Quick Pick (expanded) */}
           {showTimePicker && (
-            <TimeQuickPick value={estimate} onChange={handleEstimateChange} />
+            <TimeQuickPick value={estimate} onChange={handleEstimateChange} onDone={() => setShowTimePicker(false)} />
           )}
 
           {/* Deadline Snapper (expanded) */}
@@ -333,6 +333,11 @@ export function TaskDetailScreen({ navigation, route }: Props) {
                     <Icon name="close-circle" size={20} color={colors.gray400} />
                   </Pressable>
                 )}
+                <Pressable
+                  style={styles.deadlineDoneBtn}
+                  onPress={() => { setShowDeadlinePicker(false); setShowCustomDatePicker(false); }}>
+                  <Text style={styles.deadlineDoneText}>Done</Text>
+                </Pressable>
               </View>
 
               {/* Custom date picker (iOS inline) */}
@@ -662,6 +667,17 @@ const createStyles = (c: ThemeColors) => StyleSheet.create({
   actionText: {
     fontSize: 16,
     fontWeight: '500',
+    color: c.text,
+    fontFamily: FontFamily,
+  },
+  deadlineDoneBtn: {
+    marginLeft: 'auto',
+    paddingVertical: Spacing.xs,
+    paddingHorizontal: Spacing.md,
+  },
+  deadlineDoneText: {
+    fontSize: 15,
+    fontWeight: '600',
     color: c.text,
     fontFamily: FontFamily,
   },

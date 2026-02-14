@@ -211,10 +211,11 @@ const TIME_OPTIONS = [5, 15, 30, 60, 120, 240];
 interface TimeQuickPickProps {
     value: number | null;
     onChange: (minutes: number | null) => void;
+    onDone?: () => void;
 }
 
-export const TimeQuickPick = memo(function TimeQuickPick({ value, onChange }: TimeQuickPickProps) {
-  const { colors, shadows, isDark } = useTheme();
+export const TimeQuickPick = memo(function TimeQuickPick({ value, onChange, onDone }: TimeQuickPickProps) {
+  const { colors } = useTheme();
   const styles = React.useMemo(() => createStyles(colors), [colors]);
     const [showStepper, setShowStepper] = useState(false);
     const isCustom = value != null && value > 0 && !TIME_OPTIONS.includes(value);
@@ -277,11 +278,11 @@ export const TimeQuickPick = memo(function TimeQuickPick({ value, onChange }: Ti
             {showStepper && (
                 <Animated.View entering={FadeIn.duration(150)} exiting={FadeOut.duration(100)} style={styles.stepperRow}>
                     <View style={styles.stepperSide}>
-                        <Pressable onPress={() => adjustBy(-10)} hitSlop={4} style={styles.stepperJumpBtn}>
-                            <Text style={styles.stepperJumpText}>−10</Text>
-                        </Pressable>
                         <Pressable onPress={() => adjustBy(-5)} hitSlop={4} style={styles.stepperJumpBtn}>
                             <Text style={styles.stepperJumpText}>−5</Text>
+                        </Pressable>
+                        <Pressable onPress={() => adjustBy(-10)} hitSlop={4} style={styles.stepperJumpBtn}>
+                            <Text style={styles.stepperJumpText}>−10</Text>
                         </Pressable>
                     </View>
 
@@ -306,6 +307,13 @@ export const TimeQuickPick = memo(function TimeQuickPick({ value, onChange }: Ti
                         </Pressable>
                     </View>
                 </Animated.View>
+            )}
+
+            {/* Done button */}
+            {onDone && (
+                <Pressable onPress={() => { haptic('light'); onDone(); }} style={styles.timePickerDone}>
+                    <Text style={styles.timePickerDoneText}>Done</Text>
+                </Pressable>
             )}
         </Animated.View>
     );
@@ -487,5 +495,17 @@ const createStyles = (c: ThemeColors) => StyleSheet.create({
         color: c.text,
         marginRight: 6,
     fontFamily: FontFamily,
+    },
+    timePickerDone: {
+        alignSelf: 'center',
+        paddingVertical: Spacing.sm,
+        paddingHorizontal: Spacing.xl,
+        marginTop: Spacing.sm,
+    },
+    timePickerDoneText: {
+        fontSize: 15,
+        fontWeight: '600',
+        color: c.text,
+        fontFamily: FontFamily,
     },
 });

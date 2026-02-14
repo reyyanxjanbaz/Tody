@@ -14,7 +14,7 @@
  */
 
 import React, { useCallback } from 'react';
-import { StyleSheet, ViewStyle, StyleProp, Platform } from 'react-native';
+import { StyleSheet, ViewStyle, StyleProp } from 'react-native';
 import Animated, {
     useSharedValue,
     useAnimatedStyle,
@@ -56,7 +56,6 @@ export function AnimatedPressable({
 }: AnimatedPressableProps) {
     const scale = useSharedValue(1);
     const opacity = useSharedValue(1);
-    const pressed = useSharedValue(false);
 
     const fireHaptic = useCallback(
         (type: HapticStyle) => {
@@ -78,7 +77,6 @@ export function AnimatedPressable({
         .maxDuration(10000)
         .onBegin(() => {
             'worklet';
-            pressed.value = true;
             scale.value = withSpring(pressScale, SPRING_SNAPPY);
             opacity.value = withTiming(0.85, TIMING_FADE);
             if (hapticStyle) {
@@ -87,7 +85,6 @@ export function AnimatedPressable({
         })
         .onFinalize((_event, success) => {
             'worklet';
-            pressed.value = false;
             scale.value = withSpring(1, SPRING_SNAPPY);
             opacity.value = withTiming(1, TIMING_FADE);
             if (success) {

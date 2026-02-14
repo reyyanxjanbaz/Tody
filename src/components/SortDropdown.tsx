@@ -36,7 +36,7 @@ export const SortDropdown = memo(function SortDropdown({
   onSelect,
   onClose,
 }: SortDropdownProps) {
-  const { colors, shadows, isDark } = useTheme();
+  const { colors } = useTheme();
   const styles = React.useMemo(() => createStyles(colors), [colors]);
 
   return (
@@ -69,6 +69,12 @@ export const SortDropdown = memo(function SortDropdown({
               </Pressable>
             );
           })}
+          <Pressable
+            style={styles.doneBtn}
+            onPress={() => { haptic('selection'); onClose(); }}
+          >
+            <Text style={styles.doneText}>Done</Text>
+          </Pressable>
         </Animated.View>
       </Pressable>
     </Modal>
@@ -120,6 +126,18 @@ const createStyles = (c: ThemeColors) => StyleSheet.create({
   },
   rowTextActive: {
     color: c.text,
+    fontWeight: '600',
+  },
+  doneBtn: {
+    marginTop: Spacing.md,
+    paddingVertical: Spacing.md,
+    backgroundColor: c.surfaceDark,
+    borderRadius: 10,
+    alignItems: 'center',
+  },
+  doneText: {
+    ...Typography.body,
+    color: c.white,
     fontWeight: '600',
   },
 });

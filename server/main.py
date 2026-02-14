@@ -6,21 +6,24 @@ All endpoints require the user's Supabase JWT in the Authorization header.
 The server validates it and scopes every query to that user.
 """
 
-from fastapi import FastAPI, Depends, HTTPException, Header
+import logging
+
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 
-from db import get_supabase, get_service_client
-from auth import get_current_user_id
+from db import get_service_client
 from routers import tasks, categories, inbox, profile
+
+logger = logging.getLogger(__name__)
 
 # ── App ──────────────────────────────────────────────────────────────────────
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Startup: verify Supabase connection
-    client = get_service_client()
-    print("✓ Connected to Supabase")
+    get_service_client()
+    logger.info("Connected to Supabase")
     yield
 
 app = FastAPI(

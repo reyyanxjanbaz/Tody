@@ -106,7 +106,7 @@ export const TaskInput = memo(function TaskInput({
   defaultCategory,
   categories: catList,
 }: TaskInputProps) {
-  const { colors, shadows, isDark } = useTheme();
+  const { colors } = useTheme();
   const styles = React.useMemo(() => createStyles(colors), [colors]);
   const [value, setValue] = useState('');
   const [category, setCategory] = useState(defaultCategory || 'personal');
@@ -297,7 +297,7 @@ export const TaskInput = memo(function TaskInput({
 
           {/* Expanded time picker */}
           {showTimePicker && (
-            <TimeQuickPick value={estimate} onChange={handleEstimateChange} />
+            <TimeQuickPick value={estimate} onChange={handleEstimateChange} onDone={() => setShowTimePicker(false)} />
           )}
 
           {/* Expanded deadline snapper */}
@@ -331,6 +331,14 @@ export const TaskInput = memo(function TaskInput({
                     <Icon name="close-circle" size={20} color={colors.gray400} />
                   </Pressable>
                 )}
+                <Pressable
+                  style={styles.deadlineDoneBtn}
+                  onPress={() => {
+                    setShowDeadlinePicker(false);
+                    setShowCustomDatePicker(false);
+                  }}>
+                  <Text style={styles.deadlineDoneText}>Done</Text>
+                </Pressable>
               </View>
               {showCustomDatePicker && Platform.OS === 'ios' && (
                 <Animated.View entering={FadeInDown.duration(200)} style={styles.datePickerContainer}>
@@ -477,5 +485,16 @@ const createStyles = (c: ThemeColors) => StyleSheet.create({
     height: 4,
     borderRadius: 2,
     backgroundColor: c.gray200,
+  },
+  deadlineDoneBtn: {
+    marginLeft: 'auto',
+    paddingVertical: Spacing.xs,
+    paddingHorizontal: Spacing.md,
+  },
+  deadlineDoneText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: c.text,
+    fontFamily: FontFamily,
   },
 });

@@ -28,8 +28,8 @@ export const PerformanceFusionSection = memo(function PerformanceFusionSection({
   stats,
   tasks,
 }: PerformanceFusionSectionProps) {
-  const { colors, shadows, isDark } = useTheme();
-  const styles = React.useMemo(() => createStyles(colors), [colors]);
+  const { colors, isDark } = useTheme();
+  const styles = React.useMemo(() => createStyles(colors, isDark), [colors, isDark]);
 
   const realityStats = useMemo(() => calculateUserStats(tasks), [tasks]);
   const recentTasks = useMemo(() => getRecentEstimatedTasks(tasks, 10), [tasks]);
@@ -282,7 +282,7 @@ export const PerformanceFusionSection = memo(function PerformanceFusionSection({
   );
 });
 
-const createStyles = (c: ThemeColors) => StyleSheet.create({
+const createStyles = (c: ThemeColors, isDark: boolean) => StyleSheet.create({
   container: {
     marginHorizontal: Spacing.xxl,
     marginBottom: Spacing.xl,
@@ -292,7 +292,7 @@ const createStyles = (c: ThemeColors) => StyleSheet.create({
     marginBottom: Spacing.md,
   },
   heroCard: {
-    backgroundColor: c.surfaceDark,
+    backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : c.surfaceDark,
     borderRadius: BorderRadius.card,
     padding: Spacing.lg,
     marginBottom: Spacing.sm,
@@ -320,7 +320,7 @@ const createStyles = (c: ThemeColors) => StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: Spacing.xs,
-    backgroundColor: c.gray800,
+    backgroundColor: isDark ? 'rgba(255,255,255,0.12)' : c.gray800,
     paddingHorizontal: Spacing.md,
     paddingVertical: Spacing.sm,
     borderRadius: BorderRadius.pill,

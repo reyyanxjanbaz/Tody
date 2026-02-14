@@ -86,15 +86,6 @@ export interface InboxTask {
   isProcessing?: boolean;
 }
 
-export interface ProcessedTask extends InboxTask {
-  title: string;
-  description?: string;
-  deadline?: number | null;
-  priority: Priority;
-  energyLevel: EnergyLevel;
-  processedAt: number;
-}
-
 export type RootStackParamList = {
   Login: undefined;
   Register: undefined;

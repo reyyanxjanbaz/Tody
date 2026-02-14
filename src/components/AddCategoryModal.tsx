@@ -57,7 +57,7 @@ export const AddCategoryModal = memo(function AddCategoryModal({
   onClose,
   onCreate,
 }: AddCategoryModalProps) {
-  const { colors, shadows, isDark } = useTheme();
+  const { colors } = useTheme();
   const styles = React.useMemo(() => createStyles(colors), [colors]);
   const [name, setName] = useState('');
   const [icon, setIcon] = useState('briefcase-outline');
@@ -165,7 +165,7 @@ const createStyles = (c: ThemeColors) => StyleSheet.create({
   },
   card: {
     width: '88%',
-    backgroundColor: c.white,
+    backgroundColor: c.surface,
     borderRadius: BorderRadius.card,
     paddingVertical: Spacing.xxl,
     paddingHorizontal: Spacing.xxl,

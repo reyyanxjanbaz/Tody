@@ -124,7 +124,7 @@ export const TaskItem = memo(function TaskItem({
   const hasPanned = useSharedValue(false);
 
   // ── Computed ──────────────────────────────────────────────────────────
-  const { colors, shadows, isDark } = useTheme();
+  const { colors, isDark } = useTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
 
   const PRIORITY_COLORS: Record<Priority, string> = useMemo(() => ({

@@ -29,7 +29,7 @@ const CHART_WIDTH = SCREEN_WIDTH - Spacing.lg * 4;
 const CHART_HEIGHT = 150;
 
 export function RealityScoreScreen({ navigation }: Props) {
-  const { colors, shadows, isDark } = useTheme();
+  const { colors } = useTheme();
   const styles = React.useMemo(() => createStyles(colors), [colors]);
   const insets = useSafeAreaInsets();
   const { tasks, archivedTasks } = useTasks();
@@ -241,7 +241,7 @@ export function RealityScoreScreen({ navigation }: Props) {
 const createStyles = (c: ThemeColors) => StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: c.white,
+    backgroundColor: c.background,
   },
   header: {
     flexDirection: 'row',

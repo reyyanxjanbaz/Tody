@@ -57,7 +57,7 @@ function getBentoSize(text: string): { colSpan: 1 | 2; minH: number } {
 }
 
 export function ProcessInboxScreen({ navigation }: Props) {
-  const { colors, shadows, isDark } = useTheme();
+  const { colors } = useTheme();
   const styles = React.useMemo(() => createStyles(colors), [colors]);
   const insets = useSafeAreaInsets();
   const { inboxTasks, captureTask, deleteInboxTask, removeInboxTask } = useInbox();
@@ -109,11 +109,6 @@ export function ProcessInboxScreen({ navigation }: Props) {
     setEnergyLevel('medium');
     setDeadline(null);
   }, []);
-
-  const goToNext = useCallback(() => {
-    resetForm();
-    setCurrentIndex(prev => Math.min(prev, inboxTasks.length - 1));
-  }, [resetForm, inboxTasks.length]);
 
   const goToPrev = useCallback(() => {
     resetForm();
@@ -228,10 +223,6 @@ export function ProcessInboxScreen({ navigation }: Props) {
       return Math.min(prev, inboxTasks.length - 2);
     });
   }, [activeTask, deleteInboxTask, resetForm, inboxTasks.length]);
-
-  const handleNext = useCallback(() => {
-    goNext();
-  }, [goNext]);
 
   // Add memo handlers
   const handleOpenAddMemo = useCallback(() => {

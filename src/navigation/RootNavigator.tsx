@@ -13,7 +13,7 @@ import { RealityScoreScreen } from '../screens/RealityScoreScreen';
 import { ProfileScreen } from '../screens/ProfileScreen';
 import { SettingsScreen } from '../screens/SettingsScreen';
 import { RootStackParamList } from '../types';
-import { FontFamily, type ThemeColors } from '../utils/colors';
+import { type ThemeColors } from '../utils/colors';
 import { useTheme } from '../context/ThemeContext';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -49,7 +49,7 @@ const DETAIL_SCREEN_OPTIONS = {
 };
 
 export function RootNavigator() {
-  const { colors, shadows, isDark } = useTheme();
+  const { colors } = useTheme();
   const styles = React.useMemo(() => createStyles(colors), [colors]);
   const { user, isLoading } = useAuth();
 

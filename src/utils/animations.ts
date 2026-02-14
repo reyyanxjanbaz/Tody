@@ -14,7 +14,7 @@ import { Easing, WithSpringConfig, WithTimingConfig } from 'react-native-reanima
 // ── Spring Presets ──────────────────────────────────────────────────────────
 
 /** Default iOS-like spring for most UI elements */
-export const SPRING_CONFIG: WithSpringConfig = {
+const SPRING_CONFIG: WithSpringConfig = {
     damping: 15,
     stiffness: 150,
     mass: 1,
@@ -30,7 +30,7 @@ export const SPRING_SNAPPY: WithSpringConfig = {
 };
 
 /** Gentle spring for modals, overlays, page-level movements */
-export const SPRING_GENTLE: WithSpringConfig = {
+const SPRING_GENTLE: WithSpringConfig = {
     damping: 18,
     stiffness: 120,
     mass: 1,
@@ -56,31 +56,31 @@ export const SPRING_CRITICAL: WithSpringConfig = {
 // ── Timing Presets ──────────────────────────────────────────────────────────
 
 /** Micro-interaction: 200ms easeInOutCubic */
-export const TIMING_MICRO: WithTimingConfig = {
+const TIMING_MICRO: WithTimingConfig = {
     duration: 200,
     easing: Easing.bezier(0.65, 0, 0.35, 1),
 };
 
 /** Standard transition: 300ms easeInOutCubic */
-export const TIMING_TRANSITION: WithTimingConfig = {
+const TIMING_TRANSITION: WithTimingConfig = {
     duration: 300,
     easing: Easing.bezier(0.65, 0, 0.35, 1),
 };
 
 /** Page-level transition: 400ms easeInOutCubic */
-export const TIMING_PAGE: WithTimingConfig = {
+const TIMING_PAGE: WithTimingConfig = {
     duration: 400,
     easing: Easing.bezier(0.65, 0, 0.35, 1),
 };
 
 /** Exit animation: 250ms easeOutExpo */
-export const TIMING_EXIT: WithTimingConfig = {
+const TIMING_EXIT: WithTimingConfig = {
     duration: 250,
     easing: Easing.bezier(0.16, 1, 0.3, 1),
 };
 
 /** Enter animation: 350ms easeOutExpo */
-export const TIMING_ENTER: WithTimingConfig = {
+const TIMING_ENTER: WithTimingConfig = {
     duration: 350,
     easing: Easing.bezier(0.16, 1, 0.3, 1),
 };
@@ -100,7 +100,7 @@ export const FLING_VELOCITY = 500;
 export const SWIPE_THRESHOLD = 80;
 
 /** Long-press activation delay (ms) */
-export const LONG_PRESS_DURATION = 350;
+const LONG_PRESS_DURATION = 350;
 
 // ── Stagger ─────────────────────────────────────────────────────────────────
 
@@ -116,9 +116,9 @@ export const STAGGER_MAX = 12;
 export const PRESS_SCALE = 0.95;
 
 /** Delay before showing press state to avoid flashing (ms) */
-export const PRESS_DELAY = 60;
+const PRESS_DELAY = 60;
 
 // ── Layout Animation ────────────────────────────────────────────────────────
 
 /** Shared layout transition duration */
-export const LAYOUT_DURATION = 300;
+const LAYOUT_DURATION = 300;

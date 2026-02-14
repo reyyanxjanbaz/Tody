@@ -33,7 +33,7 @@ interface RealityScoreSectionProps {
 export const RealityScoreSection = memo(function RealityScoreSection({
   tasks,
 }: RealityScoreSectionProps) {
-  const { colors, shadows, isDark } = useTheme();
+  const { colors } = useTheme();
   const styles = React.useMemo(() => createStyles(colors), [colors]);
 
   const stats = useMemo(() => calculateUserStats(tasks), [tasks]);

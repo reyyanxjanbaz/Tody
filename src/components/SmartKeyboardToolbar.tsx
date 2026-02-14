@@ -51,7 +51,7 @@ export const SmartKeyboardToolbar = memo(function SmartKeyboardToolbar({
   onInsertNumberedList,
   onInsertLineBreak,
 }: SmartKeyboardToolbarProps) {
-  const { colors, shadows, isDark } = useTheme();
+  const { colors } = useTheme();
   const styles = React.useMemo(() => createStyles(colors), [colors]);
 
   const buttons = useMemo((): ToolbarButton[] => {

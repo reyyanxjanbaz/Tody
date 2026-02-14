@@ -32,8 +32,8 @@ export const CategoryTabs = memo(function CategoryTabs({
 }: TabManagerProps) {
   const scrollRef = useRef<ScrollView>(null);
 
-  const { colors, shadows, isDark } = useTheme();
-  const styles = React.useMemo(() => createStyles(colors), [colors]);
+  const { colors, isDark } = useTheme();
+  const styles = React.useMemo(() => createStyles(colors, isDark), [colors, isDark]);
 
   const sorted = [...categories].sort((a, b) => a.order - b.order);
 
@@ -109,7 +109,7 @@ export const CategoryTabs = memo(function CategoryTabs({
 
 // ── Styles ───────────────────────────────────────────────────────────────────
 
-const createStyles = (c: ThemeColors) => StyleSheet.create({
+const createStyles = (c: ThemeColors, isDark: boolean) => StyleSheet.create({
   container: {
     backgroundColor: c.background,
     paddingTop: Spacing.sm,
@@ -177,13 +177,13 @@ const createStyles = (c: ThemeColors) => StyleSheet.create({
     gap: 4,
     paddingVertical: 6,
     paddingHorizontal: Spacing.md,
-    backgroundColor: c.surfaceDark,
+    backgroundColor: isDark ? 'rgba(255,255,255,0.12)' : c.surfaceDark,
     borderRadius: 999,
     borderWidth: 1,
-    borderColor: c.gray800,
+    borderColor: isDark ? 'rgba(255,255,255,0.2)' : c.gray800,
   },
   sortFabActive: {
-    backgroundColor: c.black,
+    backgroundColor: isDark ? 'rgba(255,255,255,0.25)' : c.black,
   },
   sortFabText: {
     fontSize: 12,
