@@ -287,13 +287,13 @@ export const TimeQuickPick = memo(function TimeQuickPick({ value, onChange }: Ti
 
                     <View style={styles.stepperCenter}>
                         <Pressable onPress={() => adjustBy(-1)} hitSlop={8} style={styles.stepperBtn}>
-                            <Icon name="remove-circle" size={32} color={colors.gray400} />
+                            <Icon name="remove-circle" size={32} color={colors.gray500} />
                         </Pressable>
                         <View style={styles.stepperDisplay}>
                             <Text style={styles.stepperValue}>{formatMinutes(currentVal)}</Text>
                         </View>
                         <Pressable onPress={() => adjustBy(1)} hitSlop={8} style={styles.stepperBtn}>
-                            <Icon name="add-circle" size={32} color={colors.surfaceDark} />
+                            <Icon name="add-circle" size={32} color={colors.gray500} />
                         </Pressable>
                     </View>
 

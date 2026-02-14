@@ -59,7 +59,6 @@ export interface UserStats {
 export interface User {
   id: string;
   email: string;
-  token: string;
 }
 
 export interface AuthState {

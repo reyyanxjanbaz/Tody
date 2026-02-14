@@ -136,7 +136,7 @@ const createStyles = (c: ThemeColors) => StyleSheet.create({
   },
   dropdown: {
     width: '72%',
-    backgroundColor: c.white,
+    backgroundColor: c.surface,
     borderRadius: 16,
     paddingVertical: Spacing.md,
     paddingHorizontal: Spacing.sm,
@@ -145,6 +145,8 @@ const createStyles = (c: ThemeColors) => StyleSheet.create({
     shadowOpacity: 0.15,
     shadowRadius: 24,
     elevation: 12,
+    borderWidth: 1,
+    borderColor: c.border,
   },
   dropdownTitle: {
     fontSize: 13,

@@ -326,7 +326,7 @@ const createStyles = (c: ThemeColors) => StyleSheet.create({
         zIndex: 100,
     },
     topSpacer: {
-        flex: 1,
+        flex: 0.6,
     },
     timeContainer: {
         marginTop: 80,

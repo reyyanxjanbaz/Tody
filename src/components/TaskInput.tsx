@@ -427,7 +427,7 @@ const createStyles = (c: ThemeColors) => StyleSheet.create({
     height: 30,
     borderRadius: 15,
     borderWidth: 1,
-    borderColor: c.gray200,
+    borderColor: c.gray400,
     backgroundColor: c.gray50,
     justifyContent: 'center',
     alignItems: 'center',

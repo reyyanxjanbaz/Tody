@@ -121,6 +121,7 @@ export const TaskItem = memo(function TaskItem({
   const translateX = useSharedValue(0);
   const pressScale = useSharedValue(1);
   const hasPassedThreshold = useSharedValue(false);
+  const hasPanned = useSharedValue(false);
 
   // ── Computed ──────────────────────────────────────────────────────────
   const { colors, shadows, isDark } = useTheme();
@@ -226,9 +227,17 @@ export const TaskItem = memo(function TaskItem({
     .enabled(!task.isCompleted)
     .activeOffsetX([-15, 15])
     .failOffsetY([-10, 10])
+    .onStart(() => {
+      'worklet';
+      hasPanned.value = false;
+    })
     .onUpdate((e) => {
       'worklet';
       translateX.value = e.translationX;
+
+      if (Math.abs(e.translationX) > 8) {
+        hasPanned.value = true;
+      }
 
       const crossedRight = e.translationX > SWIPE_THRESHOLD;
       const crossedLeft = e.translationX < -SWIPE_THRESHOLD;
@@ -267,7 +276,7 @@ export const TaskItem = memo(function TaskItem({
     .onFinalize((_e, success) => {
       'worklet';
       pressScale.value = withSpring(1, SPRING_SNAPPY);
-      if (success) {
+      if (success && !hasPanned.value) {
         runOnJS(handlePress)();
       }
     });
@@ -530,7 +539,7 @@ const createStyles = (c: ThemeColors) => StyleSheet.create({
   },
   leftActionBg: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: c.gray800,
+    backgroundColor: '#2A2A2A',
     justifyContent: 'center',
     alignItems: 'flex-start',
     paddingLeft: 24,
@@ -538,17 +547,17 @@ const createStyles = (c: ThemeColors) => StyleSheet.create({
   },
   rightActionBg: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: c.surfaceDark,
+    backgroundColor: '#1A1A1A',
     justifyContent: 'center',
     alignItems: 'flex-end',
     paddingRight: 24,
     zIndex: 0,
   },
   swipeActionText: {
-    color: c.white,
-    fontSize: 11,
-    fontWeight: '700',
-    letterSpacing: 1.5,
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '800',
+    letterSpacing: 2,
     fontFamily: FontFamily,
   },
   priorityBar: {
@@ -572,7 +581,7 @@ const createStyles = (c: ThemeColors) => StyleSheet.create({
   },
   title: {
     fontSize: 16,
-    fontWeight: '400',
+    fontWeight: '700',
     color: c.text,
     fontFamily: FontFamily,
   },

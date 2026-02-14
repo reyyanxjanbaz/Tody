@@ -6,8 +6,8 @@ import React, {
   useEffect,
 } from 'react';
 import { AuthState, User } from '../types';
-import { saveUser, getUser, removeUser, clearAll } from '../utils/storage';
-import { generateId } from '../utils/id';
+import { supabase } from '../lib/supabase';
+import { clearAll } from '../utils/storage';
 
 // ── Actions ──────────────────────────────────────────────────────────────────
 
@@ -72,72 +72,104 @@ function validateFields(
   return null;
 }
 
+/**
+ * Map a Supabase auth user to the app's User type.
+ */
+function toAppUser(supabaseUser: { id: string; email?: string }): User {
+  return {
+    id: supabaseUser.id,
+    email: supabaseUser.email ?? '',
+  };
+}
+
 // ── Provider ─────────────────────────────────────────────────────────────────
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [state, dispatch] = useReducer(authReducer, INITIAL);
 
-  // Restore session on mount
+  // Restore session on mount & listen for auth state changes
   useEffect(() => {
-    (async () => {
-      try {
-        const user = await getUser<User>();
-        if (user) {
-          dispatch({ type: 'SET_USER', payload: user });
-        } else {
-          dispatch({ type: 'SET_LOADING', payload: false });
-        }
-      } catch {
+    // 1. Check for an existing session
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session?.user) {
+        dispatch({ type: 'SET_USER', payload: toAppUser(session.user) });
+      } else {
         dispatch({ type: 'SET_LOADING', payload: false });
       }
-    })();
+    });
+
+    // 2. Subscribe to future auth changes (token refresh, sign-out from another tab, etc.)
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      (_event, session) => {
+        if (session?.user) {
+          dispatch({ type: 'SET_USER', payload: toAppUser(session.user) });
+        } else {
+          dispatch({ type: 'LOGOUT' });
+        }
+      },
+    );
+
+    return () => {
+      subscription.unsubscribe();
+    };
   }, []);
 
   const login = useCallback(async (email: string, password: string) => {
     dispatch({ type: 'SET_LOADING', payload: true });
 
-    const error = validateFields(email, password);
-    if (error) {
-      dispatch({ type: 'SET_ERROR', payload: error });
+    const validationError = validateFields(email, password);
+    if (validationError) {
+      dispatch({ type: 'SET_ERROR', payload: validationError });
       return;
     }
 
-    // Simulate network call
-    await new Promise<void>(r => setTimeout(r, 400));
-
-    const user: User = {
-      id: generateId(),
+    const { error } = await supabase.auth.signInWithPassword({
       email: email.toLowerCase().trim(),
-      token: generateId(),
-    };
+      password,
+    });
 
-    await saveUser(user);
-    dispatch({ type: 'SET_USER', payload: user });
+    if (error) {
+      dispatch({ type: 'SET_ERROR', payload: error.message });
+      return;
+    }
+
+    // The onAuthStateChange listener will dispatch SET_USER automatically.
   }, []);
 
   const register = useCallback(async (email: string, password: string) => {
     dispatch({ type: 'SET_LOADING', payload: true });
 
-    const error = validateFields(email, password);
-    if (error) {
-      dispatch({ type: 'SET_ERROR', payload: error });
+    const validationError = validateFields(email, password);
+    if (validationError) {
+      dispatch({ type: 'SET_ERROR', payload: validationError });
       return;
     }
 
-    // Simulate network call
-    await new Promise<void>(r => setTimeout(r, 600));
-
-    const user: User = {
-      id: generateId(),
+    const { data, error } = await supabase.auth.signUp({
       email: email.toLowerCase().trim(),
-      token: generateId(),
-    };
+      password,
+    });
 
-    await saveUser(user);
-    dispatch({ type: 'SET_USER', payload: user });
+    if (error) {
+      dispatch({ type: 'SET_ERROR', payload: error.message });
+      return;
+    }
+
+    // Supabase may require email confirmation. If the user object is returned
+    // but has no session, it means email confirmation is pending.
+    if (data.user && !data.session) {
+      dispatch({
+        type: 'SET_ERROR',
+        payload: 'Check your email for a confirmation link',
+      });
+      return;
+    }
+
+    // The onAuthStateChange listener will dispatch SET_USER automatically.
   }, []);
 
   const logout = useCallback(async () => {
+    await supabase.auth.signOut();
     await clearAll();
     dispatch({ type: 'LOGOUT' });
   }, []);

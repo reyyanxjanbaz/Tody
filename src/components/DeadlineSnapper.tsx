@@ -221,14 +221,14 @@ const createStyles = (c: ThemeColors) => StyleSheet.create({
     alignItems: 'center',
     height: 28,
     paddingHorizontal: 10,
-    backgroundColor: c.white,
+    backgroundColor: c.surface,
     borderWidth: 1,
-    borderColor: c.black,
+    borderColor: c.gray400,
     borderRadius: 14,
   },
   chipSelected: {
-    backgroundColor: c.black,
-    borderColor: c.black,
+    backgroundColor: c.text,
+    borderColor: c.text,
   },
   chipIcon: {
     marginRight: 4,
@@ -236,10 +236,10 @@ const createStyles = (c: ThemeColors) => StyleSheet.create({
   chipText: {
     fontSize: 12,
     fontWeight: '500',
-    color: c.black,
+    color: c.text,
     fontFamily: FontFamily,
   },
   chipTextSelected: {
-    color: c.white,
+    color: c.background,
   },
 });

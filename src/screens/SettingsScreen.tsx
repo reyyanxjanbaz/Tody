@@ -34,6 +34,7 @@ import {
   saveUserPreferences,
   getUserPreferences,
 } from '../utils/storage';
+import { supabase } from '../lib/supabase';
 import { Spacing, Typography, BorderRadius, FontFamily, type ThemeColors } from '../utils/colors';
 import { useTheme } from '../context/ThemeContext';
 import { haptic } from '../utils/haptics';
@@ -94,22 +95,26 @@ export function SettingsScreen({ navigation }: Props) {
     await logout();
   }, [logout]);
 
-  const handleChangePassword = useCallback(() => {
-    if (!currentPw.trim() || !newPw.trim()) {
-      setPwMessage('Both fields are required');
+  const handleChangePassword = useCallback(async () => {
+    if (!newPw.trim()) {
+      setPwMessage('New password is required');
       return;
     }
     if (newPw.length < 6) {
       setPwMessage('New password must be at least 6 characters');
       return;
     }
-    // Simulated — no real backend
+    const { error } = await supabase.auth.updateUser({ password: newPw });
+    if (error) {
+      setPwMessage(error.message);
+      return;
+    }
     haptic('success');
     setPwMessage('Password updated');
     setCurrentPw('');
     setNewPw('');
     setTimeout(() => setPwMessage(''), 3000);
-  }, [currentPw, newPw]);
+  }, [newPw]);
 
   const handleDeleteAccount = useCallback(() => {
     setShowDeleteModal(true);
@@ -118,6 +123,10 @@ export function SettingsScreen({ navigation }: Props) {
   const confirmDeleteAccount = useCallback(async () => {
     haptic('heavy');
     setShowDeleteModal(false);
+    // Note: account deletion via the client SDK requires the user to be
+    // authenticated. For full deletion (removing the auth.users row),
+    // you will need a Supabase Edge Function or service-role call.
+    // For now we sign the user out and clear local data.
     await logout();
   }, [logout]);
 
