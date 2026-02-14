@@ -312,12 +312,12 @@ export const TaskInput = memo(function TaskInput({
               />
               <View style={styles.deadlineActionsRow}>
                 <Pressable
-                  style={[styles.deadlinePlusBtn, showCustomDatePicker && styles.deadlinePlusBtnActive]}
+                  style={styles.deadlinePlusBtn}
                   onPress={handleOpenCustomDate}>
                   <Icon
-                    name={showCustomDatePicker ? 'close' : 'add'}
+                    name="add"
                     size={16}
-                    color={showCustomDatePicker ? colors.white : colors.gray500}
+                    color={colors.gray500}
                   />
                 </Pressable>
                 {deadline != null && (

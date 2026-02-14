@@ -27,10 +27,10 @@ import { isTaskLocked, getChildren } from '../utils/dependencyChains';
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 interface FocusModeProps {
-    visible: boolean;
     tasks: Task[];
     allTasks: Task[];
     onComplete: (id: string) => void;
+    onCompleteSubtask: (id: string) => void;
     onExit: () => void;
 }
 
@@ -48,10 +48,10 @@ const PRIORITY_COLORS: Record<Priority, string> = {
  * Spring-based slide transitions, haptic on complete.
  */
 export const FocusMode = memo(function FocusMode({
-    visible,
     tasks,
     allTasks,
     onComplete,
+    onCompleteSubtask,
     onExit,
 }: FocusModeProps) {
     const { colors } = useTheme();
@@ -61,8 +61,6 @@ export const FocusMode = memo(function FocusMode({
     const [direction, setDirection] = useState<'next' | 'prev'>('next');
     // Key to force re-mount of card for entering/exiting animations
     const [cardKey, setCardKey] = useState(0);
-    // Reveal subtask checklist when user tries to complete a locked task
-    const [showSubtasks, setShowSubtasks] = useState(false);
     // Shake feedback for locked attempt
     const lockShake = useSharedValue(0);
 
@@ -98,7 +96,6 @@ export const FocusMode = memo(function FocusMode({
             setDirection(dir);
             setCardKey(k => k + 1);
             setCurrentIndex(nextIndex);
-            setShowSubtasks(false);
         },
         [],
     );
@@ -112,7 +109,6 @@ export const FocusMode = memo(function FocusMode({
             lockShake.value = withSpring(1, SPRING_SNAPPY, () => {
                 lockShake.value = withSpring(0, SPRING_SNAPPY);
             });
-            setShowSubtasks(true);
             return;
         }
         haptic('success');
@@ -128,7 +124,6 @@ export const FocusMode = memo(function FocusMode({
         if (currentIndex < focusTasks.length - 1) {
             haptic('light');
             advanceCard('next', currentIndex + 1);
-            setShowSubtasks(false);
         }
     }, [currentIndex, focusTasks.length, advanceCard]);
 
@@ -136,7 +131,6 @@ export const FocusMode = memo(function FocusMode({
         if (currentIndex > 0) {
             haptic('light');
             advanceCard('prev', currentIndex - 1);
-            setShowSubtasks(false);
         }
     }, [currentIndex, advanceCard]);
 
@@ -149,8 +143,6 @@ export const FocusMode = memo(function FocusMode({
         );
         return { transform: [{ translateX }] };
     });
-
-    if (!visible) return null;
 
     // Format current time
     const now = new Date();
@@ -292,45 +284,54 @@ export const FocusMode = memo(function FocusMode({
                             </View>
                         )}
 
-                        {/* Expandable subtask checklist (revealed when user tries to complete locked task) */}
-                        {showSubtasks && hasChildren && (
-                            <Animated.View
-                                entering={FadeInDown.duration(250)}
-                                style={styles.subtaskChecklist}>
+                        {/* Subtask checklist (always visible, tappable to complete) */}
+                        {hasChildren && (
+                            <View style={styles.subtaskChecklist}>
                                 <Text style={styles.subtaskChecklistTitle}>
-                                    Complete these first
+                                    Subtasks
                                 </Text>
                                 <ScrollView
                                     style={styles.subtaskScrollView}
                                     nestedScrollEnabled
                                     showsVerticalScrollIndicator={false}>
                                     {children.map(child => (
-                                        <View key={child.id} style={styles.subtaskRow}>
-                                            <View style={[
-                                                styles.subtaskCheckbox,
-                                                child.isCompleted && styles.subtaskCheckboxDone,
-                                            ]}>
-                                                {child.isCompleted && (
-                                                    <Icon name="checkmark" size={10} color={colors.surfaceDark} />
+                                        <AnimatedPressable
+                                            key={child.id}
+                                            onPress={() => {
+                                                if (!child.isCompleted) {
+                                                    haptic('success');
+                                                    onCompleteSubtask(child.id);
+                                                }
+                                            }}
+                                            disabled={child.isCompleted}
+                                            hapticStyle={null}>
+                                            <View style={styles.subtaskRow}>
+                                                <View style={[
+                                                    styles.subtaskCheckbox,
+                                                    child.isCompleted && styles.subtaskCheckboxDone,
+                                                ]}>
+                                                    {child.isCompleted && (
+                                                        <Icon name="checkmark" size={10} color={colors.surfaceDark} />
+                                                    )}
+                                                </View>
+                                                <Text
+                                                    style={[
+                                                        styles.subtaskName,
+                                                        child.isCompleted && styles.subtaskNameDone,
+                                                    ]}
+                                                    numberOfLines={1}>
+                                                    {child.title}
+                                                </Text>
+                                                {child.isCompleted ? (
+                                                    <Icon name="checkmark-circle" size={14} color="#22C55E" />
+                                                ) : (
+                                                    <Icon name="ellipse-outline" size={14} color="rgba(255,255,255,0.25)" />
                                                 )}
                                             </View>
-                                            <Text
-                                                style={[
-                                                    styles.subtaskName,
-                                                    child.isCompleted && styles.subtaskNameDone,
-                                                ]}
-                                                numberOfLines={1}>
-                                                {child.title}
-                                            </Text>
-                                            {child.isCompleted ? (
-                                                <Icon name="checkmark-circle" size={14} color="#22C55E" />
-                                            ) : (
-                                                <Icon name="ellipse-outline" size={14} color="rgba(255,255,255,0.25)" />
-                                            )}
-                                        </View>
+                                        </AnimatedPressable>
                                     ))}
                                 </ScrollView>
-                            </Animated.View>
+                            </View>
                         )}
 
                         {/* Deadline */}

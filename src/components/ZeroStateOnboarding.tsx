@@ -107,7 +107,7 @@ export const ZeroStateOnboarding = memo(function ZeroStateOnboarding({
       {/* Welcome illustration area */}
       <View style={styles.welcomeArea}>
         <Icon name="checkmark-done-outline" size={48} color={colors.text} />
-        <Text style={styles.welcomeTitle}>Welcome to Tody</Text>
+        <Text style={styles.welcomeTitle}>Welcome to ToDy</Text>
         <Text style={styles.welcomeSubtitle}>
           Start with a template or create from scratch
         </Text>

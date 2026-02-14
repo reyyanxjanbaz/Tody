@@ -131,11 +131,11 @@ export function HomeScreen({ navigation }: Props) {
 
     // ── Personalized title ────────────────────────────────────────────────
     const personalTitle = useMemo(() => {
-        if (!user?.email) return 'Tody';
+        if (!user?.email) return 'ToDy';
         const name = user.email.split('@')[0];
         // Capitalize first letter
         const displayName = name.charAt(0).toUpperCase() + name.slice(1);
-        return `${displayName}'s Tody`;
+        return `${displayName}'s ToDy`;
     }, [user?.email]);
 
     // ── Lock state map (computed) ──────────────────────────────────────────────
@@ -879,13 +879,15 @@ export function HomeScreen({ navigation }: Props) {
             </Modal>
 
             {/* Focus Mode Overlay */}
-            <FocusMode
-                visible={isFocusMode}
-                tasks={focusTasks}
-                allTasks={tasks}
-                onComplete={handleCompleteWithLockCheck}
-                onExit={() => setIsFocusMode(false)}
-            />
+            {isFocusMode && (
+                <FocusMode
+                    tasks={focusTasks}
+                    allTasks={tasks}
+                    onComplete={handleCompleteWithLockCheck}
+                    onCompleteSubtask={handleCompleteWithLockCheck}
+                    onExit={() => setIsFocusMode(false)}
+                />
+            )}
 
             {/* Category Modals */}
             <AddCategoryModal

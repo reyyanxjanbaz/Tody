@@ -34,6 +34,46 @@ function isValidUUID(str: string): boolean {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str);
 }
 
+// ── Retry helper ────────────────────────────────────────────────────────────
+
+const MAX_RETRIES = 3;
+const INITIAL_DELAY_MS = 500;
+
+/** Return true when the error looks like a transient network problem. */
+function isNetworkError(err: unknown): boolean {
+  if (err instanceof TypeError && /network request failed/i.test(err.message)) {
+    return true;
+  }
+  if (typeof err === 'object' && err !== null && 'message' in err) {
+    const msg = (err as { message: string }).message;
+    return /network request failed|fetch failed|aborted|timeout|ECONNRESET/i.test(msg);
+  }
+  return false;
+}
+
+/**
+ * Execute `fn` up to MAX_RETRIES times with exponential back-off when it
+ * throws a transient network error.  Non-network errors are re-thrown
+ * immediately so callers still see e.g. RLS or validation errors.
+ */
+async function withRetry<T>(label: string, fn: () => PromiseLike<T>): Promise<T> {
+  let attempt = 0;
+  while (true) {
+    try {
+      return await Promise.resolve(fn());
+    } catch (err) {
+      attempt++;
+      if (isNetworkError(err) && attempt < MAX_RETRIES) {
+        const delay = INITIAL_DELAY_MS * Math.pow(2, attempt - 1);
+        log(`${label}: network error, retrying in ${delay}ms (attempt ${attempt}/${MAX_RETRIES})`);
+        await new Promise<void>(resolve => setTimeout(resolve, delay));
+      } else {
+        throw err;
+      }
+    }
+  }
+}
+
 // ── Timestamp helpers ───────────────────────────────────────────────────────
 
 /** epoch ms → ISO string  (null-safe) */
@@ -359,52 +399,62 @@ export async function pushTasks(
   const CHUNK = 200;
   for (let i = 0; i < rows.length; i += CHUNK) {
     const chunk = rows.slice(i, i + CHUNK);
-    const { error } = await supabase
-      .from('tasks')
-      .upsert(chunk as any, { onConflict: 'id' });
-
-    if (error) {
-      logError(`pushTasks chunk ${i}-${i + chunk.length} failed:`, error.message);
+    try {
+      const { error } = await withRetry(`pushTasks[${i}]`, () =>
+        supabase.from('tasks').upsert(chunk as any, { onConflict: 'id' }),
+      );
+      if (error) {
+        logError(`pushTasks chunk ${i}-${i + chunk.length} failed:`, error.message);
+      }
+    } catch (e: any) {
+      logError(`pushTasks chunk ${i}-${i + chunk.length} failed after retries:`, e?.message ?? e);
     }
   }
 
   log(`Pushed ${rows.length} tasks`);
 }
 
-/** Push a single task to Supabase (upsert). Fire-and-forget. */
+/** Push a single task to Supabase (upsert). Retries on transient network errors. */
 export async function upsertTask(task: Task, userId: string, catMap: CategoryMap): Promise<void> {
   const row = taskToDbRow(task, userId, catMap);
-  const { error } = await supabase
-    .from('tasks')
-    .upsert(row as any, { onConflict: 'id' });
-
-  if (error) {
-    logError('upsertTask failed:', error.message);
+  try {
+    const { error } = await withRetry('upsertTask', () =>
+      supabase.from('tasks').upsert(row as any, { onConflict: 'id' }),
+    );
+    if (error) {
+      logError('upsertTask failed:', error.message);
+    }
+  } catch (e: any) {
+    logError('upsertTask failed after retries:', e?.message ?? e);
   }
 }
 
 /** Delete a task from Supabase. */
 export async function deleteTaskFromDb(taskId: string): Promise<void> {
-  const { error } = await supabase
-    .from('tasks')
-    .delete()
-    .eq('id', taskId);
-
-  if (error) {
-    logError('deleteTaskFromDb failed:', error.message);
+  try {
+    const { error } = await withRetry('deleteTaskFromDb', () =>
+      supabase.from('tasks').delete().eq('id', taskId),
+    );
+    if (error) {
+      logError('deleteTaskFromDb failed:', error.message);
+    }
+  } catch (e: any) {
+    logError('deleteTaskFromDb failed after retries:', e?.message ?? e);
   }
 }
 
 /** Delete multiple tasks from Supabase. */
 export async function deleteTasksFromDb(taskIds: string[]): Promise<void> {
   if (taskIds.length === 0) return;
-  const { error } = await supabase
-    .from('tasks')
-    .delete()
-    .in('id', taskIds);
-
-  if (error) {
-    logError('deleteTasksFromDb failed:', error.message);
+  try {
+    const { error } = await withRetry('deleteTasksFromDb', () =>
+      supabase.from('tasks').delete().in('id', taskIds),
+    );
+    if (error) {
+      logError('deleteTasksFromDb failed:', error.message);
+    }
+  } catch (e: any) {
+    logError('deleteTasksFromDb failed after retries:', e?.message ?? e);
   }
 }
 
@@ -448,7 +498,7 @@ export async function pushInboxTasks(tasks: InboxTask[], userId: string): Promis
   }
 }
 
-/** Upsert a single inbox task. */
+/** Upsert a single inbox task. Retries on transient network errors. */
 export async function upsertInboxTask(task: InboxTask, userId: string): Promise<void> {
   const row = {
     id: task.id,
@@ -456,24 +506,29 @@ export async function upsertInboxTask(task: InboxTask, userId: string): Promise<
     raw_text: task.rawText,
     captured_at: toISO(task.capturedAt) || new Date().toISOString(),
   };
-  const { error } = await supabase
-    .from('inbox_tasks')
-    .upsert(row, { onConflict: 'id' });
-
-  if (error) {
-    logError('upsertInboxTask failed:', error.message);
+  try {
+    const { error } = await withRetry('upsertInboxTask', () =>
+      supabase.from('inbox_tasks').upsert(row, { onConflict: 'id' }),
+    );
+    if (error) {
+      logError('upsertInboxTask failed:', error.message);
+    }
+  } catch (e: any) {
+    logError('upsertInboxTask failed after retries:', e?.message ?? e);
   }
 }
 
 /** Delete an inbox task from Supabase. */
 export async function deleteInboxTaskFromDb(taskId: string): Promise<void> {
-  const { error } = await supabase
-    .from('inbox_tasks')
-    .delete()
-    .eq('id', taskId);
-
-  if (error) {
-    logError('deleteInboxTaskFromDb failed:', error.message);
+  try {
+    const { error } = await withRetry('deleteInboxTaskFromDb', () =>
+      supabase.from('inbox_tasks').delete().eq('id', taskId),
+    );
+    if (error) {
+      logError('deleteInboxTaskFromDb failed:', error.message);
+    }
+  } catch (e: any) {
+    logError('deleteInboxTaskFromDb failed after retries:', e?.message ?? e);
   }
 }
 

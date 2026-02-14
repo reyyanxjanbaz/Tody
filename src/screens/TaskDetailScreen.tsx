@@ -331,11 +331,6 @@ export function TaskDetailScreen({ navigation, route }: Props) {
                     color={showCustomDatePicker ? colors.white : colors.gray500}
                   />
                 </Pressable>
-                {deadline != null && (
-                  <Pressable style={styles.deadlineClearBtn} onPress={handleClearDeadline}>
-                    <Icon name="close-circle" size={20} color={colors.gray400} />
-                  </Pressable>
-                )}
                 <Pressable
                   style={styles.deadlineDoneBtn}
                   onPress={() => { setShowDeadlinePicker(false); setShowCustomDatePicker(false); }}>

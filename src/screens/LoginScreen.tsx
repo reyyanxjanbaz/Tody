@@ -77,7 +77,7 @@ export function LoginScreen({ navigation }: Props) {
         <Animated.View
           entering={FadeInDown.duration(400)}
           style={styles.header}>
-          <Text style={styles.title}>Tody</Text>
+          <Text style={styles.title}>ToDy</Text>
           <Animated.Text
             entering={FadeInDown.delay(80).duration(350)}
             style={styles.subtitle}>
