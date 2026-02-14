@@ -10,6 +10,8 @@ import { ArchiveScreen } from '../screens/ArchiveScreen';
 import { TaskDetailScreen } from '../screens/TaskDetailScreen';
 import { ProcessInboxScreen } from '../screens/ProcessInboxScreen';
 import { RealityScoreScreen } from '../screens/RealityScoreScreen';
+import { ProfileScreen } from '../screens/ProfileScreen';
+import { SettingsScreen } from '../screens/SettingsScreen';
 import { RootStackParamList } from '../types';
 import { Colors } from '../utils/colors';
 
@@ -66,6 +68,8 @@ export function RootNavigator() {
             <Stack.Screen name="TaskDetail" component={TaskDetailScreen} options={DETAIL_SCREEN_OPTIONS} />
             <Stack.Screen name="ProcessInbox" component={ProcessInboxScreen} options={MODAL_SCREEN_OPTIONS} />
             <Stack.Screen name="RealityScore" component={RealityScoreScreen} options={MODAL_SCREEN_OPTIONS} />
+            <Stack.Screen name="Profile" component={ProfileScreen} options={DETAIL_SCREEN_OPTIONS} />
+            <Stack.Screen name="Settings" component={SettingsScreen} options={DETAIL_SCREEN_OPTIONS} />
           </>
         ) : (
           <>

@@ -20,16 +20,19 @@ import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useTasks } from '../context/TaskContext';
 import { TaskInput, TaskInputParams } from '../components/TaskInput';
 import { TaskItem } from '../components/TaskItem';
-import { EnergyFilter } from '../components/EnergyFilter';
+import { CategoryTabs } from '../components/EnergyFilter';
+import { AddCategoryModal } from '../components/AddCategoryModal';
+import { ManageCategoriesModal } from '../components/ManageCategoriesModal';
+import { SortDropdown } from '../components/SortDropdown';
 import { SectionHeader } from '../components/SectionHeader';
 import { EmptyState } from '../components/EmptyState';
 import { QuickCaptureFAB } from '../components/QuickCaptureFAB';
 import { InboxBadge } from '../components/InboxBadge';
 import { TaskPreviewOverlay } from '../components/TaskPreviewOverlay';
-import { BatchModeBar } from '../components/BatchMode';
 import { ZeroStateOnboarding } from '../components/ZeroStateOnboarding';
 import { FocusMode } from '../components/FocusMode';
 import { TodayLine } from '../components/TodayLine';
+import { CalendarStrip } from '../components/CalendarStrip';
 import { AnimatedPressable } from '../components/ui';
 import { useUndo } from '../components/UndoToast';
 import { organizeTasks, searchTasks } from '../utils/taskIntelligence';
@@ -40,8 +43,9 @@ import {
     flattenTasksHierarchically,
 } from '../utils/dependencyChains';
 import { Colors, Spacing, Typography, Shadows, BorderRadius } from '../utils/colors';
-import { Task, RootStackParamList, EnergyLevel } from '../types';
+import { Task, RootStackParamList, Category, SortOption, Priority } from '../types';
 import { haptic } from '../utils/haptics';
+import { startOfDay, endOfDay } from '../utils/dateUtils';
 
 // ── FlashList item discriminated union ────────────────────────────────────────
 
@@ -82,8 +86,13 @@ export function HomeScreen({ navigation }: Props) {
         completeTimedTask,
         deleteTaskWithCascade,
         deleteTask: deleteSingleTask,
-        activeEnergyFilter,
-        setActiveEnergyFilter,
+        categories,
+        activeCategory,
+        setActiveCategory,
+        addCategory,
+        updateCategory,
+        deleteCategory,
+        reorderCategories,
         uncompleteTask,
         restoreTasks,
     } = useTasks();
@@ -103,13 +112,15 @@ export function HomeScreen({ navigation }: Props) {
     const [highlightChildrenOf, setHighlightChildrenOf] = useState<string | null>(
         null,
     );
-    // Batch mode state
-    const [isBatchMode, setIsBatchMode] = useState(false);
-    const [selectedTaskIds, setSelectedTaskIds] = useState<Set<string>>(
-        new Set(),
-    );
     // Focus mode state
     const [isFocusMode, setIsFocusMode] = useState(false);
+    // Calendar strip state
+    const [selectedDate, setSelectedDate] = useState(() => startOfDay().getTime());
+    // Category modal state
+    const [showAddCategory, setShowAddCategory] = useState(false);
+    const [showManageCategories, setShowManageCategories] = useState(false);
+    const [showSortDropdown, setShowSortDropdown] = useState(false);
+    const [activeSortOption, setActiveSortOption] = useState<SortOption>('default');
 
     // ── Lock state map (computed) ──────────────────────────────────────────────
     const lockMap = useMemo(() => {
@@ -120,9 +131,9 @@ export function HomeScreen({ navigation }: Props) {
         return map;
     }, [tasks]);
 
-    // ── Filtered set for Energy ────────────────────────────────────────────────
+    // ── Filtered set for Category ──────────────────────────────────────────────
     const visibleTaskIds = useMemo(() => {
-        if (activeEnergyFilter === 'all') return null;
+        if (activeCategory === 'overview') return null;
 
         const ids = new Set<string>();
         const taskMap = new Map(tasks.map(t => [t.id, t]));
@@ -137,24 +148,39 @@ export function HomeScreen({ navigation }: Props) {
         };
 
         tasks
-            .filter(t => t.energyLevel === activeEnergyFilter)
+            .filter(t => t.category === activeCategory)
             .forEach(addWithAncestors);
 
         return ids;
-    }, [tasks, activeEnergyFilter]);
+    }, [tasks, activeCategory]);
 
     const tasksForDisplay = useMemo(() => {
-        if (visibleTaskIds === null) return tasks;
-        return tasks.filter(t => visibleTaskIds.has(t.id));
-    }, [tasks, visibleTaskIds]);
+        let filtered = visibleTaskIds === null ? tasks : tasks.filter(t => visibleTaskIds.has(t.id));
+
+        // Filter by selected calendar date
+        const dayStart = selectedDate;
+        const dayEnd = endOfDay(new Date(selectedDate)).getTime();
+        const todayStart = startOfDay().getTime();
+        const isSelectedToday = dayStart === todayStart;
+
+        if (!isSelectedToday) {
+            filtered = filtered.filter(t => {
+                if (t.deadline && t.deadline >= dayStart && t.deadline <= dayEnd) return true;
+                if (!t.deadline && t.createdAt >= dayStart && t.createdAt <= dayEnd) return true;
+                return false;
+            });
+        }
+
+        return filtered;
+    }, [tasks, visibleTaskIds, selectedDate]);
 
     const displayedTaskCount = useMemo(() => {
-        if (activeEnergyFilter === 'all')
+        if (activeCategory === 'overview')
             return tasks.filter(t => !t.isCompleted).length;
         return tasks.filter(
-            t => !t.isCompleted && t.energyLevel === activeEnergyFilter,
+            t => !t.isCompleted && t.category === activeCategory,
         ).length;
-    }, [tasks, activeEnergyFilter]);
+    }, [tasks, activeCategory]);
 
     // ── Computed data ──────────────────────────────────────────────────────────
     const sections = useMemo(() => {
@@ -165,8 +191,36 @@ export function HomeScreen({ navigation }: Props) {
         }));
     }, [tasksForDisplay]);
 
+    // ── Sort comparator ──────────────────────────────────────────────────────
+    const PRIORITY_ORDER: Record<Priority, number> = { high: 0, medium: 1, low: 2, none: 3 };
+    const getSortComparator = useCallback((option: SortOption) => {
+        switch (option) {
+            case 'deadline-asc':
+                return (a: Task, b: Task) => (a.deadline ?? Infinity) - (b.deadline ?? Infinity);
+            case 'deadline-desc':
+                return (a: Task, b: Task) => (b.deadline ?? 0) - (a.deadline ?? 0);
+            case 'priority-high':
+                return (a: Task, b: Task) => PRIORITY_ORDER[a.priority] - PRIORITY_ORDER[b.priority];
+            case 'priority-low':
+                return (a: Task, b: Task) => PRIORITY_ORDER[b.priority] - PRIORITY_ORDER[a.priority];
+            case 'newest':
+                return (a: Task, b: Task) => b.createdAt - a.createdAt;
+            case 'oldest':
+                return (a: Task, b: Task) => a.createdAt - b.createdAt;
+            default:
+                return () => 0;
+        }
+    }, []);
+
     // ── Flatten sections for FlashList ─────────────────────────────────────────
     const flattenedItems = useMemo(() => {
+        if (activeSortOption !== 'default') {
+            // Flat sorted mode — no section headers
+            const sorted = [...tasksForDisplay]
+                .filter(t => t.depth === 0)
+                .sort(getSortComparator(activeSortOption));
+            return sorted.map(t => ({ type: 'task' as const, task: t }));
+        }
         const items: ListItem[] = [];
         for (const section of sections) {
             if (section.title === 'TODAY') {
@@ -183,7 +237,7 @@ export function HomeScreen({ navigation }: Props) {
             }
         }
         return items;
-    }, [sections]);
+    }, [sections, tasksForDisplay, activeSortOption, getSortComparator]);
 
     const searchResults = useMemo(
         () => (searchQuery.trim() ? searchTasks(tasks, searchQuery) : []),
@@ -225,12 +279,13 @@ export function HomeScreen({ navigation }: Props) {
         (text: string, params?: TaskInputParams) => {
             addTask(text, {
                 energyLevel: params?.energyLevel ?? 'medium',
+                category: params?.category ?? (activeCategory !== 'overview' ? activeCategory : 'personal'),
                 ...(params?.priority ? { priority: params.priority } : {}),
                 ...(params?.estimatedMinutes ? { estimatedMinutes: params.estimatedMinutes } : {}),
                 ...(params?.deadline != null ? { deadline: params.deadline } : {}),
             });
         },
-        [addTask],
+        [addTask, activeCategory],
     );
 
     const handleTaskPress = useCallback(
@@ -409,19 +464,6 @@ export function HomeScreen({ navigation }: Props) {
         [completeTask, lockMap, tasks, showUndo, uncompleteTask],
     );
 
-    // Batch toggle helper
-    const toggleBatchSelection = useCallback((id: string) => {
-        setSelectedTaskIds(prev => {
-            const next = new Set(prev);
-            if (next.has(id)) {
-                next.delete(id);
-            } else {
-                next.add(id);
-            }
-            return next;
-        });
-    }, []);
-
     // ── Render helpers ─────────────────────────────────────────────────────────
 
     /** Render the actual TaskItem row (shared between main list and search) */
@@ -446,26 +488,17 @@ export function HomeScreen({ navigation }: Props) {
                     <View style={styles.flex1}>
                         <TaskItem
                             task={task}
-                            onPress={
-                                isBatchMode
-                                    ? () => toggleBatchSelection(task.id)
-                                    : handleTaskPress
-                            }
-                            onComplete={
-                                isBatchMode
-                                    ? () => toggleBatchSelection(task.id)
-                                    : handleCompleteWithLockCheck
-                            }
+                            onPress={handleTaskPress}
+                            onComplete={handleCompleteWithLockCheck}
                             onDefer={deferTask}
                             onRevive={handleRevive}
                             onStart={handleStartTask}
                             onCompleteTimed={handleCompleteTimedTask}
-                            isLocked={isBatchMode ? false : locked}
+                            isLocked={locked}
                             isLastChild={isLastChild}
-                            onLongPress={isBatchMode ? undefined : handleLongPress}
+                            onLongPress={handleLongPress}
                             onAddSubtask={handleAddSubtaskViaSwipe}
                             childHighlight={shouldHighlight}
-                            checkedOverride={isBatchMode ? selectedTaskIds.has(task.id) : undefined}
                         />
                     </View>
                 </View>
@@ -483,9 +516,6 @@ export function HomeScreen({ navigation }: Props) {
             highlightChildrenOf,
             handleLongPress,
             handleAddSubtaskViaSwipe,
-            isBatchMode,
-            selectedTaskIds,
-            toggleBatchSelection,
         ],
     );
 
@@ -530,7 +560,7 @@ export function HomeScreen({ navigation }: Props) {
     const overrideItemLayout = useCallback(
         (layout: { size?: number; span?: number }, item: ListItem) => {
             if (item.type === 'section-header') {
-                layout.size = 40;
+                layout.size = 68;
             } else if (item.type === 'today-line') {
                 layout.size = 32;
             }
@@ -542,7 +572,7 @@ export function HomeScreen({ navigation }: Props) {
     // ── Pre-built empty / footer components ────────────────────────────────────
 
     const ListEmpty = useMemo(() => {
-        if (activeCount === 0 && activeEnergyFilter === 'all') {
+        if (activeCount === 0 && activeCategory === 'overview') {
             return (
                 <ZeroStateOnboarding
                     onSelectTemplate={templateTasks => {
@@ -558,29 +588,24 @@ export function HomeScreen({ navigation }: Props) {
                 />
             );
         }
+        const activeCat = categories.find(c => c.id === activeCategory);
         return (
             <EmptyState
                 title={
-                    activeEnergyFilter === 'all'
+                    activeCategory === 'overview'
                         ? 'No tasks yet'
-                        : `No ${activeEnergyFilter} energy tasks`
+                        : `No ${activeCat?.name ?? 'category'} tasks`
                 }
                 subtitle={
-                    activeEnergyFilter === 'all'
+                    activeCategory === 'overview'
                         ? 'Type above to add your first task'
-                        : 'Create one or switch filter'
+                        : 'Create one or switch tab'
                 }
-                icon={activeEnergyFilter === 'all' ? undefined : 'flash-outline'}
-                iconColor={
-                    activeEnergyFilter === 'high'
-                        ? '#EF4444'
-                        : activeEnergyFilter === 'medium'
-                            ? '#F59E0B'
-                            : '#22C55E'
-                }
+                icon={activeCategory === 'overview' ? undefined : (activeCat?.icon as string) ?? 'folder-outline'}
+                iconColor={activeCat?.color ?? Colors.textTertiary}
             />
         );
-    }, [activeCount, activeEnergyFilter, addTask]);
+    }, [activeCount, activeCategory, categories, addTask]);
 
     const ListFooter = useMemo(() => {
         if (fullyDecayedCount <= 0) return null;
@@ -687,11 +712,24 @@ export function HomeScreen({ navigation }: Props) {
                         />
                     }
                     ListHeaderComponent={
-                        <EnergyFilter
-                            activeFilter={activeEnergyFilter}
-                            onFilterChange={setActiveEnergyFilter}
-                            taskCount={displayedTaskCount}
-                        />
+                        <View>
+                            <CalendarStrip
+                                selectedDate={selectedDate}
+                                onDateChange={setSelectedDate}
+                            />
+                            <CategoryTabs
+                                categories={categories}
+                                activeCategory={activeCategory}
+                                onCategoryChange={(id) => {
+                                    setActiveCategory(id);
+                                    setActiveSortOption('default');
+                                }}
+                                onAddPress={() => setShowAddCategory(true)}
+                                onManagePress={() => setShowManageCategories(true)}
+                                sortOption={activeSortOption}
+                                onSortPress={() => setShowSortDropdown(true)}
+                            />
+                        </View>
                     }
                     ListEmptyComponent={ListEmpty}
                     keyboardShouldPersistTaps="handled"
@@ -701,13 +739,17 @@ export function HomeScreen({ navigation }: Props) {
             )}
 
             {/* ── Bottom Controls ───────────────────────────────────────── */}
-            {!isSearching && !isBatchMode && (
+            {!isSearching && (
                 <KeyboardAvoidingView
                     behavior={Platform.OS === 'ios' ? 'padding' : undefined}
                     keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
                     style={styles.bottomControlsWrapper}
                 >
-                    <TaskInput onSubmit={handleAddTask} />
+                    <TaskInput
+                        onSubmit={handleAddTask}
+                        defaultCategory={activeCategory !== 'overview' ? activeCategory : 'personal'}
+                        categories={categories.filter(c => c.id !== 'overview')}
+                    />
 
                     {/* Bottom Nav Bar */}
                     <View style={[styles.bottomNavBar, { paddingBottom: insets.bottom }]}>
@@ -730,73 +772,14 @@ export function HomeScreen({ navigation }: Props) {
                         </AnimatedPressable>
 
                         <AnimatedPressable
-                            onPress={() => {
-                                haptic('selection');
-                                setIsBatchMode(!isBatchMode);
-                                setSelectedTaskIds(new Set());
-                            }}
+                            onPress={() => navigation.navigate('Profile')}
                             hitSlop={8}
                             style={styles.navButton}>
-                            <Icon
-                                name="checkbox-outline"
-                                size={24}
-                                color={Colors.textTertiary}
-                            />
-                            <Text style={styles.navButtonText}>Batch</Text>
+                            <Icon name="person-outline" size={24} color={Colors.textTertiary} />
+                            <Text style={styles.navButtonText}>Profile</Text>
                         </AnimatedPressable>
                     </View>
                 </KeyboardAvoidingView>
-            )}
-
-            {/* Batch Mode Bottom Bar */}
-            {isBatchMode && (
-                <BatchModeBar
-                    selectedCount={selectedTaskIds.size}
-                    onCompleteAll={() => {
-                        const ids = Array.from(selectedTaskIds);
-                        ids.forEach(id => completeTask(id));
-                        showUndo(
-                            `${ids.length} task${ids.length !== 1 ? 's' : ''} completed`,
-                            () => {
-                                ids.forEach(id => uncompleteTask(id));
-                            },
-                        );
-                        setSelectedTaskIds(new Set());
-                        setIsBatchMode(false);
-                        haptic('success');
-                    }}
-                    onDeleteAll={() => {
-                        const ids = Array.from(selectedTaskIds);
-                        const snapshots = tasks.filter(t => ids.includes(t.id));
-                        ids.forEach(id => deleteSingleTask(id));
-                        showUndo(
-                            `${ids.length} task${ids.length !== 1 ? 's' : ''} deleted`,
-                            () => {
-                                restoreTasks(snapshots);
-                            },
-                        );
-                        setSelectedTaskIds(new Set());
-                        setIsBatchMode(false);
-                        haptic('warning');
-                    }}
-                    onArchiveAll={() => {
-                        const ids = Array.from(selectedTaskIds);
-                        ids.forEach(id => completeTask(id));
-                        showUndo(
-                            `${ids.length} task${ids.length !== 1 ? 's' : ''} archived`,
-                            () => {
-                                ids.forEach(id => uncompleteTask(id));
-                            },
-                        );
-                        setSelectedTaskIds(new Set());
-                        setIsBatchMode(false);
-                        haptic('success');
-                    }}
-                    onCancel={() => {
-                        setIsBatchMode(false);
-                        setSelectedTaskIds(new Set());
-                    }}
-                />
             )}
 
             {/* Archive Confirmation Modal */}
@@ -891,6 +874,33 @@ export function HomeScreen({ navigation }: Props) {
                 tasks={focusTasks}
                 onComplete={id => completeTask(id)}
                 onExit={() => setIsFocusMode(false)}
+            />
+
+            {/* Category Modals */}
+            <AddCategoryModal
+                visible={showAddCategory}
+                onClose={() => setShowAddCategory(false)}
+                onCreate={(name, icon, color) => {
+                    addCategory(name, icon, color);
+                    setShowAddCategory(false);
+                }}
+            />
+            <ManageCategoriesModal
+                visible={showManageCategories}
+                categories={categories}
+                onClose={() => setShowManageCategories(false)}
+                onRename={(id, name) => updateCategory(id, { name })}
+                onDelete={deleteCategory}
+                onReorder={reorderCategories}
+            />
+            <SortDropdown
+                visible={showSortDropdown}
+                current={activeSortOption}
+                onSelect={(option) => {
+                    setActiveSortOption(option);
+                    setShowSortDropdown(false);
+                }}
+                onClose={() => setShowSortDropdown(false)}
             />
         </View>
     );

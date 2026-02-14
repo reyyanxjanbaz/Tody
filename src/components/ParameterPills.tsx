@@ -203,13 +203,6 @@ interface TimeQuickPickProps {
     onChange: (minutes: number | null) => void;
 }
 
-/** Smart step size — faster for larger values */
-function getStepSize(val: number): number {
-    if (val < 30) return 5;
-    if (val < 120) return 15;
-    return 30;
-}
-
 export const TimeQuickPick = memo(function TimeQuickPick({ value, onChange }: TimeQuickPickProps) {
     const [showStepper, setShowStepper] = useState(false);
     const isCustom = value != null && value > 0 && !TIME_OPTIONS.includes(value);
@@ -227,15 +220,9 @@ export const TimeQuickPick = memo(function TimeQuickPick({ value, onChange }: Ti
         }
     }, [showStepper, isCustom, value, onChange]);
 
-    const handleIncrement = useCallback(() => {
-        const step = getStepSize(currentVal);
-        onChange(Math.min(currentVal + step, 480));
-        haptic('selection');
-    }, [currentVal, onChange]);
-
-    const handleDecrement = useCallback(() => {
-        const step = getStepSize(currentVal - 1);
-        onChange(Math.max(currentVal - step, 5));
+    const adjustBy = useCallback((delta: number) => {
+        const next = Math.max(1, Math.min(currentVal + delta, 480));
+        onChange(next);
         haptic('selection');
     }, [currentVal, onChange]);
 
@@ -274,18 +261,38 @@ export const TimeQuickPick = memo(function TimeQuickPick({ value, onChange }: Ti
                 </Pressable>
             </View>
 
-            {/* Custom duration stepper — no typing, just tap */}
+            {/* Custom duration stepper — ±1 center, ±5 and ±10 on sides */}
             {showStepper && (
                 <Animated.View entering={FadeIn.duration(150)} exiting={FadeOut.duration(100)} style={styles.stepperRow}>
-                    <Pressable onPress={handleDecrement} hitSlop={8} style={styles.stepperBtn}>
-                        <Icon name="remove-circle" size={32} color={Colors.gray400} />
-                    </Pressable>
-                    <View style={styles.stepperDisplay}>
-                        <Text style={styles.stepperValue}>{formatMinutes(currentVal)}</Text>
+                    <View style={styles.stepperSide}>
+                        <Pressable onPress={() => adjustBy(-10)} hitSlop={4} style={styles.stepperJumpBtn}>
+                            <Text style={styles.stepperJumpText}>−10</Text>
+                        </Pressable>
+                        <Pressable onPress={() => adjustBy(-5)} hitSlop={4} style={styles.stepperJumpBtn}>
+                            <Text style={styles.stepperJumpText}>−5</Text>
+                        </Pressable>
                     </View>
-                    <Pressable onPress={handleIncrement} hitSlop={8} style={styles.stepperBtn}>
-                        <Icon name="add-circle" size={32} color={Colors.surfaceDark} />
-                    </Pressable>
+
+                    <View style={styles.stepperCenter}>
+                        <Pressable onPress={() => adjustBy(-1)} hitSlop={8} style={styles.stepperBtn}>
+                            <Icon name="remove-circle" size={32} color={Colors.gray400} />
+                        </Pressable>
+                        <View style={styles.stepperDisplay}>
+                            <Text style={styles.stepperValue}>{formatMinutes(currentVal)}</Text>
+                        </View>
+                        <Pressable onPress={() => adjustBy(1)} hitSlop={8} style={styles.stepperBtn}>
+                            <Icon name="add-circle" size={32} color={Colors.surfaceDark} />
+                        </Pressable>
+                    </View>
+
+                    <View style={styles.stepperSide}>
+                        <Pressable onPress={() => adjustBy(5)} hitSlop={4} style={styles.stepperJumpBtn}>
+                            <Text style={styles.stepperJumpText}>+5</Text>
+                        </Pressable>
+                        <Pressable onPress={() => adjustBy(10)} hitSlop={4} style={styles.stepperJumpBtn}>
+                            <Text style={styles.stepperJumpText}>+10</Text>
+                        </Pressable>
+                    </View>
                 </Animated.View>
             )}
         </Animated.View>
@@ -396,7 +403,32 @@ const styles = StyleSheet.create({
         justifyContent: 'center',
         paddingTop: Spacing.md,
         paddingBottom: Spacing.xs,
-        gap: Spacing.xl,
+        gap: Spacing.sm,
+    },
+    stepperCenter: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: Spacing.md,
+    },
+    stepperSide: {
+        flexDirection: 'column',
+        alignItems: 'center',
+        gap: 4,
+    },
+    stepperJumpBtn: {
+        width: 40,
+        height: 28,
+        borderRadius: 8,
+        borderWidth: 1,
+        borderColor: Colors.gray200,
+        backgroundColor: Colors.gray50,
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    stepperJumpText: {
+        fontSize: 12,
+        fontWeight: '600',
+        color: Colors.gray500,
     },
     stepperBtn: {
         padding: 4,

@@ -7,8 +7,11 @@ import React, {
   useRef,
 } from 'react';
 import { LayoutAnimation, Platform, UIManager } from 'react-native';
-import { Task, Priority, EnergyLevel } from '../types';
-import { saveTasks, getTasks, saveArchivedTasks, getArchivedTasks, saveEnergyFilter, getEnergyFilter } from '../utils/storage';
+import { Task, Priority, EnergyLevel, Category, DEFAULT_CATEGORIES } from '../types';
+import {
+  saveTasks, getTasks, saveArchivedTasks, getArchivedTasks,
+  saveCategories, getCategories, saveActiveCategory, getActiveCategory,
+} from '../utils/storage';
 import { generateId } from '../utils/id';
 import { useAuth } from './AuthContext';
 import { parseTaskInput } from '../utils/taskParser';
@@ -28,8 +31,15 @@ interface TaskContextType {
   tasks: Task[];
   archivedTasks: Task[];
   isLoading: boolean;
-  activeEnergyFilter: EnergyLevel | 'all';
-  setActiveEnergyFilter: (level: EnergyLevel | 'all') => void;
+  // Category system
+  categories: Category[];
+  activeCategory: string;
+  setActiveCategory: (id: string) => void;
+  addCategory: (name: string, icon: string, color: string) => Category;
+  updateCategory: (id: string, updates: Partial<Category>) => void;
+  deleteCategory: (id: string) => void;
+  reorderCategories: (orderedIds: string[]) => void;
+  // Task operations
   addTask: (input: string, overrides?: Partial<Task>) => Task;
   addSubtask: (parentId: string, input: string, overrides?: Partial<Task>) => Task | null;
   updateTask: (id: string, updates: Partial<Task>) => void;
@@ -56,7 +66,8 @@ export function TaskProvider({ children }: { children: React.ReactNode }) {
   const { user } = useAuth();
   const [tasks, setTasks] = useState<Task[]>([]);
   const [archivedTasks, setArchivedTasks] = useState<Task[]>([]);
-  const [activeEnergyFilter, setActiveEnergyFilter] = useState<EnergyLevel | 'all'>('all');
+  const [categories, setCategories] = useState<Category[]>(DEFAULT_CATEGORIES);
+  const [activeCategory, setActiveCategory] = useState<string>('overview');
   const [isLoading, setIsLoading] = useState(true);
   const tasksRef = useRef(tasks);
   tasksRef.current = tasks;
@@ -76,6 +87,7 @@ export function TaskProvider({ children }: { children: React.ReactNode }) {
           depth: t.depth ?? 0,
           parentId: t.parentId ?? null,
           energyLevel: t.energyLevel ?? 'medium',
+          category: t.category ?? 'personal',
         }));
         // Initialize overdueStartDate for tasks that became overdue
         const initialized = initializeOverdueDates(migrated);
@@ -84,9 +96,14 @@ export function TaskProvider({ children }: { children: React.ReactNode }) {
         const storedArchived = await getArchivedTasks<Task>();
         setArchivedTasks(storedArchived);
 
-        const storedFilter = await getEnergyFilter();
-        if (storedFilter) {
-          setActiveEnergyFilter(storedFilter as EnergyLevel | 'all');
+        // Load categories
+        const storedCategories = await getCategories<Category>();
+        if (storedCategories.length > 0) {
+          setCategories(storedCategories);
+        }
+        const storedActiveCategory = await getActiveCategory();
+        if (storedActiveCategory) {
+          setActiveCategory(storedActiveCategory);
         }
       } catch {
         // Start fresh if storage is corrupt
@@ -133,12 +150,18 @@ export function TaskProvider({ children }: { children: React.ReactNode }) {
     };
   }, [archivedTasks, isLoading]);
 
-  // Persist filter preference
+  // Persist category preferences
   useEffect(() => {
     if (!isLoading) {
-      saveEnergyFilter(activeEnergyFilter);
+      saveCategories(categories);
     }
-  }, [activeEnergyFilter, isLoading]);
+  }, [categories, isLoading]);
+
+  useEffect(() => {
+    if (!isLoading) {
+      saveActiveCategory(activeCategory);
+    }
+  }, [activeCategory, isLoading]);
 
   const addTask = useCallback((input: string, overrides?: Partial<Task>): Task => {
     const parsed = parseTaskInput(input);
@@ -154,6 +177,7 @@ export function TaskProvider({ children }: { children: React.ReactNode }) {
       completedAt: null,
       priority: parsed.priority,
       energyLevel: 'medium',
+      category: 'personal',
       isCompleted: false,
       isRecurring: false,
       recurringFrequency: null,
@@ -195,6 +219,7 @@ export function TaskProvider({ children }: { children: React.ReactNode }) {
       completedAt: null,
       priority: parsed.priority,
       energyLevel: parent.energyLevel ?? 'medium', // Inherit parent's energy level
+      category: parent.category || 'personal', // Inherit parent's category
       isCompleted: false,
       isRecurring: false,
       recurringFrequency: null,
@@ -511,13 +536,57 @@ export function TaskProvider({ children }: { children: React.ReactNode }) {
     return tasksRef.current.find(t => t.id === id);
   }, []);
 
+  // ── Category CRUD ────────────────────────────────────────────────────
+
+  const addCategory = useCallback((name: string, icon: string, color: string): Category => {
+    const newCat: Category = {
+      id: generateId(),
+      name,
+      icon,
+      color,
+      isDefault: false,
+      order: categories.length,
+    };
+    setCategories(prev => [...prev, newCat]);
+    return newCat;
+  }, [categories.length]);
+
+  const updateCategory = useCallback((id: string, updates: Partial<Category>) => {
+    setCategories(prev => prev.map(c => c.id === id ? { ...c, ...updates } : c));
+  }, []);
+
+  const deleteCategory = useCallback((id: string) => {
+    setCategories(prev => prev.filter(c => c.id !== id));
+    // Reassign tasks from deleted category to 'personal'
+    setTasks(prev => prev.map(t =>
+      t.category === id ? { ...t, category: 'personal', updatedAt: Date.now() } : t,
+    ));
+    // If the active tab was the deleted category, go to overview
+    setActiveCategory(prev => prev === id ? 'overview' : prev);
+  }, []);
+
+  const reorderCategories = useCallback((orderedIds: string[]) => {
+    setCategories(prev => {
+      const map = new Map(prev.map(c => [c.id, c]));
+      return orderedIds.map((id, i) => {
+        const cat = map.get(id);
+        return cat ? { ...cat, order: i } : cat;
+      }).filter(Boolean) as Category[];
+    });
+  }, []);
+
   return (
     <TaskContext.Provider
       value={{
         tasks,
         archivedTasks,
-        activeEnergyFilter,
-        setActiveEnergyFilter,
+        categories,
+        activeCategory,
+        setActiveCategory,
+        addCategory,
+        updateCategory,
+        deleteCategory,
+        reorderCategories,
         isLoading,
         addTask,
         addSubtask,

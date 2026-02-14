@@ -50,8 +50,6 @@ export const SmartKeyboardToolbar = memo(function SmartKeyboardToolbar({
   onInsertNumberedList,
   onInsertLineBreak,
 }: SmartKeyboardToolbarProps) {
-  if (!visible) return null;
-
   const buttons = useMemo((): ToolbarButton[] => {
     switch (mode) {
       case 'title':
@@ -83,6 +81,7 @@ export const SmartKeyboardToolbar = memo(function SmartKeyboardToolbar({
     }
   }, [mode, onInsertPriority, onInsertEnergy, onAddTime, onInsertBullet, onInsertNumberedList, onInsertLineBreak]);
 
+  if (!visible) return null;
   if (buttons.length === 0) return null;
 
   return (

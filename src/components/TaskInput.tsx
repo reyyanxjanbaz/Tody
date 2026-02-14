@@ -15,7 +15,7 @@
  * and can override with a single tap.
  */
 
-import React, { memo, useState, useCallback, useRef } from 'react';
+import React, { memo, useState, useCallback, useRef, useEffect } from 'react';
 import {
   View,
   Text,
@@ -33,7 +33,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import Icon from 'react-native-vector-icons/Ionicons';
 import { Colors, Spacing, Typography, BorderRadius } from '../utils/colors';
-import { Priority, EnergyLevel } from '../types';
+import { Priority, EnergyLevel, Category } from '../types';
 import { haptic } from '../utils/haptics';
 import { AnimatedPressable } from './ui';
 import { DeadlineSnapper } from './DeadlineSnapper';
@@ -45,6 +45,7 @@ import {
   DeadlinePill,
   TimeQuickPick,
 } from './ParameterPills';
+import { CategoryPill } from './CategoryPill';
 
 // ── Props ───────────────────────────────────────────────────────────────────
 
@@ -53,6 +54,7 @@ export interface TaskInputParams {
   energyLevel?: EnergyLevel;
   priority?: Priority;
   deadline?: number | null;
+  category?: string;
 }
 
 interface TaskInputProps {
@@ -61,6 +63,10 @@ interface TaskInputProps {
   autoFocus?: boolean;
   /** Compact mode hides deadline picker for subtask entry */
   compact?: boolean;
+  /** Default category for new tasks */
+  defaultCategory?: string;
+  /** Available categories (excluding Overview) */
+  categories?: Category[];
 }
 
 // ── Smart Inference ─────────────────────────────────────────────────────────
@@ -96,8 +102,11 @@ export const TaskInput = memo(function TaskInput({
   placeholder,
   autoFocus,
   compact = false,
+  defaultCategory,
+  categories: catList,
 }: TaskInputProps) {
   const [value, setValue] = useState('');
+  const [category, setCategory] = useState(defaultCategory || 'personal');
   const [energy, setEnergy] = useState<EnergyLevel>('medium');
   const [priority, setPriority] = useState<Priority>('none');
   const [estimate, setEstimate] = useState<number | null>(null);
@@ -107,6 +116,11 @@ export const TaskInput = memo(function TaskInput({
   const [showCustomDatePicker, setShowCustomDatePicker] = useState(false);
   const [tempDate, setTempDate] = useState(new Date());
   const [hasManualEnergy, setHasManualEnergy] = useState(false);
+
+  // Sync default category when active tab changes
+  useEffect(() => {
+    if (defaultCategory) setCategory(defaultCategory);
+  }, [defaultCategory]);
   const [hasManualPriority, setHasManualPriority] = useState(false);
   const [hasManualEstimate, setHasManualEstimate] = useState(false);
 
@@ -142,6 +156,7 @@ export const TaskInput = memo(function TaskInput({
       priority: priority !== 'none' ? priority : undefined,
       estimatedMinutes: estimate ?? undefined,
       deadline: deadline,
+      category: category,
     });
 
     // Reset
@@ -150,13 +165,14 @@ export const TaskInput = memo(function TaskInput({
     setPriority('none');
     setEstimate(null);
     setDeadline(null);
+    setCategory(defaultCategory || 'personal');
     setShowTimePicker(false);
     setShowDeadlinePicker(false);
     setShowCustomDatePicker(false);
     setHasManualEnergy(false);
     setHasManualPriority(false);
     setHasManualEstimate(false);
-  }, [value, energy, priority, estimate, deadline, onSubmit]);
+  }, [value, energy, priority, estimate, deadline, category, defaultCategory, onSubmit]);
 
   const handleEnergyChange = useCallback((e: EnergyLevel) => {
     setEnergy(e);
@@ -267,6 +283,9 @@ export const TaskInput = memo(function TaskInput({
             keyboardShouldPersistTaps="always">
             <EnergyPill value={energy} onChange={handleEnergyChange} />
             <PriorityPill value={priority} onChange={handlePriorityChange} />
+            {catList && catList.length > 0 && (
+              <CategoryPill value={category} categories={catList} onChange={setCategory} />
+            )}
             <EstimatePill value={estimate} onPress={handleEstimatePress} />
             {!compact && (
               <DeadlinePill value={deadline} onPress={handleDeadlinePress} />
@@ -323,7 +342,10 @@ export const TaskInput = memo(function TaskInput({
                   />
                   <Pressable
                     style={styles.datePickerDoneBtn}
-                    onPress={() => setShowCustomDatePicker(false)}>
+                    onPress={() => {
+                      setShowCustomDatePicker(false);
+                      setShowDeadlinePicker(false);
+                    }}>
                     <Text style={styles.datePickerDoneText}>Done</Text>
                   </Pressable>
                 </Animated.View>

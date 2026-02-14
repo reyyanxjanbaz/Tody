@@ -11,8 +11,6 @@ interface InboxBadgeProps {
 export const InboxBadge = memo(function InboxBadge({ onPress }: InboxBadgeProps) {
   const { inboxCount } = useInbox();
 
-  if (inboxCount === 0) return null;
-
   return (
     <Pressable onPress={onPress} hitSlop={8} style={styles.container}>
       <View style={styles.iconContainer}>

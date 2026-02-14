@@ -34,6 +34,9 @@ export interface Task {
   childIds: string[]; // Array of child task IDs
   depth: number; // 0 = root, 1 = first level subtask, 2 = second level, 3 = max
 
+  // Category
+  category?: string; // Category ID (e.g., 'work', 'personal', 'health')
+
   // User
   userId?: string; // Owner of this task
 }
@@ -101,4 +104,71 @@ export type RootStackParamList = {
   TaskDetail: { taskId: string };
   ProcessInbox: undefined;
   RealityScore: undefined;
+  Profile: undefined;
+  Settings: undefined;
 };
+
+// ── Profile & Settings Types ───────────────────────────────────────────────
+
+export interface UserPreferences {
+  darkMode: boolean;
+  dateFormat: 'MM/DD/YYYY' | 'DD/MM/YYYY' | 'YYYY-MM-DD';
+  timeFormat: '12h' | '24h';
+  weekStartsOn: 'sunday' | 'monday';
+}
+
+export const DEFAULT_PREFERENCES: UserPreferences = {
+  darkMode: false,
+  dateFormat: 'MM/DD/YYYY',
+  timeFormat: '12h',
+  weekStartsOn: 'sunday',
+};
+
+export interface ProfileStats {
+  totalCreated: number;
+  totalCompleted: number;
+  totalIncomplete: number;
+  completionPercentage: number;
+  currentStreak: number;
+  bestStreak: number;
+  averageTasksPerDay: number;
+  totalMinutesSpent: number;
+  averageMinutesPerTask: number;
+  mostProductiveDay: string;
+}
+
+export interface DayTaskStatus {
+  date: number; // timestamp start of day
+  total: number;
+  completed: number;
+  allDone: boolean; // total > 0 && completed === total
+  hasIncomplete: boolean; // total > completed
+}
+
+export interface XPData {
+  totalXP: number;
+  level: number;
+  xpInCurrentLevel: number;
+  xpForNextLevel: number;
+  progressPercent: number;
+}
+
+// ── Category System ──────────────────────────────────────────────────────────
+
+export interface Category {
+  id: string;
+  name: string;
+  icon: string;       // Ionicons name
+  color: string;      // Hex accent color
+  isDefault: boolean; // Overview can't be deleted
+  order: number;
+}
+
+export type SortOption = 'default' | 'deadline-asc' | 'deadline-desc' | 'priority-high' | 'priority-low' | 'newest' | 'oldest';
+
+export const DEFAULT_CATEGORIES: Category[] = [
+  { id: 'overview', name: 'Overview', icon: 'grid-outline', color: '#000000', isDefault: true, order: 0 },
+  { id: 'work', name: 'Work', icon: 'briefcase-outline', color: '#3B82F6', isDefault: false, order: 1 },
+  { id: 'personal', name: 'Personal', icon: 'person-outline', color: '#8B5CF6', isDefault: false, order: 2 },
+  { id: 'health', name: 'Health', icon: 'heart-outline', color: '#10B981', isDefault: false, order: 3 },
+];

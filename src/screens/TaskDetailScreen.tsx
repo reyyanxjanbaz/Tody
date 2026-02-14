@@ -33,7 +33,7 @@ import { useTasks } from '../context/TaskContext';
 import { Colors, Spacing, Typography } from '../utils/colors';
 import { formatMinutes, getElapsedMinutes } from '../utils/timeTracking';
 import { isTaskLocked, getChildren, countDescendants } from '../utils/dependencyChains';
-import { Priority, RootStackParamList, EnergyLevel } from '../types';
+import { Priority, RootStackParamList, EnergyLevel, Category } from '../types';
 import { DeadlineSnapper } from '../components/DeadlineSnapper';
 import { haptic } from '../utils/haptics';
 import {
@@ -43,6 +43,7 @@ import {
   DeadlinePill,
   TimeQuickPick,
 } from '../components/ParameterPills';
+import { CategoryPill } from '../components/CategoryPill';
 
 
 type Props = {
@@ -55,14 +56,17 @@ export function TaskDetailScreen({ navigation, route }: Props) {
   const {
     tasks, getTask, updateTask, deleteTask, deleteTaskWithCascade,
     completeTask, uncompleteTask, startTask, completeTimedTask, addSubtask,
+    categories,
   } = useTasks();
   const task = getTask(route.params.taskId);
+  const assignableCategories = useMemo(() => categories.filter(c => c.id !== 'overview'), [categories]);
 
   // ── Local state ──────────────────────────────────────────────────────────
   const [title, setTitle] = useState(task?.title ?? '');
   const [description, setDescription] = useState(task?.description ?? '');
   const [priority, setPriority] = useState<Priority>(task?.priority ?? 'none');
   const [energy, setEnergy] = useState<EnergyLevel>(task?.energyLevel ?? 'medium');
+  const [category, setCategory] = useState<string>(task?.category ?? 'personal');
   const [deadline, setDeadline] = useState<number | null>(task?.deadline ?? null);
   const [estimate, setEstimate] = useState<number | null>(task?.estimatedMinutes ?? null);
   const [showTimePicker, setShowTimePicker] = useState(false);
@@ -77,6 +81,7 @@ export function TaskDetailScreen({ navigation, route }: Props) {
       setDescription(task.description);
       setPriority(task.priority);
       setEnergy(task.energyLevel);
+      setCategory(task.category ?? 'personal');
       setDeadline(task.deadline);
       setEstimate(task.estimatedMinutes ?? null);
     }
@@ -124,6 +129,11 @@ export function TaskDetailScreen({ navigation, route }: Props) {
   const handleEnergyChange = (e: EnergyLevel) => {
     setEnergy(e);
     updateTask(task.id, { energyLevel: e });
+  };
+
+  const handleCategoryChange = (catId: string) => {
+    setCategory(catId);
+    updateTask(task.id, { category: catId });
   };
 
   const handleEstimatePress = () => {
@@ -286,6 +296,9 @@ export function TaskDetailScreen({ navigation, route }: Props) {
             keyboardShouldPersistTaps="always">
             <EnergyPill value={energy} onChange={handleEnergyChange} />
             <PriorityPill value={priority} onChange={handlePriorityChange} />
+            {assignableCategories.length > 0 && (
+              <CategoryPill value={category} categories={assignableCategories} onChange={handleCategoryChange} />
+            )}
             <EstimatePill value={estimate} onPress={handleEstimatePress} />
             <DeadlinePill value={deadline} onPress={handleDeadlinePress} />
           </ScrollView>
@@ -330,7 +343,7 @@ export function TaskDetailScreen({ navigation, route }: Props) {
                     minimumDate={new Date()}
                     textColor={Colors.text}
                   />
-                  <Pressable onPress={() => setShowCustomDatePicker(false)}>
+                  <Pressable onPress={() => { setShowCustomDatePicker(false); setShowDeadlinePicker(false); }}>
                     <Text style={styles.donePickerText}>Done</Text>
                   </Pressable>
                 </View>
