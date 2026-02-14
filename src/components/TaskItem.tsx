@@ -40,7 +40,7 @@ import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { Task, Priority } from '../types';
 import { Colors, Spacing, Typography, Shadows, BorderRadius } from '../utils/colors';
 import { formatDeadline, formatCompletedDate, daysFromNow } from '../utils/dateUtils';
-import { getTaskOpacity, formatOverdueGently } from '../utils/decay';
+import { formatOverdueGently } from '../utils/decay';
 import { formatMinutes, getElapsedMinutes, isUnreasonableDuration } from '../utils/timeTracking';
 import { recordSwipeAction } from '../utils/swipeMemory';
 import { AnimatedCheckbox } from './ui/AnimatedCheckbox';
@@ -123,7 +123,6 @@ export const TaskItem = memo(function TaskItem({
   const hasPassedThreshold = useSharedValue(false);
 
   // ── Computed ──────────────────────────────────────────────────────────
-  const opacity = useMemo(() => getTaskOpacity(task), [task]);
   const overdueLabel = useMemo(() => formatOverdueGently(task), [task]);
   const isOverdue = task.deadline ? daysFromNow(task.deadline) < 0 : false;
   const isInProgress = !!task.startedAt && !task.isCompleted;
@@ -357,7 +356,7 @@ export const TaskItem = memo(function TaskItem({
       layout={LinearTransition.duration(250)}
       style={styles.outerContainer}
     >
-      <View style={{ opacity }}>
+      <View>
         {/* Left action background (revealed on swipe right) */}
         <Animated.View style={[styles.leftActionBg, leftActionBgAnimatedStyle]}>
           <Animated.Text style={[styles.swipeActionText, leftActionStyle]}>

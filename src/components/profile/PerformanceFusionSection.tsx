@@ -1,14 +1,22 @@
 import React, { memo, useMemo } from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import { View, Text, StyleSheet, Dimensions } from 'react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import Icon from 'react-native-vector-icons/Ionicons';
 import { ProfileStats, Task } from '../../types';
 import {
   calculateUserStats,
+  getRecentEstimatedTasks,
   hasEnoughDataForStats,
 } from '../../utils/statsCalculation';
 import { formatMinutes } from '../../utils/timeTracking';
 import { Colors, Spacing, Typography, BorderRadius, Shadows } from '../../utils/colors';
+
+const { width: SCREEN_WIDTH } = Dimensions.get('window');
+const CHART_PADDING = 6; // half of dot size, so edge dots aren't clipped
+const CHART_WIDTH = SCREEN_WIDTH - Spacing.xxl * 2 - Spacing.lg * 2;
+const CHART_DRAW_WIDTH = CHART_WIDTH - CHART_PADDING * 2;
+const CHART_HEIGHT = 120;
+const CHART_DRAW_HEIGHT = CHART_HEIGHT - CHART_PADDING * 2;
 
 interface PerformanceFusionSectionProps {
   stats: ProfileStats;
@@ -20,6 +28,7 @@ export const PerformanceFusionSection = memo(function PerformanceFusionSection({
   tasks,
 }: PerformanceFusionSectionProps) {
   const realityStats = useMemo(() => calculateUserStats(tasks), [tasks]);
+  const recentTasks = useMemo(() => getRecentEstimatedTasks(tasks, 10), [tasks]);
   const hasRealityData = useMemo(() => hasEnoughDataForStats(tasks), [tasks]);
 
   const realityProgress = Math.min(100, Math.round((realityStats.totalCompletedTasks / 10) * 100));
@@ -49,6 +58,22 @@ export const PerformanceFusionSection = memo(function PerformanceFusionSection({
   const alignmentMax = Math.max(realityStats.totalEstimatedMinutes, realityStats.totalActualMinutes, 1);
   const estimatedWidth = `${Math.round((realityStats.totalEstimatedMinutes / alignmentMax) * 100)}%`;
   const actualWidth = `${Math.round((realityStats.totalActualMinutes / alignmentMax) * 100)}%`;
+
+  const chartData = useMemo(() => {
+    if (recentTasks.length < 2) return null;
+
+    const ordered = [...recentTasks].reverse();
+    const maxMinutes = Math.max(
+      ...ordered.map(task => Math.max(task.estimatedMinutes || 0, task.actualMinutes || 0)),
+    );
+    if (maxMinutes === 0) return null;
+
+    return ordered.map((task, index) => ({
+      x: CHART_PADDING + (index / (ordered.length - 1)) * CHART_DRAW_WIDTH,
+      estimatedY: CHART_PADDING + CHART_DRAW_HEIGHT - ((task.estimatedMinutes || 0) / maxMinutes) * CHART_DRAW_HEIGHT,
+      actualY: CHART_PADDING + CHART_DRAW_HEIGHT - ((task.actualMinutes || 0) / maxMinutes) * CHART_DRAW_HEIGHT,
+    }));
+  }, [recentTasks]);
 
   const statCards = [
     { label: 'Completed', value: `${stats.totalCompleted}` },
@@ -143,6 +168,98 @@ export const PerformanceFusionSection = memo(function PerformanceFusionSection({
           <Text style={styles.alignmentFooter}>
             Based on {realityStats.totalCompletedTasks} tasks with time estimates
           </Text>
+        </View>
+      )}
+
+      {hasRealityData && chartData && chartData.length >= 2 && (
+        <View style={styles.chartCard}>
+          <Text style={styles.chartTitle}>PACE GRAPH · LAST {recentTasks.length} TASKS</Text>
+          <View style={styles.chartContainer}>
+            {/* Actual lines (dark) */}
+            {chartData.map((point, index) => {
+              if (index === chartData.length - 1) return null;
+              const next = chartData[index + 1];
+              const dx = next.x - point.x;
+              const dy = next.actualY - point.actualY;
+              const length = Math.sqrt(dx * dx + dy * dy);
+              const angle = Math.atan2(dy, dx) * (180 / Math.PI);
+              return (
+                <View
+                  key={`a-${index}`}
+                  style={{
+                    position: 'absolute',
+                    height: 2,
+                    width: length,
+                    left: point.x,
+                    top: point.actualY - 1,
+                    transformOrigin: 'left center',
+                    transform: [{ rotate: `${angle}deg` }],
+                    backgroundColor: Colors.text,
+                    borderRadius: 1,
+                  }}
+                />
+              );
+            })}
+
+            {/* Estimated lines (gray) */}
+            {chartData.map((point, index) => {
+              if (index === chartData.length - 1) return null;
+              const next = chartData[index + 1];
+              const dx = next.x - point.x;
+              const dy = next.estimatedY - point.estimatedY;
+              const length = Math.sqrt(dx * dx + dy * dy);
+              const angle = Math.atan2(dy, dx) * (180 / Math.PI);
+              return (
+                <View
+                  key={`e-${index}`}
+                  style={{
+                    position: 'absolute',
+                    height: 2,
+                    width: length,
+                    left: point.x,
+                    top: point.estimatedY - 1,
+                    transformOrigin: 'left center',
+                    transform: [{ rotate: `${angle}deg` }],
+                    backgroundColor: Colors.gray400,
+                    borderRadius: 1,
+                  }}
+                />
+              );
+            })}
+
+            {/* Actual dots */}
+            {chartData.map((point, index) => (
+              <View
+                key={`ad-${index}`}
+                style={[
+                  styles.chartDot,
+                  { left: point.x - 4, top: point.actualY - 4, backgroundColor: Colors.text },
+                ]}
+              />
+            ))}
+
+            {/* Estimated dots */}
+            {chartData.map((point, index) => (
+              <View
+                key={`ed-${index}`}
+                style={[
+                  styles.chartDot,
+                  { left: point.x - 4, top: point.estimatedY - 4, backgroundColor: Colors.gray400 },
+                ]}
+              />
+            ))}
+          </View>
+
+          <View style={styles.legendRow}>
+            <View style={styles.legendItem}>
+              <View style={[styles.legendDot, { backgroundColor: Colors.text }]} />
+              <Text style={styles.legendText}>Actual</Text>
+            </View>
+            <View style={styles.legendItem}>
+              <View style={[styles.legendDot, { backgroundColor: Colors.gray400 }]} />
+              <Text style={styles.legendText}>Estimated</Text>
+            </View>
+          </View>
         </View>
       )}
 
@@ -327,6 +444,53 @@ const styles = StyleSheet.create({
     color: Colors.textTertiary,
     textAlign: 'center',
     marginTop: Spacing.xs,
+  },
+  chartCard: {
+    backgroundColor: Colors.surface,
+    borderRadius: BorderRadius.card,
+    padding: Spacing.lg,
+    marginBottom: Spacing.sm,
+    ...Shadows.subtle,
+  },
+  chartTitle: {
+    ...Typography.sectionHeader,
+    textAlign: 'center',
+    marginBottom: Spacing.md,
+  },
+  chartContainer: {
+    width: CHART_WIDTH,
+    height: CHART_HEIGHT,
+    alignSelf: 'center',
+    position: 'relative',
+  },
+  chartDot: {
+    position: 'absolute',
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  legendRow: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: Spacing.xl,
+    marginTop: Spacing.md,
+    paddingTop: Spacing.sm,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: Colors.border,
+  },
+  legendItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.xs,
+  },
+  legendDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  legendText: {
+    fontSize: 11,
+    color: Colors.gray500,
   },
   statsGrid: {
     flexDirection: 'row',

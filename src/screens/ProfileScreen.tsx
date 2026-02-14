@@ -17,9 +17,7 @@ import {
   ScrollView,
   StyleSheet,
   Alert,
-  Platform,
 } from 'react-native';
-import Animated, { FadeInDown } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import Icon from 'react-native-vector-icons/Ionicons';
@@ -37,7 +35,7 @@ import {
   calculateXP,
 } from '../utils/profileStats';
 import { getAvatarUri, saveAvatarUri } from '../utils/storage';
-import { Colors, Spacing, Typography, BorderRadius, Shadows } from '../utils/colors';
+import { Colors, Spacing, Typography } from '../utils/colors';
 import { haptic } from '../utils/haptics';
 
 type Props = {
@@ -113,6 +111,13 @@ export function ProfileScreen({ navigation }: Props) {
         <AnimatedPressable onPress={handleBack} hitSlop={12}>
           <Text style={styles.backText}>← Back</Text>
         </AnimatedPressable>
+        <Text style={styles.headerTitle}>Profile</Text>
+        <AnimatedPressable
+          onPress={handleOpenSettings}
+          hapticStyle="light"
+          style={styles.settingsRoundButton}>
+          <Icon name="settings-outline" size={18} color={Colors.white} />
+        </AnimatedPressable>
       </View>
 
       <ScrollView
@@ -130,19 +135,6 @@ export function ProfileScreen({ navigation }: Props) {
 
         {/* XP & Level */}
         <XPSection xp={xpData} />
-
-        {/* Settings Button */}
-        <Animated.View
-          entering={FadeInDown.delay(240).duration(300)}
-          style={styles.settingsButtonWrap}>
-          <AnimatedPressable
-            onPress={handleOpenSettings}
-            hapticStyle="light"
-            style={styles.settingsButton}>
-            <Icon name="settings-outline" size={18} color={Colors.white} />
-            <Text style={styles.settingsButtonText}>Settings</Text>
-          </AnimatedPressable>
-        </Animated.View>
 
         {/* Monthly Calendar */}
         <MonthlyCalendar tasks={allTasks} />
@@ -162,6 +154,7 @@ const styles = StyleSheet.create({
   headerBar: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
     paddingHorizontal: Spacing.xxl,
     paddingVertical: Spacing.lg,
   },
@@ -169,28 +162,22 @@ const styles = StyleSheet.create({
     ...Typography.link,
     color: Colors.textSecondary,
   },
+  headerTitle: {
+    ...Typography.bodyMedium,
+    color: Colors.text,
+  },
+  settingsRoundButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: Colors.surfaceDark,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
   scrollView: {
     flex: 1,
   },
   content: {
     paddingTop: Spacing.sm,
-  },
-  settingsButtonWrap: {
-    alignItems: 'center',
-    marginBottom: Spacing.xxl,
-  },
-  settingsButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.sm,
-    backgroundColor: Colors.surfaceDark,
-    paddingVertical: Spacing.md,
-    paddingHorizontal: Spacing.xxl,
-    borderRadius: BorderRadius.button,
-  },
-  settingsButtonText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: Colors.white,
   },
 });
