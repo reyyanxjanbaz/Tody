@@ -18,6 +18,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/Ionicons';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useTasks } from '../context/TaskContext';
+import { useAuth } from '../context/AuthContext';
 import { TaskInput, TaskInputParams } from '../components/TaskInput';
 import { TaskItem } from '../components/TaskItem';
 import { CategoryTabs } from '../components/EnergyFilter';
@@ -79,6 +80,7 @@ export function HomeScreen({ navigation }: Props) {
   const { colors } = useTheme();
   const styles = React.useMemo(() => createStyles(colors), [colors]);
     const insets = useSafeAreaInsets();
+    const { user } = useAuth();
     const {
         tasks,
         addTask,
@@ -126,6 +128,15 @@ export function HomeScreen({ navigation }: Props) {
     const [showManageCategories, setShowManageCategories] = useState(false);
     const [showSortDropdown, setShowSortDropdown] = useState(false);
     const [activeSortOption, setActiveSortOption] = useState<SortOption>('default');
+
+    // ── Personalized title ────────────────────────────────────────────────
+    const personalTitle = useMemo(() => {
+        if (!user?.email) return 'Tody';
+        const name = user.email.split('@')[0];
+        // Capitalize first letter
+        const displayName = name.charAt(0).toUpperCase() + name.slice(1);
+        return `${displayName}'s Tody`;
+    }, [user?.email]);
 
     // ── Lock state map (computed) ──────────────────────────────────────────────
     const lockMap = useMemo(() => {
@@ -652,8 +663,14 @@ export function HomeScreen({ navigation }: Props) {
                 <Animated.View
                     entering={FadeIn.duration(200)}
                     style={styles.header}>
-                    <View>
-                        <Text style={styles.headerTitle}>Tody</Text>
+                    <View style={styles.headerTitleWrap}>
+                        <Text
+                            style={styles.headerTitle}
+                            numberOfLines={1}
+                            adjustsFontSizeToFit
+                            minimumFontScale={0.7}>
+                            {personalTitle}
+                        </Text>
                         {activeCount > 0 && (
                             <Text style={styles.headerCount}>
                                 {activeCount} task{activeCount !== 1 ? 's' : ''}
@@ -865,7 +882,8 @@ export function HomeScreen({ navigation }: Props) {
             <FocusMode
                 visible={isFocusMode}
                 tasks={focusTasks}
-                onComplete={id => completeTask(id)}
+                allTasks={tasks}
+                onComplete={handleCompleteWithLockCheck}
                 onExit={() => setIsFocusMode(false)}
             />
 
@@ -912,8 +930,12 @@ const createStyles = (c: ThemeColors) => StyleSheet.create({
         paddingTop: Spacing.xl,
         paddingBottom: Spacing.lg,
     },
+    headerTitleWrap: {
+        flex: 1,
+        marginRight: Spacing.sm,
+    },
     headerTitle: {
-        fontSize: 36,
+        fontSize: 32,
         fontWeight: '800',
         letterSpacing: -1,
         color: c.text,

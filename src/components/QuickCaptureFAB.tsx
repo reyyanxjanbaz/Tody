@@ -201,13 +201,13 @@ const createStyles = (c: ThemeColors) => StyleSheet.create({
     flex: 1,
   },
   modalContent: {
-    backgroundColor: c.white,
+    backgroundColor: c.surface,
     borderTopLeftRadius: BorderRadius.card,
     borderTopRightRadius: BorderRadius.card,
     paddingHorizontal: Spacing.xxl,
     paddingTop: Spacing.xxl,
     borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: 'rgba(0,0,0,0.12)',
+    borderTopColor: c.border,
   },
   input: {
     fontSize: 17,

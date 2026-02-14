@@ -422,9 +422,12 @@ export function TaskDetailScreen({ navigation, route }: Props) {
               </Pressable>
             )}
             {locked && (
-              <Text style={styles.lockedHint}>
-                🔒 Complete all subtasks to unlock
-              </Text>
+              <View style={styles.lockedHintRow}>
+                <Icon name="lock-closed" size={13} color={colors.gray400} />
+                <Text style={styles.lockedHint}>
+                  Complete all subtasks to unlock
+                </Text>
+              </View>
             )}
           </View>
         )}
@@ -644,10 +647,15 @@ const createStyles = (c: ThemeColors) => StyleSheet.create({
     color: c.gray400,
     fontFamily: FontFamily,
   },
+  lockedHintRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: 4,
+  },
   lockedHint: {
     fontSize: 12,
     color: c.gray400,
-    marginTop: 4,
     fontFamily: FontFamily,
   },
 

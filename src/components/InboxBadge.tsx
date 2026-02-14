@@ -63,7 +63,7 @@ const createStyles = (c: ThemeColors) => StyleSheet.create({
     borderColor: c.background,
   },
   badgeText: {
-    color: c.white,
+    color: c.background,
     fontSize: 9,
     fontWeight: '700',
     lineHeight: 12,

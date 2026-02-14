@@ -6,7 +6,7 @@ import Animated, {
   withSpring,
 } from 'react-native-reanimated';
 import Icon from 'react-native-vector-icons/Ionicons';
-import { Spacing, FontFamily, type ThemeColors } from '../utils/colors';
+import { Spacing, FontFamily, BorderRadius, type ThemeColors } from '../utils/colors';
 import { useTheme } from '../context/ThemeContext';
 import { Category } from '../types';
 import { haptic } from '../utils/haptics';
@@ -23,8 +23,8 @@ export const CategoryPill = memo(function CategoryPill({
   categories,
   onChange,
 }: CategoryPillProps) {
-  const { colors } = useTheme();
-  const styles = React.useMemo(() => createStyles(colors), [colors]);
+  const { colors, isDark } = useTheme();
+  const styles = React.useMemo(() => createStyles(colors, isDark), [colors, isDark]);
   const [showDropdown, setShowDropdown] = useState(false);
   const scale = useSharedValue(1);
   const animStyle = useAnimatedStyle(() => ({
@@ -32,7 +32,7 @@ export const CategoryPill = memo(function CategoryPill({
   }));
 
   const current = categories.find(c => c.id === value);
-  const color = current?.color ?? colors.gray400;
+  const color = current?.color ?? colors.text;
   const label = current?.name ?? 'Category';
   const icon = current?.icon ?? 'folder-outline';
 
@@ -84,11 +84,11 @@ export const CategoryPill = memo(function CategoryPill({
               return (
                 <Pressable
                   key={cat.id}
-                  style={[styles.dropdownItem, isSelected && styles.dropdownItemActive]}
+                  style={[styles.dropdownItem, isSelected && styles.dropdownItemSelected]}
                   onPress={() => handleSelect(cat.id)}
                 >
                   <View style={[styles.dropdownDot, { backgroundColor: cat.color }]} />
-                  <Icon name={cat.icon} size={16} color={isSelected ? cat.color : colors.gray500} />
+                  <Icon name={cat.icon} size={16} color={isSelected ? cat.color : colors.textSecondary} />
                   <Text style={[
                     styles.dropdownLabel,
                     isSelected && { color: cat.color, fontWeight: '700' },
@@ -108,7 +108,7 @@ export const CategoryPill = memo(function CategoryPill({
   );
 });
 
-const createStyles = (c: ThemeColors) => StyleSheet.create({
+const createStyles = (c: ThemeColors, isDark: boolean) => StyleSheet.create({
   pill: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -130,28 +130,28 @@ const createStyles = (c: ThemeColors) => StyleSheet.create({
   },
   overlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.35)',
+    backgroundColor: isDark ? 'rgba(0,0,0,0.6)' : 'rgba(0,0,0,0.35)',
     justifyContent: 'center',
     alignItems: 'center',
   },
   dropdown: {
     width: '72%',
-    backgroundColor: c.surface,
+    backgroundColor: isDark ? c.gray100 : c.surface,
     borderRadius: 16,
     paddingVertical: Spacing.md,
     paddingHorizontal: Spacing.sm,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.15,
+    shadowOpacity: isDark ? 0.4 : 0.15,
     shadowRadius: 24,
     elevation: 12,
     borderWidth: 1,
-    borderColor: c.border,
+    borderColor: isDark ? c.gray200 : c.border,
   },
   dropdownTitle: {
     fontSize: 13,
     fontWeight: '700',
-    color: c.gray400,
+    color: c.textSecondary,
     letterSpacing: 0.6,
     textTransform: 'uppercase',
     paddingHorizontal: Spacing.md,
@@ -166,8 +166,8 @@ const createStyles = (c: ThemeColors) => StyleSheet.create({
     paddingHorizontal: Spacing.md,
     borderRadius: 10,
   },
-  dropdownItemActive: {
-    backgroundColor: c.gray50,
+  dropdownItemSelected: {
+    backgroundColor: isDark ? c.gray200 : c.gray50,
   },
   dropdownDot: {
     width: 8,

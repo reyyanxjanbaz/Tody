@@ -1,9 +1,10 @@
-import React, { memo, useState, useCallback, useEffect } from 'react';
-import { View, Text, StyleSheet, Dimensions } from 'react-native';
+import React, { memo, useState, useCallback, useEffect, useMemo } from 'react';
+import { View, Text, StyleSheet, Dimensions, ScrollView } from 'react-native';
 import Animated, {
     useSharedValue,
     useAnimatedStyle,
     withSpring,
+    interpolate,
     FadeIn,
     FadeInDown,
     FadeOut,
@@ -21,11 +22,14 @@ import { AnimatedPressable } from './ui';
 import { haptic } from '../utils/haptics';
 import { SPRING_SNAPPY } from '../utils/animations';
 
+import { isTaskLocked, getChildren } from '../utils/dependencyChains';
+
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 interface FocusModeProps {
     visible: boolean;
     tasks: Task[];
+    allTasks: Task[];
     onComplete: (id: string) => void;
     onExit: () => void;
 }
@@ -46,6 +50,7 @@ const PRIORITY_COLORS: Record<Priority, string> = {
 export const FocusMode = memo(function FocusMode({
     visible,
     tasks,
+    allTasks,
     onComplete,
     onExit,
 }: FocusModeProps) {
@@ -56,9 +61,25 @@ export const FocusMode = memo(function FocusMode({
     const [direction, setDirection] = useState<'next' | 'prev'>('next');
     // Key to force re-mount of card for entering/exiting animations
     const [cardKey, setCardKey] = useState(0);
+    // Reveal subtask checklist when user tries to complete a locked task
+    const [showSubtasks, setShowSubtasks] = useState(false);
+    // Shake feedback for locked attempt
+    const lockShake = useSharedValue(0);
 
     const focusTasks = tasks.slice(0, 3);
     const currentTask = focusTasks[currentIndex];
+
+    // Compute lock state for current task
+    const isLocked = useMemo(() => {
+        if (!currentTask) return false;
+        return isTaskLocked(currentTask, allTasks);
+    }, [currentTask, allTasks]);
+
+    // Get children for current task
+    const children = useMemo(() => {
+        if (!currentTask) return [];
+        return getChildren(currentTask, allTasks);
+    }, [currentTask, allTasks]);
 
     // Animated dot width for active indicator
     const activeDot = useSharedValue(currentIndex);
@@ -77,12 +98,23 @@ export const FocusMode = memo(function FocusMode({
             setDirection(dir);
             setCardKey(k => k + 1);
             setCurrentIndex(nextIndex);
+            setShowSubtasks(false);
         },
         [],
     );
 
     const handleComplete = useCallback(() => {
         if (!currentTask) return;
+        // Parent-child lock check: can't complete parent with incomplete children
+        if (isLocked) {
+            haptic('warning');
+            // Shake the card and reveal subtask checklist
+            lockShake.value = withSpring(1, SPRING_SNAPPY, () => {
+                lockShake.value = withSpring(0, SPRING_SNAPPY);
+            });
+            setShowSubtasks(true);
+            return;
+        }
         haptic('success');
         onComplete(currentTask.id);
         if (currentIndex < focusTasks.length - 1) {
@@ -90,12 +122,13 @@ export const FocusMode = memo(function FocusMode({
         } else {
             onExit();
         }
-    }, [currentTask, currentIndex, focusTasks.length, onComplete, onExit, advanceCard]);
+    }, [currentTask, currentIndex, focusTasks.length, onComplete, onExit, advanceCard, isLocked, lockShake]);
 
     const handleNext = useCallback(() => {
         if (currentIndex < focusTasks.length - 1) {
             haptic('light');
             advanceCard('next', currentIndex + 1);
+            setShowSubtasks(false);
         }
     }, [currentIndex, focusTasks.length, advanceCard]);
 
@@ -103,8 +136,19 @@ export const FocusMode = memo(function FocusMode({
         if (currentIndex > 0) {
             haptic('light');
             advanceCard('prev', currentIndex - 1);
+            setShowSubtasks(false);
         }
     }, [currentIndex, advanceCard]);
+
+    // Animated shake style for locked card
+    const lockShakeStyle = useAnimatedStyle(() => {
+        const translateX = interpolate(
+            lockShake.value,
+            [0, 0.25, 0.5, 0.75, 1],
+            [0, -8, 8, -4, 0],
+        );
+        return { transform: [{ translateX }] };
+    });
 
     if (!visible) return null;
 
@@ -149,6 +193,11 @@ export const FocusMode = memo(function FocusMode({
             ? SlideOutLeft.duration(250)
             : SlideOutRight.duration(250);
 
+    // Subtask progress stats
+    const completedChildren = children.filter(c => c.isCompleted).length;
+    const totalChildren = children.length;
+    const hasChildren = totalChildren > 0;
+
     return (
         <Animated.View
             entering={FadeIn.duration(250)}
@@ -185,7 +234,7 @@ export const FocusMode = memo(function FocusMode({
                 exiting={exiting}
                 style={styles.taskCardContainer}>
                 {currentTask && (
-                    <View style={styles.taskCard}>
+                    <Animated.View style={[styles.taskCard, lockShakeStyle]}>
                         {/* Priority indicator */}
                         <View style={styles.priorityRow}>
                             <Icon
@@ -204,6 +253,12 @@ export const FocusMode = memo(function FocusMode({
                                     currentTask.priority.slice(1)}{' '}
                                 priority
                             </Text>
+                            {/* Lock badge for parent tasks */}
+                            {isLocked && (
+                                <View style={styles.lockBadge}>
+                                    <Icon name="lock-closed" size={11} color="rgba(255,255,255,0.6)" />
+                                </View>
+                            )}
                         </View>
 
                         {/* Title */}
@@ -215,6 +270,68 @@ export const FocusMode = memo(function FocusMode({
                                 {currentTask.description}
                             </Text>
                         ) : null}
+
+                        {/* Subtask progress bar (always visible if task has children) */}
+                        {hasChildren && (
+                            <View style={styles.subtaskProgressSection}>
+                                <View style={styles.subtaskProgressHeader}>
+                                    <Icon name="git-branch-outline" size={14} color="rgba(255,255,255,0.5)" />
+                                    <Text style={styles.subtaskProgressText}>
+                                        {completedChildren}/{totalChildren} subtask{totalChildren !== 1 ? 's' : ''} done
+                                    </Text>
+                                </View>
+                                <View style={styles.subtaskProgressTrack}>
+                                    <View
+                                        style={[
+                                            styles.subtaskProgressFill,
+                                            { width: `${totalChildren > 0 ? (completedChildren / totalChildren) * 100 : 0}%` },
+                                            completedChildren === totalChildren && styles.subtaskProgressComplete,
+                                        ]}
+                                    />
+                                </View>
+                            </View>
+                        )}
+
+                        {/* Expandable subtask checklist (revealed when user tries to complete locked task) */}
+                        {showSubtasks && hasChildren && (
+                            <Animated.View
+                                entering={FadeInDown.duration(250)}
+                                style={styles.subtaskChecklist}>
+                                <Text style={styles.subtaskChecklistTitle}>
+                                    Complete these first
+                                </Text>
+                                <ScrollView
+                                    style={styles.subtaskScrollView}
+                                    nestedScrollEnabled
+                                    showsVerticalScrollIndicator={false}>
+                                    {children.map(child => (
+                                        <View key={child.id} style={styles.subtaskRow}>
+                                            <View style={[
+                                                styles.subtaskCheckbox,
+                                                child.isCompleted && styles.subtaskCheckboxDone,
+                                            ]}>
+                                                {child.isCompleted && (
+                                                    <Icon name="checkmark" size={10} color={colors.surfaceDark} />
+                                                )}
+                                            </View>
+                                            <Text
+                                                style={[
+                                                    styles.subtaskName,
+                                                    child.isCompleted && styles.subtaskNameDone,
+                                                ]}
+                                                numberOfLines={1}>
+                                                {child.title}
+                                            </Text>
+                                            {child.isCompleted ? (
+                                                <Icon name="checkmark-circle" size={14} color="#22C55E" />
+                                            ) : (
+                                                <Icon name="ellipse-outline" size={14} color="rgba(255,255,255,0.25)" />
+                                            )}
+                                        </View>
+                                    ))}
+                                </ScrollView>
+                            </Animated.View>
+                        )}
 
                         {/* Deadline */}
                         {currentTask.deadline && (
@@ -243,18 +360,26 @@ export const FocusMode = memo(function FocusMode({
                         {/* Complete button */}
                         <AnimatedPressable
                             onPress={handleComplete}
-                            hapticStyle="success"
+                            hapticStyle={isLocked ? null : 'success'}
                             pressScale={0.95}>
-                            <View style={styles.completeButton}>
+                            <View style={[
+                                styles.completeButton,
+                                isLocked && styles.completeButtonLocked,
+                            ]}>
                                 <Icon
-                                    name="checkmark-circle-outline"
+                                    name={isLocked ? 'lock-closed' : 'checkmark-circle-outline'}
                                     size={20}
-                                    color={colors.white}
+                                    color={isLocked ? 'rgba(255,255,255,0.4)' : colors.surfaceDark}
                                 />
-                                <Text style={styles.completeText}>Mark Complete</Text>
+                                <Text style={[
+                                    styles.completeText,
+                                    isLocked && styles.completeTextLocked,
+                                ]}>
+                                    {isLocked ? 'Finish Subtasks First' : 'Mark Complete'}
+                                </Text>
                             </View>
                         </AnimatedPressable>
-                    </View>
+                    </Animated.View>
                 )}
             </Animated.View>
 
@@ -415,11 +540,106 @@ const createStyles = (c: ThemeColors) => StyleSheet.create({
         marginTop: 28,
         gap: 8,
     },
+    completeButtonLocked: {
+        backgroundColor: 'rgba(255,255,255,0.1)',
+        borderWidth: 1,
+        borderColor: 'rgba(255,255,255,0.15)',
+    },
     completeText: {
         fontSize: 16,
         fontWeight: '700',
         color: c.surfaceDark,
     fontFamily: FontFamily,
+    },
+    completeTextLocked: {
+        color: 'rgba(255,255,255,0.4)',
+    },
+    lockBadge: {
+        width: 22,
+        height: 22,
+        borderRadius: 11,
+        backgroundColor: 'rgba(255,255,255,0.12)',
+        justifyContent: 'center',
+        alignItems: 'center',
+        marginLeft: 'auto',
+    },
+    subtaskProgressSection: {
+        marginBottom: 16,
+        gap: 6,
+    },
+    subtaskProgressHeader: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 6,
+    },
+    subtaskProgressText: {
+        fontSize: 12,
+        fontWeight: '500',
+        color: 'rgba(255,255,255,0.5)',
+        fontFamily: FontFamily,
+    },
+    subtaskProgressTrack: {
+        height: 3,
+        backgroundColor: 'rgba(255,255,255,0.1)',
+        borderRadius: 1.5,
+        overflow: 'hidden',
+    },
+    subtaskProgressFill: {
+        height: '100%',
+        backgroundColor: 'rgba(255,255,255,0.5)',
+        borderRadius: 1.5,
+    },
+    subtaskProgressComplete: {
+        backgroundColor: '#22C55E',
+    },
+    subtaskChecklist: {
+        backgroundColor: 'rgba(0,0,0,0.25)',
+        borderRadius: 10,
+        padding: 12,
+        marginBottom: 16,
+        borderWidth: 1,
+        borderColor: 'rgba(255,255,255,0.08)',
+    },
+    subtaskChecklistTitle: {
+        fontSize: 11,
+        fontWeight: '700',
+        letterSpacing: 1,
+        textTransform: 'uppercase',
+        color: 'rgba(255,255,255,0.4)',
+        marginBottom: 8,
+        fontFamily: FontFamily,
+    },
+    subtaskScrollView: {
+        maxHeight: 120,
+    },
+    subtaskRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 8,
+        paddingVertical: 5,
+    },
+    subtaskCheckbox: {
+        width: 16,
+        height: 16,
+        borderRadius: 4,
+        borderWidth: 1.5,
+        borderColor: 'rgba(255,255,255,0.25)',
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    subtaskCheckboxDone: {
+        backgroundColor: '#22C55E',
+        borderColor: '#22C55E',
+    },
+    subtaskName: {
+        flex: 1,
+        fontSize: 13,
+        color: 'rgba(255,255,255,0.7)',
+        fontFamily: FontFamily,
+    },
+    subtaskNameDone: {
+        textDecorationLine: 'line-through',
+        color: 'rgba(255,255,255,0.35)',
     },
     navigationRow: {
         flexDirection: 'row',

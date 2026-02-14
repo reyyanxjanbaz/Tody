@@ -152,7 +152,7 @@ export const TaskPreviewOverlay = memo(function TaskPreviewOverlay({
               style={styles.actionButton}
               onPress={() => { onClose(); onEdit(task); }}
             >
-              <Icon name="create-outline" size={16} color={colors.white} />
+              <Icon name="create-outline" size={16} color={colors.background} />
               <Text style={styles.actionButtonText}>Edit</Text>
             </Pressable>
             {task.depth < 3 && !task.isCompleted && (
@@ -160,7 +160,7 @@ export const TaskPreviewOverlay = memo(function TaskPreviewOverlay({
                 style={[styles.actionButton, styles.actionButtonSecondary]}
                 onPress={() => { onClose(); onAddSubtask(task); }}
               >
-                <Icon name="git-branch-outline" size={16} color={colors.black} />
+                <Icon name="git-branch-outline" size={16} color={colors.text} />
                 <Text style={[styles.actionButtonText, styles.actionButtonTextSecondary]}>Subtask</Text>
               </Pressable>
             )}
