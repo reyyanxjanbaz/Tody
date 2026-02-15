@@ -22,6 +22,7 @@ import {
   Text,
   StyleSheet,
   Alert,
+  Platform,
   Dimensions,
 } from 'react-native';
 import Animated, {
@@ -184,21 +185,31 @@ export const TaskItem = memo(function TaskItem({
             {
               text: 'Adjust',
               onPress: () => {
-                Alert.prompt(
-                  'Actual time (minutes)',
-                  'How many minutes did you actually work?',
-                  (text) => {
-                    const mins = parseInt(text, 10);
-                    if (!isNaN(mins) && mins > 0) {
-                      onCompleteTimed(task.id, mins);
-                    } else {
-                      onCompleteTimed(task.id);
-                    }
-                  },
-                  'plain-text',
-                  '',
-                  'number-pad',
-                );
+                if (Platform.OS === 'ios') {
+                  Alert.prompt(
+                    'Actual time (minutes)',
+                    'How many minutes did you actually work?',
+                    (text) => {
+                      const mins = parseInt(text, 10);
+                      if (!isNaN(mins) && mins > 0) {
+                        onCompleteTimed(task.id, mins);
+                      } else {
+                        onCompleteTimed(task.id);
+                      }
+                    },
+                    'plain-text',
+                    '',
+                    'number-pad',
+                  );
+                } else {
+                  // Android: offer preset durations (Alert.prompt is iOS-only)
+                  Alert.alert('Adjust time', 'How long did you actually work?', [
+                    { text: '15 min', onPress: () => onCompleteTimed(task.id, 15) },
+                    { text: '30 min', onPress: () => onCompleteTimed(task.id, 30) },
+                    { text: '1 hour', onPress: () => onCompleteTimed(task.id, 60) },
+                    { text: 'Use actual', onPress: () => onCompleteTimed(task.id) },
+                  ]);
+                }
               },
             },
           ],

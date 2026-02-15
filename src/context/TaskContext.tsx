@@ -145,6 +145,83 @@ export function TaskProvider({ children }: { children: React.ReactNode }) {
     })();
   }, []);
 
+  // ── Reset state when user identity changes (logout → new login) ───────────
+  const prevUserIdRef = useRef<string | null | undefined>(undefined);
+
+  useEffect(() => {
+    const currentUserId = user?.id ?? null;
+    const prevUserId = prevUserIdRef.current;
+    prevUserIdRef.current = currentUserId;
+
+    // Skip the very first resolution – the mount effect handles initial load
+    if (prevUserId === undefined) return;
+    // No actual change
+    if (prevUserId === currentUserId) return;
+
+    // ── User identity changed ──
+    // Temporarily block sync effect until reload completes
+    hasSyncedRef.current = true;
+
+    // Cancel any pending storage writes from the previous user
+    if (persistTimeout.current) {
+      clearTimeout(persistTimeout.current);
+      persistTimeout.current = null;
+    }
+    if (archivePersistTimeout.current) {
+      clearTimeout(archivePersistTimeout.current);
+      archivePersistTimeout.current = null;
+    }
+
+    // Clear in-memory state
+    setTasks([]);
+    setArchivedTasks([]);
+    setCategories(DEFAULT_CATEGORIES);
+    setActiveCategory('overview');
+
+    if (!currentUserId) {
+      // Logged out – reset complete
+      hasSyncedRef.current = false;
+      setIsLoading(false);
+      return;
+    }
+
+    // A different user logged in – reload from (now-cleared) storage
+    setIsLoading(true);
+    (async () => {
+      try {
+        const stored = await getTasks<Task>();
+        const migrated = stored.map(t => ({
+          ...t,
+          childIds: t.childIds ?? [],
+          depth: t.depth ?? 0,
+          parentId: t.parentId ?? null,
+          energyLevel: t.energyLevel ?? 'medium',
+          category: t.category ?? 'personal',
+        }));
+        const initialized = initializeOverdueDates(migrated);
+        setTasks(initialized);
+
+        const storedArchived = await getArchivedTasks<Task>();
+        setArchivedTasks(storedArchived);
+
+        const storedCategories = await getCategories<Category>();
+        if (storedCategories.length > 0) {
+          setCategories(storedCategories);
+        }
+        const storedActiveCategory = await getActiveCategory();
+        if (storedActiveCategory) {
+          setActiveCategory(storedActiveCategory);
+        }
+      } catch {
+        // Already reset to empty above
+      } finally {
+        // Allow sync effect to run now that reload is complete
+        hasSyncedRef.current = false;
+        setIsLoading(false);
+      }
+    })();
+  }, [user?.id]);
+
   // ── Supabase sync: push local data on login / pull on subsequent launches ─
   useEffect(() => {
     if (!user || isLoading || hasSyncedRef.current) return;
@@ -175,9 +252,9 @@ export function TaskProvider({ children }: { children: React.ReactNode }) {
           await pushTasks(allLocal, user.id, catMapRef.current);
         }
 
-        console.log('[TaskContext] Supabase sync complete');
+        // sync complete
       } catch (e) {
-        console.error('[TaskContext] Supabase sync error:', e);
+        // sync error silenced
       }
     })();
   }, [user, isLoading]);

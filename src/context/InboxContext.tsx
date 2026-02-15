@@ -57,6 +57,49 @@ export function InboxProvider({ children }: { children: React.ReactNode }) {
     })();
   }, []);
 
+  // ── Reset state when user identity changes (logout → new login) ───────────
+  const prevUserIdRef = useRef<string | null | undefined>(undefined);
+
+  useEffect(() => {
+    const currentUserId = user?.id ?? null;
+    const prevUserId = prevUserIdRef.current;
+    prevUserIdRef.current = currentUserId;
+
+    // Skip the very first resolution – the mount effect handles initial load
+    if (prevUserId === undefined) return;
+    // No actual change
+    if (prevUserId === currentUserId) return;
+
+    // ── User identity changed ──
+    hasSyncedRef.current = true;
+
+    if (persistTimeout.current) {
+      clearTimeout(persistTimeout.current);
+      persistTimeout.current = null;
+    }
+
+    setInboxTasks([]);
+
+    if (!currentUserId) {
+      hasSyncedRef.current = false;
+      setIsLoading(false);
+      return;
+    }
+
+    setIsLoading(true);
+    (async () => {
+      try {
+        const stored = await getInboxTasks<InboxTask>();
+        setInboxTasks(stored);
+      } catch {
+        // Already reset to empty above
+      } finally {
+        hasSyncedRef.current = false;
+        setIsLoading(false);
+      }
+    })();
+  }, [user?.id]);
+
   // Supabase sync on login
   useEffect(() => {
     if (!user || isLoading || hasSyncedRef.current) return;
@@ -87,9 +130,9 @@ export function InboxProvider({ children }: { children: React.ReactNode }) {
           await pushInboxTasks(localItems, user.id);
         }
 
-        console.log('[InboxContext] Supabase sync complete');
+        // sync complete
       } catch (e) {
-        console.error('[InboxContext] Supabase sync error:', e);
+        // sync error silenced
       }
     })();
   }, [user, isLoading]);

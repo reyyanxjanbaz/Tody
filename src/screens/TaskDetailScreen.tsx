@@ -22,6 +22,7 @@ import {
   StyleSheet,
   Platform,
   Alert,
+  Keyboard,
 } from 'react-native';
 import Animated, { FadeIn, FadeOut } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -45,6 +46,7 @@ import {
   TimeQuickPick,
 } from '../components/ParameterPills';
 import { CategoryPill } from '../components/CategoryPill';
+import { PromptModal } from '../components/ui';
 
 
 type Props = {
@@ -76,6 +78,7 @@ export function TaskDetailScreen({ navigation, route }: Props) {
   const [showDeadlinePicker, setShowDeadlinePicker] = useState(false);
   const [showCustomDatePicker, setShowCustomDatePicker] = useState(false);
   const [tempDate, setTempDate] = useState(new Date());
+  const [subtaskPromptVisible, setSubtaskPromptVisible] = useState(false);
 
   // Sync external changes
   useEffect(() => {
@@ -226,16 +229,24 @@ export function TaskDetailScreen({ navigation, route }: Props) {
       Alert.alert('Max depth', 'Max 3 levels of subtasks');
       return;
     }
-    Alert.prompt(
-      'Add subtask',
-      'Enter subtask title',
-      (text) => {
-        if (text && text.trim()) {
-          addSubtask(task.id, text.trim());
-        }
-      },
-      'plain-text',
-    );
+    Keyboard.dismiss();
+    if (Platform.OS === 'ios') {
+      Alert.prompt(
+        'Add subtask',
+        'Enter subtask title',
+        (text) => {
+          if (text && text.trim()) {
+            const created = addSubtask(task.id, text.trim());
+            if (!created) {
+              Alert.alert('Could not add subtask', 'Please try again.');
+            }
+          }
+        },
+        'plain-text',
+      );
+    } else {
+      setTimeout(() => setSubtaskPromptVisible(true), 80);
+    }
   };
 
   const handleBack = () => {
@@ -267,7 +278,7 @@ export function TaskDetailScreen({ navigation, route }: Props) {
       <ScrollView
         style={styles.scrollView}
         contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 140 }]}
-        keyboardShouldPersistTaps="handled">
+        keyboardShouldPersistTaps="always">
 
         {/* ── Title ─────────────────────────────────────────────── */}
         <TextInput
@@ -483,6 +494,27 @@ export function TaskDetailScreen({ navigation, route }: Props) {
           <Icon name="trash-outline" size={20} color={colors.text} />
         </Pressable>
       </View>
+
+      {/* Android subtask prompt */}
+      <PromptModal
+        visible={subtaskPromptVisible}
+        title="Add subtask"
+        message="Enter subtask title"
+        onSubmit={(text) => {
+          const trimmed = text.trim();
+          if (!trimmed) {
+            setSubtaskPromptVisible(false);
+            return;
+          }
+          const created = addSubtask(task.id, trimmed);
+          setSubtaskPromptVisible(false);
+          if (!created) {
+            Alert.alert('Could not add subtask', 'Please try again.');
+          }
+        }}
+        onCancel={() => setSubtaskPromptVisible(false)}
+        submitLabel="Add"
+      />
     </View>
   );
 }

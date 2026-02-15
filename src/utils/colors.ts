@@ -4,14 +4,8 @@ import { StyleSheet, ViewStyle, Platform } from 'react-native';
 
 export const FontFamily = Platform.select({
   ios: 'CharisSIL',
-  android: 'CharisSIL-Regular',
-  default: 'CharisSIL-Regular',
-}) as string;
-
-export const FontFamilyBold = Platform.select({
-  ios: 'CharisSIL-Bold',
-  android: 'CharisSIL-Bold',
-  default: 'CharisSIL-Bold',
+  android: 'CharisSIL',
+  default: 'CharisSIL',
 }) as string;
 
 // ── Theme Color Type ────────────────────────────────────────────────────────
@@ -210,20 +204,4 @@ export const Typography = StyleSheet.create({
   },
 });
 
-export const CommonStyles = StyleSheet.create({
-  separator: {
-    height: StyleSheet.hairlineWidth,
-    backgroundColor: Colors.border,
-  },
-  row: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  flex: {
-    flex: 1,
-  },
-  screenContainer: {
-    flex: 1,
-    backgroundColor: Colors.background,
-  },
-});
+

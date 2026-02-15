@@ -17,6 +17,7 @@ import {
   ScrollView,
   StyleSheet,
   Alert,
+  Platform,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -28,7 +29,7 @@ import { ProfileHeader } from '../components/profile/ProfileHeader';
 import { XPSection } from '../components/profile/XPSection';
 import { MonthlyCalendar } from '../components/profile/MonthlyCalendar';
 import { PerformanceFusionSection } from '../components/profile/PerformanceFusionSection';
-import { AnimatedPressable } from '../components/ui';
+import { AnimatedPressable, PromptModal } from '../components/ui';
 import {
   calculateProfileStats,
   calculateStreaks,
@@ -50,6 +51,7 @@ export function ProfileScreen({ navigation }: Props) {
   const { user } = useAuth();
   const { tasks, archivedTasks } = useTasks();
   const [avatarUri, setAvatarUri] = useState<string | null>(null);
+  const [avatarPromptVisible, setAvatarPromptVisible] = useState(false);
 
   // Merge active + archived tasks for full picture
   const allTasks = useMemo(() => [...tasks, ...archivedTasks], [tasks, archivedTasks]);
@@ -78,31 +80,31 @@ export function ProfileScreen({ navigation }: Props) {
   }, [navigation]);
 
   const handleChangeAvatar = useCallback(() => {
-    // Since we don't have react-native-image-picker installed,
-    // show a prompt for a URL as a lightweight placeholder.
-    // In production this would open the camera roll.
-    Alert.prompt(
-      'Set Avatar',
-      'Paste an image URL (or leave blank to remove)',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Save',
-          onPress: async (value?: string) => {
-            if (value && value.trim()) {
-              setAvatarUri(value.trim());
-              await saveAvatarUri(value.trim());
-            } else {
-              setAvatarUri(null);
-              await saveAvatarUri('');
-            }
-            haptic('success');
-          },
-        },
-      ],
-      'plain-text',
-      avatarUri ?? '',
-    );
+    const handleSave = async (value: string) => {
+      if (value.trim()) {
+        setAvatarUri(value.trim());
+        await saveAvatarUri(value.trim());
+      } else {
+        setAvatarUri(null);
+        await saveAvatarUri('');
+      }
+      haptic('success');
+    };
+
+    if (Platform.OS === 'ios') {
+      Alert.prompt(
+        'Set Avatar',
+        'Paste an image URL (or leave blank to remove)',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Save', onPress: (v?: string) => handleSave(v ?? '') },
+        ],
+        'plain-text',
+        avatarUri ?? '',
+      );
+    } else {
+      setAvatarPromptVisible(true);
+    }
   }, [avatarUri]);
 
   if (!user) return null;
@@ -145,6 +147,26 @@ export function ProfileScreen({ navigation }: Props) {
         {/* Unified analytics narrative: stats + reality score */}
         <PerformanceFusionSection stats={profileStats} tasks={allTasks} />
       </ScrollView>
+
+      {/* Android avatar URL prompt */}
+      <PromptModal
+        visible={avatarPromptVisible}
+        title="Set Avatar"
+        message="Paste an image URL (or leave blank to remove)"
+        defaultValue={avatarUri ?? ''}
+        onSubmit={async (v) => {
+          setAvatarPromptVisible(false);
+          if (v.trim()) {
+            setAvatarUri(v.trim());
+            await saveAvatarUri(v.trim());
+          } else {
+            setAvatarUri(null);
+            await saveAvatarUri('');
+          }
+          haptic('success');
+        }}
+        onCancel={() => setAvatarPromptVisible(false)}
+      />
     </View>
   );
 }

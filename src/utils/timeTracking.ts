@@ -20,33 +20,6 @@ export function calculateActualMinutes(
 }
 
 /**
- * Parse user estimate input into minutes.
- * Accepts formats: "30", "30m", "30 min", "1h", "1 hour", "1h30m", "1.5h"
- */
-export function parseEstimateInput(input: string): number | null {
-  const trimmed = input.trim().toLowerCase();
-  if (!trimmed) { return null; }
-
-  // Pure number = minutes
-  const pureNum = Number(trimmed);
-  if (!isNaN(pureNum) && pureNum > 0) { return Math.round(pureNum); }
-
-  // "1h30m" or "1h 30m"
-  const hhmm = trimmed.match(/^(\d+(?:\.\d+)?)\s*h(?:ours?|r)?\s*(?:(\d+)\s*m(?:in(?:utes?)?)?)?$/);
-  if (hhmm) {
-    const hours = parseFloat(hhmm[1]);
-    const mins = hhmm[2] ? parseInt(hhmm[2], 10) : 0;
-    return Math.round(hours * 60 + mins);
-  }
-
-  // "30m" or "30 min" or "30 minutes"
-  const minMatch = trimmed.match(/^(\d+)\s*m(?:in(?:utes?)?)?$/);
-  if (minMatch) { return parseInt(minMatch[1], 10); }
-
-  return null;
-}
-
-/**
  * Format minutes into a human-readable string.
  * e.g., 90 => "1h 30m", 30 => "30m", 120 => "2h"
  */

@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useCallback, useRef } from 'react';
+import React, { useMemo, useState, useCallback, useRef, useEffect } from 'react';
 import {
     View,
     Text,
@@ -9,7 +9,7 @@ import {
     Modal,
     Alert,
     RefreshControl,
-    KeyboardAvoidingView,
+    KeyboardEvent,
     Platform,
 } from 'react-native';
 import Animated, { FadeIn, FadeOut } from 'react-native-reanimated';
@@ -27,7 +27,6 @@ import { ManageCategoriesModal } from '../components/ManageCategoriesModal';
 import { SortDropdown } from '../components/SortDropdown';
 import { SectionHeader } from '../components/SectionHeader';
 import { EmptyState } from '../components/EmptyState';
-import { QuickCaptureFAB } from '../components/QuickCaptureFAB';
 import { InboxBadge } from '../components/InboxBadge';
 import { TaskPreviewOverlay } from '../components/TaskPreviewOverlay';
 import { ZeroStateOnboarding } from '../components/ZeroStateOnboarding';
@@ -128,6 +127,29 @@ export function HomeScreen({ navigation }: Props) {
     const [showManageCategories, setShowManageCategories] = useState(false);
     const [showSortDropdown, setShowSortDropdown] = useState(false);
     const [activeSortOption, setActiveSortOption] = useState<SortOption>('default');
+    const [keyboardHeight, setKeyboardHeight] = useState(0);
+
+    useEffect(() => {
+        const handleKeyboardShow = (event: KeyboardEvent) => {
+            const nextHeight = event.endCoordinates?.height ?? 0;
+            setKeyboardHeight(Math.max(0, nextHeight - insets.bottom));
+        };
+
+        const handleKeyboardHide = () => {
+            setKeyboardHeight(0);
+        };
+
+        const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
+        const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
+
+        const showSub = Keyboard.addListener(showEvent, handleKeyboardShow);
+        const hideSub = Keyboard.addListener(hideEvent, handleKeyboardHide);
+
+        return () => {
+            showSub.remove();
+            hideSub.remove();
+        };
+    }, [insets.bottom]);
 
     // ── Personalized title ────────────────────────────────────────────────
     const personalTitle = useMemo(() => {
@@ -797,11 +819,7 @@ export function HomeScreen({ navigation }: Props) {
 
             {/* ── Bottom Controls ───────────────────────────────────────── */}
             {!isSearching && (
-                <KeyboardAvoidingView
-                    behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-                    keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
-                    style={styles.bottomControlsWrapper}
-                >
+                <View style={[styles.bottomControlsWrapper, { bottom: keyboardHeight }]}> 
                     <TaskInput
                         onSubmit={handleAddTask}
                         defaultCategory={activeCategory !== 'overview' ? activeCategory : 'personal'}
@@ -828,7 +846,7 @@ export function HomeScreen({ navigation }: Props) {
                             <Text style={styles.navButtonText}>Profile</Text>
                         </AnimatedPressable>
                     </View>
-                </KeyboardAvoidingView>
+                </View>
             )}
 
             {/* Archive Confirmation Modal */}

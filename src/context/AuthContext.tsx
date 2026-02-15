@@ -98,6 +98,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       } else {
         dispatch({ type: 'SET_LOADING', payload: false });
       }
+    }).catch(() => {
+      // Network error while restoring session — drop into logged-out state
+      dispatch({ type: 'SET_LOADING', payload: false });
     });
 
     // 2. Subscribe to future auth changes (token refresh, sign-out from another tab, etc.)
@@ -125,13 +128,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       return;
     }
 
-    const { error } = await supabase.auth.signInWithPassword({
-      email: email.toLowerCase().trim(),
-      password,
-    });
+    try {
+      const { error } = await supabase.auth.signInWithPassword({
+        email: email.toLowerCase().trim(),
+        password,
+      });
 
-    if (error) {
-      dispatch({ type: 'SET_ERROR', payload: error.message });
+      if (error) {
+        dispatch({ type: 'SET_ERROR', payload: error.message });
+        return;
+      }
+    } catch (e: any) {
+      dispatch({
+        type: 'SET_ERROR',
+        payload: 'Network error — please check your connection and try again',
+      });
       return;
     }
 
@@ -147,22 +158,30 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       return;
     }
 
-    const { data, error } = await supabase.auth.signUp({
-      email: email.toLowerCase().trim(),
-      password,
-    });
+    try {
+      const { data, error } = await supabase.auth.signUp({
+        email: email.toLowerCase().trim(),
+        password,
+      });
 
-    if (error) {
-      dispatch({ type: 'SET_ERROR', payload: error.message });
-      return;
-    }
+      if (error) {
+        dispatch({ type: 'SET_ERROR', payload: error.message });
+        return;
+      }
 
-    // Supabase may require email confirmation. If the user object is returned
-    // but has no session, it means email confirmation is pending.
-    if (data.user && !data.session) {
+      // Supabase may require email confirmation. If the user object is returned
+      // but has no session, it means email confirmation is pending.
+      if (data.user && !data.session) {
+        dispatch({
+          type: 'SET_ERROR',
+          payload: 'Check your email for a confirmation link',
+        });
+        return;
+      }
+    } catch (e: any) {
       dispatch({
         type: 'SET_ERROR',
-        payload: 'Check your email for a confirmation link',
+        payload: 'Network error — please check your connection and try again',
       });
       return;
     }
