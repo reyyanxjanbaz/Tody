@@ -1,10 +1,10 @@
-import React, { memo, useRef } from 'react';
-import { View, Text, Pressable, ScrollView, StyleSheet } from 'react-native';
-import Animated, { LinearTransition, ZoomIn } from 'react-native-reanimated';
+import React, { memo, useRef, useState, useCallback } from 'react';
+import { View, Text, Pressable, ScrollView, StyleSheet, NativeSyntheticEvent, NativeScrollEvent } from 'react-native';
+import Animated, { LinearTransition, ZoomIn, useSharedValue, useAnimatedStyle, withTiming } from 'react-native-reanimated';
 import Icon from 'react-native-vector-icons/Ionicons';
 import { Spacing, Typography, FontFamily, type ThemeColors } from '../utils/colors';
 import { useTheme } from '../context/ThemeContext';
-import { Category, SortOption } from '../types';
+import { Category } from '../types';
 import { haptic } from '../utils/haptics';
 
 // ── Props ────────────────────────────────────────────────────────────────────
@@ -15,8 +15,6 @@ interface TabManagerProps {
   onCategoryChange: (id: string) => void;
   onAddPress: () => void;
   onManagePress: () => void;
-  sortOption: SortOption;
-  onSortPress: () => void;
 }
 
 // ── Component ────────────────────────────────────────────────────────────────
@@ -27,8 +25,6 @@ export const CategoryTabs = memo(function CategoryTabs({
   onCategoryChange,
   onAddPress,
   onManagePress,
-  sortOption,
-  onSortPress,
 }: TabManagerProps) {
   const scrollRef = useRef<ScrollView>(null);
 
@@ -37,17 +33,34 @@ export const CategoryTabs = memo(function CategoryTabs({
 
   const sorted = [...categories].sort((a, b) => a.order - b.order);
 
+  // Shadow-fade indicator for scrollable categories
+  const shadowOpacity = useSharedValue(sorted.length > 3 ? 1 : 0);
+
+  const handleScroll = useCallback((e: NativeSyntheticEvent<NativeScrollEvent>) => {
+    const { contentOffset, contentSize, layoutMeasurement } = e.nativeEvent;
+    const distanceFromEnd = contentSize.width - layoutMeasurement.width - contentOffset.x;
+    // Show shadow when there's more than 8px of content to scroll
+    shadowOpacity.value = withTiming(distanceFromEnd > 8 ? 1 : 0, { duration: 200 });
+  }, [shadowOpacity]);
+
+  const shadowStyle = useAnimatedStyle(() => ({
+    opacity: shadowOpacity.value,
+  }));
+
   return (
     <View style={styles.container}>
       {/* Tab row */}
       <View style={styles.row}>
-        <ScrollView
-          ref={scrollRef}
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.tabScroll}
-          keyboardShouldPersistTaps="always"
-        >
+        <View style={styles.scrollContainer}>
+          <ScrollView
+            ref={scrollRef}
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.tabScroll}
+            keyboardShouldPersistTaps="always"
+            onScroll={handleScroll}
+            scrollEventThrottle={16}
+          >
           {sorted.map((cat) => {
             const isActive = activeCategory === cat.id;
             return (
@@ -79,7 +92,9 @@ export const CategoryTabs = memo(function CategoryTabs({
             );
           })}
         </ScrollView>
-
+          {/* Right-side shadow indicating more categories */}
+          <Animated.View style={[styles.scrollShadow, shadowStyle]} pointerEvents="none" />
+        </View>
         {/* Tab management buttons */}
         <View style={styles.actions}>
           <Pressable onPress={() => { haptic('light'); onAddPress(); }} hitSlop={6} style={styles.actionBtn}>
@@ -87,19 +102,6 @@ export const CategoryTabs = memo(function CategoryTabs({
           </Pressable>
           <Pressable onPress={() => { haptic('light'); onManagePress(); }} hitSlop={6} style={styles.actionBtn}>
             <Icon name="pencil-outline" size={15} color={colors.gray500} />
-          </Pressable>
-          <Pressable
-            onPress={() => { haptic('light'); onSortPress(); }}
-            style={[styles.sortFab, sortOption !== 'default' && styles.sortFabActive]}
-            hitSlop={6}
-          >
-            <Icon
-              name={sortOption === 'default' ? 'swap-vertical-outline' : 'swap-vertical'}
-              size={13}
-              color={colors.white}
-            />
-            <Text style={styles.sortFabText}>Sort</Text>
-            {sortOption !== 'default' && <View style={styles.sortFabDot} />}
           </Pressable>
         </View>
       </View>
@@ -119,6 +121,39 @@ const createStyles = (c: ThemeColors, isDark: boolean) => StyleSheet.create({
     alignItems: 'center',
     borderBottomWidth: 1,
     borderBottomColor: c.gray100,
+  },
+  scrollContainer: {
+    flex: 1,
+    position: 'relative',
+    overflow: 'hidden',
+  },
+  scrollShadow: {
+    position: 'absolute',
+    right: 0,
+    top: 0,
+    bottom: 0,
+    width: 32,
+    backgroundColor: 'transparent',
+    // Linear shadow effect using multiple box shadows on iOS, elevation on Android
+    ...(isDark
+      ? {
+          shadowColor: '#000000',
+          shadowOffset: { width: -12, height: 0 },
+          shadowOpacity: 0.7,
+          shadowRadius: 10,
+          // Semi-transparent background for the fade-out effect
+          borderLeftWidth: StyleSheet.hairlineWidth,
+          borderLeftColor: 'rgba(255,255,255,0.06)',
+        }
+      : {
+          shadowColor: c.background,
+          shadowOffset: { width: -12, height: 0 },
+          shadowOpacity: 1,
+          shadowRadius: 10,
+          borderLeftWidth: StyleSheet.hairlineWidth,
+          borderLeftColor: 'rgba(0,0,0,0.06)',
+        }),
+    elevation: 8,
   },
   tabScroll: {
     paddingLeft: Spacing.lg,
@@ -170,32 +205,5 @@ const createStyles = (c: ThemeColors, isDark: boolean) => StyleSheet.create({
     height: 30,
     justifyContent: 'center',
     alignItems: 'center',
-  },
-  sortFab: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    paddingVertical: 6,
-    paddingHorizontal: Spacing.md,
-    backgroundColor: isDark ? 'rgba(255,255,255,0.12)' : c.surfaceDark,
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: isDark ? 'rgba(255,255,255,0.2)' : c.gray800,
-  },
-  sortFabActive: {
-    backgroundColor: isDark ? 'rgba(255,255,255,0.25)' : c.black,
-  },
-  sortFabText: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: c.white,
-    letterSpacing: 0.1,
-    fontFamily: FontFamily,
-  },
-  sortFabDot: {
-    width: 5,
-    height: 5,
-    borderRadius: 2.5,
-    backgroundColor: c.gray200,
   },
 });

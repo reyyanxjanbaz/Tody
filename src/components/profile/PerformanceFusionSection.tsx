@@ -289,6 +289,7 @@ const createStyles = (c: ThemeColors, isDark: boolean) => StyleSheet.create({
   },
   sectionTitle: {
     ...Typography.sectionHeader,
+    color: c.textTertiary,
     marginBottom: Spacing.md,
   },
   heroCard: {
@@ -406,6 +407,7 @@ const createStyles = (c: ThemeColors, isDark: boolean) => StyleSheet.create({
   },
   alignmentTitle: {
     ...Typography.sectionHeader,
+    color: c.textTertiary,
     marginBottom: 2,
   },
   alignmentSubtitle: {
@@ -461,6 +463,7 @@ const createStyles = (c: ThemeColors, isDark: boolean) => StyleSheet.create({
   },
   chartTitle: {
     ...Typography.sectionHeader,
+    color: c.textTertiary,
     textAlign: 'center',
     marginBottom: Spacing.md,
   },

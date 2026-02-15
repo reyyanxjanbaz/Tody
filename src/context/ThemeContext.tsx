@@ -51,7 +51,7 @@ const ThemeContext = createContext<ThemeContextValue>({
 // ── Provider ────────────────────────────────────────────────────────────────
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
-  const [isDark, setIsDark] = useState(false);
+  const [isDark, setIsDark] = useState(true);
   const [loaded, setLoaded] = useState(false);
 
   // Load persisted preference on mount; seed defaults for new users
@@ -59,12 +59,12 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     (async () => {
       const prefs = await getUserPreferences<UserPreferences>();
       if (prefs) {
-        if (prefs.darkMode) {
-          setIsDark(true);
-        }
+        // Respect the persisted preference (could be light or dark)
+        setIsDark(prefs.darkMode ?? true);
       } else {
-        // First launch – persist default preferences (light mode, etc.)
+        // First launch – persist default preferences (dark mode on)
         await saveUserPreferences(DEFAULT_PREFERENCES);
+        setIsDark(true);
       }
       setLoaded(true);
     })();

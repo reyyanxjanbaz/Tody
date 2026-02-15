@@ -259,9 +259,12 @@ const createStyles = (c: ThemeColors, isDark: boolean) => StyleSheet.create({
     borderRadius: 15,
     justifyContent: 'center',
     alignItems: 'center',
+    overflow: 'hidden',
   },
   todayCircle: {
     backgroundColor: isDark ? c.white : c.surfaceDark,
+    borderRadius: 15,
+    overflow: 'hidden',
   },
   dayNumber: {
     fontSize: 14,

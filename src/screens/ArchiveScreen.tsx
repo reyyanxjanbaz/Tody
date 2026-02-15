@@ -213,6 +213,7 @@ const createStyles = (c: ThemeColors) => StyleSheet.create({
   },
   headerTitle: {
     ...Typography.heading,
+    color: c.text,
   },
   headerCount: {
     ...Typography.small,

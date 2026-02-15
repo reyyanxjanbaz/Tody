@@ -20,6 +20,7 @@ import Icon from 'react-native-vector-icons/Ionicons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { haptic } from '../utils/haptics';
 import { SPRING_SNAPPY } from '../utils/animations';
+import { FontFamily } from '../utils/colors';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const TOAST_WIDTH = SCREEN_WIDTH * 0.9;
@@ -272,6 +273,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '500',
     color: '#FFFFFF',
+    fontFamily: FontFamily,
   },
   undoButton: {
     flexDirection: 'row',
@@ -287,6 +289,7 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '600',
     color: '#FFFFFF',
+    fontFamily: FontFamily,
   },
   progressContainer: {
     height: 3,

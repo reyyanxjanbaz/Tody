@@ -1,0 +1,72 @@
+# Video Script: Tody Technical Walkthrough
+
+## Introduction (0:00 - 0:45)
+Visual: Screen recording of the app launching, showing the logo, then landing on the Login screen.
+Audio:
+"Hello everyone. Today I'm going to give you a technical walkthrough of Tody, a task management application built with React Native and TypeScript.
+
+We chose React Native to deliver a high-performance, native experience on both iOS and Android from a single codebase. The backend infrastructure is powered by Supabase, which handles our database and authentication.
+
+In this video, I’ll break down the architectural decisions we made, specifically focusing on React Native component structure, our Offline-First State Management, and the Authentication Flow."
+
+---
+
+## Part 1: React Native Principles & Navigation (0:45 - 2:00)
+Visual: Split screen. Left side shows the app running. Right side shows the code for src/navigation/RootNavigator.tsx.
+Audio:
+"Let's start with the structure. The entry point of our UI relies on React Navigation.
+
+If we look at RootNavigator.tsx, you can see we’re using a 'Native Stack Navigator'. A key principle we use here is Conditional Rendering for authentication protection.
+
+Instead of navigating users to a 'Login' screen manually, we simply check the user object from our custom useAuth hook.
+- If user is null, we strictly render the Auth stack (Login/Register).
+- If user exists, we render the App stack (Home, Profile, etc.).
+
+This ensures that there is technically no way for an unauthenticated user to even mount the Home screen components. It's secure by default."
+
+---
+
+## Part 2: Authentication Flow (2:00 - 3:30)
+Visual: Show src/context/AuthContext.tsx. Scroll to the AuthProvider.
+Audio:
+"Now, let's look at how that user state works. We use the Context API to wrap our application.
+
+In AuthContext.tsx, we interface directly with the Supabase client.
+1. On Mount: We check for an existing generic session.
+2. Real-time Listener: We subscribe to supabase.auth.onAuthStateChange.
+
+This is crucial because if a user's token expires or they sign out from another device, Supabase notifies us here. Our reducer instantly updates the state to 'logged out', and because of the navigation structure we just saw, the app immediately flips back to the Login screen."
+
+---
+
+## Part 3: State Management & Offline-First Data (3:30 - 6:00)
+Visual: Show src/context/TaskContext.tsx.
+Audio:
+"This is the most complex part of the app: TaskContext. We decided to use React Context for global state instead of Redux because our state shape is relatively flat, but the logic is deep.
+
+We follow an Offline-First architecture. This means the app works fully functional without internet."
+
+Visual: Highlight the addTask function in TaskContext.tsx.
+Audio:
+"Let's look at the addTask function as an example. When a user creates a task, we perform an Optimistic Update:
+
+1. Update Local State: We immediately update the tasks state array and render the new task on screen. This makes the app feel instant (zero latency).
+2. Persist Locally: We save this to AsyncStorage so if the user kills the app, the data is safe.
+3. Sync to Background: Finally, we fire a network request to Supabase (upsertTask) in the background."
+
+Visual: Scroll to the generic useEffect sync logic in TaskContext.tsx.
+Audio:
+"We also have a sync engine running in a useEffect. When the app loads, we pull data from the server and merge it with local data. We use a 'Last-Write-Wins' strategy based on updatedAt timestamps to resolve conflicts between the server and the device."
+
+---
+
+## Part 4: Code Demo / Feature Highlight (6:00 - End)
+Visual: Show app demo. Create a task, mark it as complete. Then delete it.
+Audio:
+"To summarize, let's see it in action.
+I create a task here. The UI updates instantly because of our optimistic state management.
+Under the hood, TaskContext is sending that data to Supabase.
+
+When I mark it done, we trigger a layout animation—which we enabled globally in the file entry point—giving that smooth, native feel.
+
+By combining React Context, Supabase, and strictly typed TypeScript interfaces, Tody delivers a robust, scalable architecture that provides a seamless user experience."

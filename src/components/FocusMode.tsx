@@ -1,4 +1,4 @@
-import React, { memo, useState, useCallback, useEffect, useMemo } from 'react';
+import React, { memo, useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import { View, Text, StyleSheet, Dimensions, ScrollView } from 'react-native';
 import Animated, {
     useSharedValue,
@@ -7,6 +7,8 @@ import Animated, {
     withTiming,
     interpolate,
     Extrapolation,
+    Easing,
+    cancelAnimation,
     FadeIn,
     FadeInDown,
     FadeOut,
@@ -27,6 +29,7 @@ import { isTaskLocked, getChildren } from '../utils/dependencyChains';
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const SWIPE_THRESHOLD = SCREEN_WIDTH * 0.25;
 const FLING_VELOCITY_THRESHOLD = 500;
+const EXIT_HOLD_DURATION = 1500;
 
 interface FocusModeProps {
     tasks: Task[];
@@ -63,6 +66,9 @@ export const FocusMode = memo(function FocusMode({
     const lockShake = useSharedValue(0);
     // Pan gesture translation for swipe
     const cardTranslateX = useSharedValue(0);
+    // Hold-to-exit progress
+    const exitProgress = useSharedValue(0);
+    const exitHolding = useSharedValue(false);
 
     const focusTasks = tasks.slice(0, 3);
     const currentTask = focusTasks[currentIndex];
@@ -135,6 +141,83 @@ export const FocusMode = memo(function FocusMode({
     const handlePrev = useCallback(() => {
         goToPrev();
     }, [goToPrev]);
+
+    // ── Hold-to-exit gesture ───────────────────────────────────────────
+    const exitTriggered = useRef(false);
+
+    const triggerExit = useCallback(() => {
+        if (exitTriggered.current) return;
+        exitTriggered.current = true;
+        haptic('success');
+        onExit();
+    }, [onExit]);
+
+    // Reset trigger flag when component mounts
+    useEffect(() => {
+        exitTriggered.current = false;
+    }, []);
+
+    const exitLongPress = Gesture.LongPress()
+        .minDuration(100)
+        .maxDistance(50)
+        .onStart(() => {
+            'worklet';
+            exitHolding.value = true;
+            exitProgress.value = withTiming(1, {
+                duration: EXIT_HOLD_DURATION,
+                easing: Easing.bezier(0.25, 0.1, 0.25, 1),
+            }, (finished) => {
+                if (finished && exitHolding.value) {
+                    runOnJS(triggerExit)();
+                }
+            });
+        })
+        .onEnd(() => {
+            'worklet';
+            exitHolding.value = false;
+            cancelAnimation(exitProgress);
+            exitProgress.value = withTiming(0, { duration: 200 });
+        })
+        .onFinalize(() => {
+            'worklet';
+            if (!exitHolding.value) return;
+            exitHolding.value = false;
+            cancelAnimation(exitProgress);
+            exitProgress.value = withTiming(0, { duration: 200 });
+        });
+
+    // Animated exit pill fill — sweeps left to right
+    const exitFillStyle = useAnimatedStyle(() => {
+        const widthPercent = interpolate(
+            exitProgress.value,
+            [0, 1],
+            [0, 100],
+            Extrapolation.CLAMP,
+        );
+        return {
+            width: `${widthPercent}%` as any,
+            opacity: interpolate(exitProgress.value, [0, 0.02, 1], [0, 0.3, 0.55]),
+        };
+    });
+
+    // Pill border intensifies during hold
+    const exitBorderStyle = useAnimatedStyle(() => {
+        const alpha = interpolate(
+            exitProgress.value,
+            [0, 0.05, 1],
+            [0.15, 0.5, 1],
+            Extrapolation.CLAMP,
+        );
+        return {
+            borderColor: `rgba(255,255,255,${alpha})`,
+            borderWidth: interpolate(
+                exitProgress.value,
+                [0, 0.05, 1],
+                [1, 1.5, 2.5],
+                Extrapolation.CLAMP,
+            ),
+        };
+    });
 
     // ── Swipe gesture for card transitions ──────────────────────────────
     const panGesture = Gesture.Pan()
@@ -469,13 +552,16 @@ export const FocusMode = memo(function FocusMode({
                 </AnimatedPressable>
             </View>
 
-            {/* Exit */}
-            <AnimatedPressable onPress={onExit} hapticStyle="light">
-                <View style={styles.exitButton}>
-                    <Icon name="close-outline" size={16} color="rgba(255,255,255,0.6)" />
-                    <Text style={styles.exitText}>Exit Focus Mode</Text>
-                </View>
-            </AnimatedPressable>
+            {/* Hold to Exit */}
+            <GestureDetector gesture={exitLongPress}>
+                <Animated.View style={[styles.exitPill, exitBorderStyle]}>
+                    <Animated.View style={[styles.exitPillFill, exitFillStyle]} />
+                    <View style={styles.exitPillContent}>
+                        <Icon name="hand-left-outline" size={13} color="rgba(255,255,255,0.6)" />
+                        <Text style={styles.exitPillText}>Hold to Exit</Text>
+                    </View>
+                </Animated.View>
+            </GestureDetector>
         </Animated.View>
     );
 });
@@ -483,7 +569,7 @@ export const FocusMode = memo(function FocusMode({
 const createStyles = (c: ThemeColors) => StyleSheet.create({
     container: {
         ...StyleSheet.absoluteFillObject,
-        backgroundColor: c.surfaceDark,
+        backgroundColor: '#000000',
         alignItems: 'center',
         paddingHorizontal: 32,
         zIndex: 100,
@@ -703,24 +789,41 @@ const createStyles = (c: ThemeColors) => StyleSheet.create({
         color: 'rgba(255,255,255,0.5)',
     fontFamily: FontFamily,
     },
-    exitButton: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'center',
-        gap: 6,
-        paddingVertical: 14,
-        paddingHorizontal: 24,
-        backgroundColor: 'rgba(255,255,255,0.08)',
-        borderRadius: BorderRadius.pill,
+    exitPill: {
+        overflow: 'hidden',
+        height: 42,
+        borderRadius: 21,
+        borderWidth: 1,
+        borderColor: 'rgba(255,255,255,0.15)',
+        backgroundColor: 'rgba(255,255,255,0.06)',
         marginTop: 20,
         marginBottom: 60,
         alignSelf: 'center',
+        minWidth: 170,
     },
-    exitText: {
-        fontSize: 14,
-        fontWeight: '600',
-        color: 'rgba(255,255,255,0.6)',
-    fontFamily: FontFamily,
+    exitPillFill: {
+        position: 'absolute',
+        left: 0,
+        top: 0,
+        bottom: 0,
+        backgroundColor: '#ffffff',
+        borderRadius: 21,
+    },
+    exitPillContent: {
+        flex: 1,
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 7,
+        paddingHorizontal: 24,
+    },
+    exitPillText: {
+        fontSize: 11,
+        fontWeight: '700',
+        color: 'rgba(255,255,255,0.7)',
+        fontFamily: FontFamily,
+        letterSpacing: 0.8,
+        textTransform: 'uppercase',
     },
     emptyFocusContainer: {
         flex: 1,

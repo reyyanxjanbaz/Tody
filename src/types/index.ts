@@ -108,7 +108,7 @@ export interface UserPreferences {
 }
 
 export const DEFAULT_PREFERENCES: UserPreferences = {
-  darkMode: false,
+  darkMode: true,
   dateFormat: 'MM/DD/YYYY',
   timeFormat: '12h',
   weekStartsOn: 'sunday',

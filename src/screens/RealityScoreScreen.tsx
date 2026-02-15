@@ -322,6 +322,7 @@ const createStyles = (c: ThemeColors) => StyleSheet.create({
   },
   chartTitle: {
     ...Typography.sectionHeader,
+    color: c.textTertiary,
     marginBottom: Spacing.lg,
     textAlign: 'center',
   },

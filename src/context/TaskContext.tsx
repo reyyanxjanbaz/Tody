@@ -28,6 +28,7 @@ import {
   upsertCategory,
   deleteTaskFromDb,
   deleteTasksFromDb,
+  deleteCategoryFromDb,
   buildCategoryMap,
   CategoryMap,
 } from '../lib/supabaseSync';
@@ -821,7 +822,11 @@ export function TaskProvider({ children }: { children: React.ReactNode }) {
     ));
     // If the active tab was the deleted category, go to overview
     setActiveCategory(prev => prev === id ? 'overview' : prev);
-  }, []);
+    // Delete from Supabase so it doesn't come back on next sync
+    if (user) {
+      deleteCategoryFromDb(id).catch(() => {});
+    }
+  }, [user]);
 
   const reorderCategories = useCallback((orderedIds: string[]) => {
     setCategories(prev => {

@@ -174,6 +174,7 @@ const createStyles = (c: ThemeColors) => StyleSheet.create({
   },
   title: {
     ...Typography.heading,
+    color: c.text,
     textAlign: 'center',
     marginBottom: Spacing.lg,
   },

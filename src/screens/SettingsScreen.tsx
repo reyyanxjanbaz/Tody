@@ -369,6 +369,7 @@ const createStyles = (c: ThemeColors) => StyleSheet.create({
   },
   sectionTitle: {
     ...Typography.sectionHeader,
+    color: c.textTertiary,
     marginBottom: Spacing.md,
   },
   card: {

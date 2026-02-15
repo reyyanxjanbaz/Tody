@@ -47,7 +47,8 @@ import {
   TimeQuickPick,
 } from '../components/ParameterPills';
 import { CategoryPill } from '../components/CategoryPill';
-import { PromptModal } from '../components/ui';
+import { SubtaskModal } from '../components/SubtaskModal';
+import { TaskInputParams } from '../components/TaskInput';
 
 
 type Props = {
@@ -231,23 +232,7 @@ export function TaskDetailScreen({ navigation, route }: Props) {
       return;
     }
     Keyboard.dismiss();
-    if (Platform.OS === 'ios') {
-      Alert.prompt(
-        'Add subtask',
-        'Enter subtask title',
-        (text) => {
-          if (text && text.trim()) {
-            const created = addSubtask(task.id, text.trim());
-            if (!created) {
-              Alert.alert('Could not add subtask', 'Please try again.');
-            }
-          }
-        },
-        'plain-text',
-      );
-    } else {
-      setTimeout(() => setSubtaskPromptVisible(true), 80);
-    }
+    setSubtaskPromptVisible(true);
   };
 
   const handleBack = () => {
@@ -506,25 +491,29 @@ export function TaskDetailScreen({ navigation, route }: Props) {
         </Pressable>
       </View>
 
-      {/* Android subtask prompt */}
-      <PromptModal
+      {/* Subtask modal */}
+      <SubtaskModal
         visible={subtaskPromptVisible}
-        title="Add subtask"
-        message="Enter subtask title"
-        onSubmit={(text) => {
+        onClose={() => setSubtaskPromptVisible(false)}
+        onSubmit={(text: string, params?: TaskInputParams) => {
           const trimmed = text.trim();
           if (!trimmed) {
             setSubtaskPromptVisible(false);
             return;
           }
-          const created = addSubtask(task.id, trimmed);
+          const created = addSubtask(task.id, trimmed, {
+            ...(params?.estimatedMinutes ? { estimatedMinutes: params.estimatedMinutes } : {}),
+            ...(params?.energyLevel ? { energyLevel: params.energyLevel } : {}),
+            ...(params?.priority && params.priority !== 'none' ? { priority: params.priority } : {}),
+            ...(params?.deadline != null ? { deadline: params.deadline } : {}),
+            ...(params?.category ? { category: params.category } : {}),
+          });
           setSubtaskPromptVisible(false);
           if (!created) {
             Alert.alert('Could not add subtask', 'Please try again.');
           }
         }}
-        onCancel={() => setSubtaskPromptVisible(false)}
-        submitLabel="Add"
+        defaultCategory={task.category ?? 'personal'}
       />
     </View>
     </KeyboardAvoidingView>

@@ -522,6 +522,16 @@ export async function deleteTaskFromDb(taskId: string): Promise<void> {
 }
 
 /** Delete multiple tasks from Supabase. */
+export async function deleteCategoryFromDb(categoryId: string): Promise<void> {
+  if (!isValidUUID(categoryId)) return;
+  try {
+    const { error } = await supabase.from('categories').delete().eq('id', categoryId);
+    if (error) logError('deleteCategoryFromDb failed:', error.message);
+  } catch (e: any) {
+    logError('deleteCategoryFromDb failed:', e?.message ?? e);
+  }
+}
+
 export async function deleteTasksFromDb(taskIds: string[]): Promise<void> {
   if (taskIds.length === 0) return;
   try {

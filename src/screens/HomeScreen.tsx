@@ -35,6 +35,7 @@ import { FocusOrb } from '../components/FocusOrb';
 import { TodayLine } from '../components/TodayLine';
 import { CalendarStrip } from '../components/CalendarStrip';
 import { AnimatedPressable } from '../components/ui';
+import { SubtaskModal } from '../components/SubtaskModal';
 import { useUndo } from '../components/UndoToast';
 import { organizeTasks, searchTasks } from '../utils/taskIntelligence';
 import { isFullyDecayed } from '../utils/decay';
@@ -77,8 +78,8 @@ type Props = {
 };
 
 export function HomeScreen({ navigation }: Props) {
-  const { colors } = useTheme();
-  const styles = React.useMemo(() => createStyles(colors), [colors]);
+  const { colors, isDark } = useTheme();
+  const styles = React.useMemo(() => createStyles(colors, isDark), [colors, isDark]);
     const insets = useSafeAreaInsets();
     const { user } = useAuth();
     const {
@@ -131,22 +132,22 @@ export function HomeScreen({ navigation }: Props) {
     const [keyboardHeight, setKeyboardHeight] = useState(0);
 
     useEffect(() => {
+        // On Android with adjustResize, the OS already shrinks the window
+        // so we must NOT add manual keyboard offset (causes double-shift).
+        if (Platform.OS === 'android') return;
+
         const handleKeyboardShow = (event: KeyboardEvent) => {
             const kbHeight = event.endCoordinates?.height ?? 0;
-            // On iOS, keyboard height includes safe area; on Android it does not
-            if (Platform.OS === 'ios') {
-                setKeyboardHeight(Math.max(0, kbHeight - insets.bottom));
-            } else {
-                setKeyboardHeight(kbHeight);
-            }
+            // On iOS, keyboard height includes safe area
+            setKeyboardHeight(Math.max(0, kbHeight - insets.bottom));
         };
 
         const handleKeyboardHide = () => {
             setKeyboardHeight(0);
         };
 
-        const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
-        const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
+        const showEvent = 'keyboardWillShow';
+        const hideEvent = 'keyboardWillHide';
 
         const showSub = Keyboard.addListener(showEvent, handleKeyboardShow);
         const hideSub = Keyboard.addListener(hideEvent, handleKeyboardHide);
@@ -470,7 +471,13 @@ export function HomeScreen({ navigation }: Props) {
             addSubtask(
                 subtaskParentId,
                 text,
-                params?.estimatedMinutes ? { estimatedMinutes: params.estimatedMinutes } : undefined,
+                {
+                    ...(params?.estimatedMinutes ? { estimatedMinutes: params.estimatedMinutes } : {}),
+                    ...(params?.energyLevel ? { energyLevel: params.energyLevel } : {}),
+                    ...(params?.priority && params.priority !== 'none' ? { priority: params.priority } : {}),
+                    ...(params?.deadline != null ? { deadline: params.deadline } : {}),
+                    ...(params?.category ? { category: params.category } : {}),
+                },
             );
             setShowSubtaskInput(false);
             setSubtaskParentId(null);
@@ -810,16 +817,33 @@ export function HomeScreen({ navigation }: Props) {
                                 }}
                                 onAddPress={() => setShowAddCategory(true)}
                                 onManagePress={() => setShowManageCategories(true)}
-                                sortOption={activeSortOption}
-                                onSortPress={() => setShowSortDropdown(true)}
                             />
                         </View>
                     }
                     ListEmptyComponent={ListEmpty}
                     keyboardShouldPersistTaps="handled"
-                    contentContainerStyle={{ ...styles.listContent, paddingBottom: 180 }}
+                    contentContainerStyle={{ ...styles.listContent, paddingBottom: 180, paddingTop: 4 }}
                     ListFooterComponent={ListFooter}
                 />
+            )}
+
+            {/* ── Floating Sort FAB ─────────────────────────────────────── */}
+            {!isSearching && (
+                <Pressable
+                    style={[
+                        styles.sortFab,
+                        activeSortOption !== 'default' && styles.sortFabActive,
+                    ]}
+                    onPress={() => { haptic('light'); setShowSortDropdown(true); }}
+                    hitSlop={4}
+                >
+                    <Icon
+                        name={activeSortOption === 'default' ? 'swap-vertical-outline' : 'swap-vertical'}
+                        size={14}
+                        color={colors.white}
+                    />
+                    {activeSortOption !== 'default' && <View style={styles.sortFabDot} />}
+                </Pressable>
             )}
 
             {/* ── Bottom Controls ───────────────────────────────────────── */}
@@ -906,38 +930,19 @@ export function HomeScreen({ navigation }: Props) {
             />
 
             {/* Subtask Input Modal */}
-            <Modal
+            <SubtaskModal
                 visible={showSubtaskInput}
-                transparent
-                animationType="fade"
-                onRequestClose={() => {
+                onClose={() => {
                     setShowSubtaskInput(false);
                     setSubtaskParentId(null);
-                }}>
-                <KeyboardAvoidingView
-                    behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-                    style={styles.modalOverlay}>
-                    <Animated.View
-                        entering={FadeIn.duration(250)}
-                        style={styles.modalCard}>
-                        <Text style={styles.modalTitle}>Add subtask</Text>
-                        <TaskInput
-                            onSubmit={handleSubtaskSubmit}
-                            placeholder="Subtask title..."
-                            autoFocus
-                            compact
-                        />
-                        <Pressable
-                            style={styles.modalCancelButton}
-                            onPress={() => {
-                                setShowSubtaskInput(false);
-                                setSubtaskParentId(null);
-                            }}>
-                            <Text style={styles.modalCancelText}>Cancel</Text>
-                        </Pressable>
-                    </Animated.View>
-                </KeyboardAvoidingView>
-            </Modal>
+                }}
+                onSubmit={handleSubtaskSubmit}
+                defaultCategory={
+                    subtaskParentId
+                        ? tasks.find(t => t.id === subtaskParentId)?.category ?? 'personal'
+                        : 'personal'
+                }
+            />
 
             {/* Focus Mode Overlay */}
             {isFocusMode && (
@@ -980,7 +985,7 @@ export function HomeScreen({ navigation }: Props) {
     );
 }
 
-const createStyles = (c: ThemeColors) => StyleSheet.create({
+const createStyles = (c: ThemeColors, isDark: boolean) => StyleSheet.create({
     container: {
         flex: 1,
         backgroundColor: c.background,
@@ -1141,5 +1146,34 @@ const createStyles = (c: ThemeColors) => StyleSheet.create({
     modalArchiveText: {
         ...Typography.body,
         color: c.white,
+    },
+    sortFab: {
+        position: 'absolute',
+        right: Spacing.lg,
+        top: 190,
+        width: 38,
+        height: 38,
+        borderRadius: 19,
+        backgroundColor: isDark ? 'rgba(255,255,255,0.14)' : c.surfaceDark,
+        justifyContent: 'center',
+        alignItems: 'center',
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 3 },
+        shadowOpacity: isDark ? 0.4 : 0.15,
+        shadowRadius: 8,
+        elevation: 6,
+        zIndex: 50,
+    },
+    sortFabActive: {
+        backgroundColor: isDark ? 'rgba(255,255,255,0.28)' : c.black,
+    },
+    sortFabDot: {
+        position: 'absolute',
+        top: 6,
+        right: 6,
+        width: 6,
+        height: 6,
+        borderRadius: 3,
+        backgroundColor: '#22C55E',
     },
 });
