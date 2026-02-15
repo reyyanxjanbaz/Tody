@@ -331,16 +331,19 @@ export function rebuildChildIds(tasks: Task[]): Task[] {
 
 /** Fetch all categories from Supabase for the current user. */
 export async function fetchCategories(): Promise<Category[]> {
-  const { data, error } = await supabase
-    .from('categories')
-    .select('*')
-    .order('sort_order');
-
-  if (error) {
-    logError('fetchCategories failed:', error.message);
+  try {
+    const { data, error } = await withRetry('fetchCategories', () =>
+      supabase.from('categories').select('*').order('sort_order'),
+    );
+    if (error) {
+      logError('fetchCategories failed:', error.message);
+      return [];
+    }
+    return (data || []).map(dbRowToCategory);
+  } catch (e: any) {
+    logError('fetchCategories failed after retries:', e?.message ?? e);
     return [];
   }
-  return (data || []).map(dbRowToCategory);
 }
 
 /** Push a single category to Supabase (upsert). */
@@ -390,14 +393,17 @@ export async function pushCategories(categories: Category[], userId: string): Pr
     is_default: c.isDefault,
     sort_order: c.order,
   }));
-  const { error } = await supabase
-    .from('categories')
-    .upsert(rows, { onConflict: 'id' });
-
-  if (error) {
-    logError('pushCategories failed:', error.message);
-  } else {
-    log(`Pushed ${rows.length} categories`);
+  try {
+    const { error } = await withRetry('pushCategories', () =>
+      supabase.from('categories').upsert(rows, { onConflict: 'id' }),
+    );
+    if (error) {
+      logError('pushCategories failed:', error.message);
+    } else {
+      log(`Pushed ${rows.length} categories`);
+    }
+  } catch (e: any) {
+    logError('pushCategories failed after retries:', e?.message ?? e);
   }
 }
 
@@ -405,24 +411,27 @@ export async function pushCategories(categories: Category[], userId: string): Pr
 
 /** Fetch all tasks from Supabase. Returns them with childIds rebuilt. */
 export async function fetchTasks(catMap: CategoryMap): Promise<{ active: Task[]; archived: Task[] }> {
-  const { data, error } = await supabase
-    .from('tasks')
-    .select('*')
-    .order('created_at', { ascending: false });
+  try {
+    const { data, error } = await withRetry('fetchTasks', () =>
+      supabase.from('tasks').select('*').order('created_at', { ascending: false }),
+    );
+    if (error) {
+      logError('fetchTasks failed:', error.message);
+      return { active: [], archived: [] };
+    }
 
-  if (error) {
-    logError('fetchTasks failed:', error.message);
+    const all = (data || []).map((row: DbTask) => dbRowToTask(row, catMap));
+    const withChildren = rebuildChildIds(all);
+
+    const active = withChildren.filter(t => !t.isArchived);
+    const archived = withChildren.filter(t => t.isArchived);
+
+    log(`Fetched ${active.length} active + ${archived.length} archived tasks`);
+    return { active, archived };
+  } catch (e: any) {
+    logError('fetchTasks failed after retries:', e?.message ?? e);
     return { active: [], archived: [] };
   }
-
-  const all = (data || []).map((row: DbTask) => dbRowToTask(row, catMap));
-  const withChildren = rebuildChildIds(all);
-
-  const active = withChildren.filter(t => !t.isArchived);
-  const archived = withChildren.filter(t => t.isArchived);
-
-  log(`Fetched ${active.length} active + ${archived.length} archived tasks`);
-  return { active, archived };
 }
 
 /** Push all local tasks to Supabase (upsert). */
@@ -531,16 +540,19 @@ export async function deleteTasksFromDb(taskIds: string[]): Promise<void> {
 
 /** Fetch all inbox tasks from Supabase. */
 export async function fetchInboxTasks(): Promise<InboxTask[]> {
-  const { data, error } = await supabase
-    .from('inbox_tasks')
-    .select('*')
-    .order('captured_at', { ascending: false });
-
-  if (error) {
-    logError('fetchInboxTasks failed:', error.message);
+  try {
+    const { data, error } = await withRetry('fetchInboxTasks', () =>
+      supabase.from('inbox_tasks').select('*').order('captured_at', { ascending: false }),
+    );
+    if (error) {
+      logError('fetchInboxTasks failed:', error.message);
+      return [];
+    }
+    return (data || []).map(dbRowToInboxTask);
+  } catch (e: any) {
+    logError('fetchInboxTasks failed after retries:', e?.message ?? e);
     return [];
   }
-  return (data || []).map(dbRowToInboxTask);
 }
 
 /** Push all local inbox tasks to Supabase (insert, skip duplicates). */
@@ -556,14 +568,17 @@ export async function pushInboxTasks(tasks: InboxTask[], userId: string): Promis
   // Use ignoreDuplicates so if a row with the same ID already exists
   // (possibly from another account), it is skipped instead of triggering
   // an UPDATE that would fail the RLS USING check.
-  const { error } = await supabase
-    .from('inbox_tasks')
-    .upsert(rows, { onConflict: 'id', ignoreDuplicates: true });
-
-  if (error) {
-    logError('pushInboxTasks failed:', error.message);
-  } else {
-    log(`Pushed ${rows.length} inbox tasks`);
+  try {
+    const { error } = await withRetry('pushInboxTasks', () =>
+      supabase.from('inbox_tasks').upsert(rows, { onConflict: 'id', ignoreDuplicates: true }),
+    );
+    if (error) {
+      logError('pushInboxTasks failed:', error.message);
+    } else {
+      log(`Pushed ${rows.length} inbox tasks`);
+    }
+  } catch (e: any) {
+    logError('pushInboxTasks failed after retries:', e?.message ?? e);
   }
 }
 

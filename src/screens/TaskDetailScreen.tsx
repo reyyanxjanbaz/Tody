@@ -23,6 +23,7 @@ import {
   Platform,
   Alert,
   Keyboard,
+  KeyboardAvoidingView,
 } from 'react-native';
 import Animated, { FadeIn, FadeOut } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -271,6 +272,10 @@ export function TaskDetailScreen({ navigation, route }: Props) {
 
   // ── Render ───────────────────────────────────────────────────────────────
   return (
+    <KeyboardAvoidingView
+      style={{ flex: 1 }}
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      keyboardVerticalOffset={0}>
     <View style={[styles.container, { paddingTop: insets.top }]}>
       {/* Header */}
       <View style={styles.header} />
@@ -292,17 +297,23 @@ export function TaskDetailScreen({ navigation, route }: Props) {
           autoFocus={!task.title}
         />
 
-        {/* ── Description ───────────────────────────────────────── */}
-        <TextInput
-          style={styles.descriptionInput}
-          value={description}
-          onChangeText={setDescription}
-          onBlur={handleDescriptionBlur}
-          placeholder="Add notes..."
-          placeholderTextColor={colors.gray400}
-          multiline
-          textAlignVertical="top"
-        />
+        {/* ── Description (sticky-note style) ───────────────── */}
+        <View style={styles.stickyNote}>
+          <View style={styles.stickyNoteHeader}>
+            <Icon name="document-text-outline" size={14} color={colors.gray400} />
+            <Text style={styles.stickyNoteLabel}>Notes</Text>
+          </View>
+          <TextInput
+            style={styles.descriptionInput}
+            value={description}
+            onChangeText={setDescription}
+            onBlur={handleDescriptionBlur}
+            placeholder="Add notes..."
+            placeholderTextColor={colors.gray400}
+            multiline
+            textAlignVertical="top"
+          />
+        </View>
 
         {/* ── Parameter Pills ───────────────────────────────────── */}
         <View style={styles.pillSection}>
@@ -516,6 +527,7 @@ export function TaskDetailScreen({ navigation, route }: Props) {
         submitLabel="Add"
       />
     </View>
+    </KeyboardAvoidingView>
   );
 }
 
@@ -606,9 +618,33 @@ const createStyles = (c: ThemeColors) => StyleSheet.create({
   descriptionInput: {
     ...Typography.body,
     color: c.textSecondary,
-    minHeight: 44,
+    minHeight: 120,
     padding: 0,
+    paddingTop: 0,
+    lineHeight: 24,
+  },
+  stickyNote: {
+    backgroundColor: c.gray50,
+    borderRadius: 12,
+    padding: Spacing.md,
     marginBottom: Spacing.lg,
+    borderWidth: 1,
+    borderColor: c.gray200,
+    minHeight: 140,
+  },
+  stickyNoteHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: Spacing.sm,
+  },
+  stickyNoteLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: c.gray400,
+    letterSpacing: 0.5,
+    textTransform: 'uppercase',
+    fontFamily: FontFamily,
   },
 
   // Parameter pills

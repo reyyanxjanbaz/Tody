@@ -35,18 +35,20 @@ const createStyles = (c: ThemeColors) => StyleSheet.create({
   container: {
     alignItems: 'center',
     paddingVertical: Spacing.xs,
+    paddingHorizontal: Spacing.sm,
     gap: 2,
   },
   iconContainer: {
     position: 'relative',
-    height: 20,
+    minHeight: 24,
     width: 26,
     alignItems: 'center',
+    justifyContent: 'center',
   },
   label: {
-    ...Typography.small,
+    ...Typography.caption,
     fontWeight: '600',
-    color: c.textTertiary,
+    color: c.textSecondary,
   },
   badge: {
     position: 'absolute',

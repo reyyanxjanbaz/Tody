@@ -4,15 +4,15 @@ import Animated, {
     useSharedValue,
     useAnimatedStyle,
     withSpring,
+    withTiming,
     interpolate,
+    Extrapolation,
     FadeIn,
     FadeInDown,
     FadeOut,
-    SlideInRight,
-    SlideOutLeft,
-    SlideInLeft,
-    SlideOutRight,
+    runOnJS,
 } from 'react-native-reanimated';
+import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Icon from 'react-native-vector-icons/Ionicons';
 import { Task, Priority } from '../types';
 import { Spacing, Typography, BorderRadius, FontFamily, type ThemeColors } from '../utils/colors';
@@ -25,6 +25,8 @@ import { SPRING_SNAPPY } from '../utils/animations';
 import { isTaskLocked, getChildren } from '../utils/dependencyChains';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
+const SWIPE_THRESHOLD = SCREEN_WIDTH * 0.25;
+const FLING_VELOCITY_THRESHOLD = 500;
 
 interface FocusModeProps {
     tasks: Task[];
@@ -57,12 +59,10 @@ export const FocusMode = memo(function FocusMode({
     const { colors } = useTheme();
   const styles = React.useMemo(() => createStyles(colors), [colors]);
     const [currentIndex, setCurrentIndex] = useState(0);
-    // Direction: 'next' | 'prev' for card transition
-    const [direction, setDirection] = useState<'next' | 'prev'>('next');
-    // Key to force re-mount of card for entering/exiting animations
-    const [cardKey, setCardKey] = useState(0);
     // Shake feedback for locked attempt
     const lockShake = useSharedValue(0);
+    // Pan gesture translation for swipe
+    const cardTranslateX = useSharedValue(0);
 
     const focusTasks = tasks.slice(0, 3);
     const currentTask = focusTasks[currentIndex];
@@ -88,17 +88,24 @@ export const FocusMode = memo(function FocusMode({
     // Reset index when tasks change
     useEffect(() => {
         setCurrentIndex(0);
-        setCardKey(k => k + 1);
-    }, [tasks.length]);
+        cardTranslateX.value = 0;
+    }, [tasks.length, cardTranslateX]);
 
-    const advanceCard = useCallback(
-        (dir: 'next' | 'prev', nextIndex: number) => {
-            setDirection(dir);
-            setCardKey(k => k + 1);
-            setCurrentIndex(nextIndex);
-        },
-        [],
-    );
+    const goToNext = useCallback(() => {
+        if (currentIndex < focusTasks.length - 1) {
+            haptic('light');
+            setCurrentIndex(prev => prev + 1);
+            cardTranslateX.value = 0;
+        }
+    }, [currentIndex, focusTasks.length, cardTranslateX]);
+
+    const goToPrev = useCallback(() => {
+        if (currentIndex > 0) {
+            haptic('light');
+            setCurrentIndex(prev => prev - 1);
+            cardTranslateX.value = 0;
+        }
+    }, [currentIndex, cardTranslateX]);
 
     const handleComplete = useCallback(() => {
         if (!currentTask) return;
@@ -114,25 +121,58 @@ export const FocusMode = memo(function FocusMode({
         haptic('success');
         onComplete(currentTask.id);
         if (currentIndex < focusTasks.length - 1) {
-            advanceCard('next', currentIndex + 1);
+            setCurrentIndex(prev => prev + 1);
+            cardTranslateX.value = 0;
         } else {
             onExit();
         }
-    }, [currentTask, currentIndex, focusTasks.length, onComplete, onExit, advanceCard, isLocked, lockShake]);
+    }, [currentTask, currentIndex, focusTasks.length, onComplete, onExit, isLocked, lockShake, cardTranslateX]);
 
     const handleNext = useCallback(() => {
-        if (currentIndex < focusTasks.length - 1) {
-            haptic('light');
-            advanceCard('next', currentIndex + 1);
-        }
-    }, [currentIndex, focusTasks.length, advanceCard]);
+        goToNext();
+    }, [goToNext]);
 
     const handlePrev = useCallback(() => {
-        if (currentIndex > 0) {
-            haptic('light');
-            advanceCard('prev', currentIndex - 1);
-        }
-    }, [currentIndex, advanceCard]);
+        goToPrev();
+    }, [goToPrev]);
+
+    // ── Swipe gesture for card transitions ──────────────────────────────
+    const panGesture = Gesture.Pan()
+        .activeOffsetX([-20, 20])
+        .failOffsetY([-15, 15])
+        .onUpdate((e) => {
+            'worklet';
+            // Limit swipe when at edges
+            const atStart = currentIndex === 0 && e.translationX > 0;
+            const atEnd = currentIndex >= focusTasks.length - 1 && e.translationX < 0;
+            if (atStart || atEnd) {
+                // Rubber band effect at edges
+                cardTranslateX.value = e.translationX * 0.2;
+            } else {
+                cardTranslateX.value = e.translationX;
+            }
+        })
+        .onEnd((e) => {
+            'worklet';
+            const shouldSwipe =
+                Math.abs(e.translationX) > SWIPE_THRESHOLD ||
+                Math.abs(e.velocityX) > FLING_VELOCITY_THRESHOLD;
+
+            if (shouldSwipe && e.translationX < 0 && currentIndex < focusTasks.length - 1) {
+                // Swipe left → next card
+                cardTranslateX.value = withTiming(-SCREEN_WIDTH, { duration: 200 }, () => {
+                    runOnJS(goToNext)();
+                });
+            } else if (shouldSwipe && e.translationX > 0 && currentIndex > 0) {
+                // Swipe right → previous card
+                cardTranslateX.value = withTiming(SCREEN_WIDTH, { duration: 200 }, () => {
+                    runOnJS(goToPrev)();
+                });
+            } else {
+                // Snap back
+                cardTranslateX.value = withSpring(0, SPRING_SNAPPY);
+            }
+        });
 
     // Animated shake style for locked card
     const lockShakeStyle = useAnimatedStyle(() => {
@@ -143,6 +183,17 @@ export const FocusMode = memo(function FocusMode({
         );
         return { transform: [{ translateX }] };
     });
+
+    // Animated card style for swipe gesture
+    const cardSwipeStyle = useAnimatedStyle(() => ({
+        transform: [{ translateX: cardTranslateX.value }],
+        opacity: interpolate(
+            Math.abs(cardTranslateX.value),
+            [0, SCREEN_WIDTH * 0.5],
+            [1, 0.5],
+            Extrapolation.CLAMP,
+        ),
+    }));
 
     // Format current time
     const now = new Date();
@@ -174,16 +225,6 @@ export const FocusMode = memo(function FocusMode({
             </Animated.View>
         );
     }
-
-    // Choose entering/exiting based on direction
-    const entering =
-        direction === 'next'
-            ? SlideInRight.duration(300)
-            : SlideInLeft.duration(300);
-    const exiting =
-        direction === 'next'
-            ? SlideOutLeft.duration(250)
-            : SlideOutRight.duration(250);
 
     // Subtask progress stats
     const completedChildren = children.filter(c => c.isCompleted).length;
@@ -219,12 +260,9 @@ export const FocusMode = memo(function FocusMode({
             {/* Spacer to push content down from top items */}
             <View style={styles.topSpacer} />
 
-            {/* Task card – keyed to force re-mount with animation */}
-            <Animated.View
-                key={cardKey}
-                entering={entering}
-                exiting={exiting}
-                style={styles.taskCardContainer}>
+            {/* Task card – gesture-driven swipe */}
+            <GestureDetector gesture={panGesture}>
+                <Animated.View style={[styles.taskCardContainer, cardSwipeStyle]}>
                 {currentTask && (
                     <Animated.View style={[styles.taskCard, lockShakeStyle]}>
                         {/* Priority indicator */}
@@ -382,7 +420,8 @@ export const FocusMode = memo(function FocusMode({
                         </AnimatedPressable>
                     </Animated.View>
                 )}
-            </Animated.View>
+                </Animated.View>
+            </GestureDetector>
 
             {/* Navigation */}
             <View style={styles.navigationRow}>

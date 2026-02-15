@@ -55,9 +55,10 @@ function computeUrgencyScore(task: Task): number {
  * Determines which temporal section a task belongs to.
  */
 function computeSection(task: Task): Section {
-  if (!task.deadline) { return 'someday'; }
+  if (!task.deadline || !isFinite(task.deadline)) { return 'someday'; }
 
   const days = daysFromNow(task.deadline);
+  if (!isFinite(days)) { return 'someday'; }
   if (days < 0) { return 'overdue'; }
   if (days === 0) { return 'now'; }
   if (days <= 3) { return 'next'; }

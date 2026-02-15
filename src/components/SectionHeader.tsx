@@ -46,9 +46,9 @@ const createStyles = (c: ThemeColors) => StyleSheet.create({
     fontFamily: FontFamily,
   },
   count: {
-    fontSize: 16,
+    fontSize: 17,
     fontWeight: '600',
-    color: c.gray400,
+    color: c.gray500,
     fontFamily: FontFamily,
   },
 });

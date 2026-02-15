@@ -8,9 +8,9 @@ import {
     Keyboard,
     Modal,
     Alert,
-    RefreshControl,
     KeyboardEvent,
     Platform,
+    KeyboardAvoidingView,
 } from 'react-native';
 import Animated, { FadeIn, FadeOut } from 'react-native-reanimated';
 import { FlashList } from '@shopify/flash-list';
@@ -31,6 +31,7 @@ import { InboxBadge } from '../components/InboxBadge';
 import { TaskPreviewOverlay } from '../components/TaskPreviewOverlay';
 import { ZeroStateOnboarding } from '../components/ZeroStateOnboarding';
 import { FocusMode } from '../components/FocusMode';
+import { FocusOrb } from '../components/FocusOrb';
 import { TodayLine } from '../components/TodayLine';
 import { CalendarStrip } from '../components/CalendarStrip';
 import { AnimatedPressable } from '../components/ui';
@@ -131,8 +132,13 @@ export function HomeScreen({ navigation }: Props) {
 
     useEffect(() => {
         const handleKeyboardShow = (event: KeyboardEvent) => {
-            const nextHeight = event.endCoordinates?.height ?? 0;
-            setKeyboardHeight(Math.max(0, nextHeight - insets.bottom));
+            const kbHeight = event.endCoordinates?.height ?? 0;
+            // On iOS, keyboard height includes safe area; on Android it does not
+            if (Platform.OS === 'ios') {
+                setKeyboardHeight(Math.max(0, kbHeight - insets.bottom));
+            } else {
+                setKeyboardHeight(kbHeight);
+            }
         };
 
         const handleKeyboardHide = () => {
@@ -253,8 +259,9 @@ export function HomeScreen({ navigation }: Props) {
     const flattenedItems = useMemo(() => {
         if (activeSortOption !== 'default') {
             // Flat sorted mode — no section headers
+            // IMPORTANT: filter out completed and archived tasks (organizeTasks does this for default mode)
             const sorted = [...tasksForDisplay]
-                .filter(t => t.depth === 0)
+                .filter(t => !t.isCompleted && !t.isArchived && t.depth === 0)
                 .sort(getSortComparator(activeSortOption));
             return sorted.map(t => ({ type: 'task' as const, task: t }));
         }
@@ -738,12 +745,20 @@ export function HomeScreen({ navigation }: Props) {
                             </Text>
                         )}
                     </View>
-                    <AnimatedPressable
-                        onPress={handleOpenSearch}
-                        hitSlop={8}
-                        style={styles.topSearchButton}>
-                        <Icon name="search-outline" size={26} color={colors.text} />
-                    </AnimatedPressable>
+                    <View style={styles.headerActions}>
+                        <AnimatedPressable
+                            onPress={handleOpenArchive}
+                            hitSlop={8}
+                            style={styles.topHeaderButton}>
+                            <Icon name="archive-outline" size={24} color={colors.textSecondary} />
+                        </AnimatedPressable>
+                        <AnimatedPressable
+                            onPress={handleOpenSearch}
+                            hitSlop={8}
+                            style={styles.topHeaderButton}>
+                            <Icon name="search-outline" size={26} color={colors.text} />
+                        </AnimatedPressable>
+                    </View>
                 </Animated.View>
             )}
 
@@ -780,15 +795,6 @@ export function HomeScreen({ navigation }: Props) {
                     getItemType={getItemType}
                     estimatedItemSize={52}
                     overrideItemLayout={overrideItemLayout}
-                    refreshControl={
-                        <RefreshControl
-                            refreshing={false}
-                            onRefresh={() => setIsFocusMode(true)}
-                            tintColor={colors.text}
-                            title="Pull for Focus Mode"
-                            titleColor={colors.gray400}
-                        />
-                    }
                     ListHeaderComponent={
                         <View>
                             <CalendarStrip
@@ -807,7 +813,6 @@ export function HomeScreen({ navigation }: Props) {
                                 sortOption={activeSortOption}
                                 onSortPress={() => setShowSortDropdown(true)}
                             />
-                            <Text style={styles.focusHint}>Drag down for Focus Mode</Text>
                         </View>
                     }
                     ListEmptyComponent={ListEmpty}
@@ -819,7 +824,7 @@ export function HomeScreen({ navigation }: Props) {
 
             {/* ── Bottom Controls ───────────────────────────────────────── */}
             {!isSearching && (
-                <View style={[styles.bottomControlsWrapper, { bottom: keyboardHeight }]}> 
+                <View style={[styles.bottomControlsWrapper, { bottom: keyboardHeight }]}>
                     <TaskInput
                         onSubmit={handleAddTask}
                         defaultCategory={activeCategory !== 'overview' ? activeCategory : 'personal'}
@@ -830,13 +835,10 @@ export function HomeScreen({ navigation }: Props) {
                     <View style={[styles.bottomNavBar, { paddingBottom: insets.bottom }]}>
                         <InboxBadge onPress={handleOpenInbox} />
 
-                        <AnimatedPressable
-                            onPress={handleOpenArchive}
-                            hitSlop={8}
-                            style={styles.navButton}>
-                            <Icon name="archive-outline" size={24} color={colors.textTertiary} />
-                            <Text style={styles.navButtonText}>Archive</Text>
-                        </AnimatedPressable>
+                        <FocusOrb
+                            onActivate={() => setIsFocusMode(true)}
+                            taskCount={activeCount}
+                        />
 
                         <AnimatedPressable
                             onPress={() => navigation.navigate('Profile')}
@@ -912,7 +914,9 @@ export function HomeScreen({ navigation }: Props) {
                     setShowSubtaskInput(false);
                     setSubtaskParentId(null);
                 }}>
-                <View style={styles.modalOverlay}>
+                <KeyboardAvoidingView
+                    behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+                    style={styles.modalOverlay}>
                     <Animated.View
                         entering={FadeIn.duration(250)}
                         style={styles.modalCard}>
@@ -932,7 +936,7 @@ export function HomeScreen({ navigation }: Props) {
                             <Text style={styles.modalCancelText}>Cancel</Text>
                         </Pressable>
                     </Animated.View>
-                </View>
+                </KeyboardAvoidingView>
             </Modal>
 
             {/* Focus Mode Overlay */}
@@ -1029,26 +1033,17 @@ const createStyles = (c: ThemeColors) => StyleSheet.create({
         paddingHorizontal: Spacing.sm,
     },
     navButtonText: {
-        ...Typography.small,
+        ...Typography.caption,
         fontWeight: '600',
-        color: c.textTertiary,
+        color: c.textSecondary,
     },
-    topSearchButton: {
+    headerActions: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: Spacing.xs,
+    },
+    topHeaderButton: {
         padding: Spacing.sm,
-    },
-    focusHint: {
-        fontSize: 12,
-        fontWeight: '500',
-        color: c.textTertiary,
-        letterSpacing: 0.6,
-        fontFamily: FontFamily,
-        textAlign: 'center',
-        paddingTop: 4,
-        paddingBottom: 0,
-        marginBottom: -10,
-        marginTop: 0,
-        textDecorationLine: 'underline',
-        opacity: 0.8,
     },
     searchHeader: {
         flexDirection: 'row',

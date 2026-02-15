@@ -229,24 +229,46 @@ export function TaskProvider({ children }: { children: React.ReactNode }) {
 
     (async () => {
       try {
-        // 1. Push local categories to Supabase
+        // 1. Push local user-created categories to Supabase
         await pushCategories(categories, user.id);
 
-        // 2. Build category map
+        // 2. Fetch DB categories
         const dbCats = await fetchDbCategories();
-        const localCats = categories.length > 0 ? categories : DEFAULT_CATEGORIES;
-        catMapRef.current = buildCategoryMap(localCats, dbCats as any);
 
-        // 3. Fetch existing tasks from DB
+        // 3. Merge DB categories into local state
+        //    - Defaults keep their string IDs ('overview', 'work', etc.)
+        //    - User-created categories from DB are added with their UUID IDs
+        let mergedCategories = [...categories];
+        if (dbCats.length > 0) {
+          const localNameSet = new Set(
+            mergedCategories.map(c => c.name.toLowerCase()),
+          );
+
+          // Add user-created categories from DB that aren't locally present
+          for (const dbCat of dbCats) {
+            if (!localNameSet.has(dbCat.name.toLowerCase())) {
+              mergedCategories.push(dbCat);
+              localNameSet.add(dbCat.name.toLowerCase());
+            }
+          }
+
+          mergedCategories.sort((a, b) => a.order - b.order);
+          setCategories(mergedCategories);
+        }
+
+        // 4. Build category map (local string IDs <-> DB UUIDs)
+        catMapRef.current = buildCategoryMap(mergedCategories, dbCats as any);
+
+        // 5. Fetch existing tasks from DB
         const { active: dbActive, archived: dbArchived } = await fetchDbTasks(catMapRef.current);
 
-        // 4. Merge: if DB has tasks, merge with local (DB wins on conflicts by updatedAt)
+        // 6. Merge tasks (DB wins on conflicts by updatedAt)
         if (dbActive.length > 0 || dbArchived.length > 0) {
           setTasks(prev => mergeTaskLists(prev, dbActive));
           setArchivedTasks(prev => mergeTaskLists(prev, dbArchived));
         }
 
-        // 5. Push any local-only tasks to Supabase
+        // 7. Push any local-only tasks to Supabase
         const allLocal = [...tasksRef.current, ...archivedTasks];
         if (allLocal.length > 0) {
           await pushTasks(allLocal, user.id, catMapRef.current);

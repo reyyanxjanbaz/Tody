@@ -39,8 +39,10 @@ export function isPast(timestamp: number): boolean {
 }
 
 export function daysFromNow(timestamp: number): number {
+  if (!timestamp || !isFinite(timestamp)) return 0;
   const now = startOfDay().getTime();
   const target = startOfDay(new Date(timestamp)).getTime();
+  if (!isFinite(target)) return 0;
   return Math.round((target - now) / (1000 * 60 * 60 * 24));
 }
 
@@ -53,13 +55,16 @@ export function getNextDay(dayOfWeek: number): Date {
 }
 
 export function formatRelativeDate(timestamp: number): string {
+  if (!timestamp || !isFinite(timestamp)) return '';
   const days = daysFromNow(timestamp);
 
   if (days < 0) {
     const absDays = Math.abs(days);
     if (absDays === 1) { return 'Yesterday'; }
     if (absDays < 7) { return `${absDays} days ago`; }
-    return `${Math.round(absDays / 7)}w ago`;
+    if (absDays < 30) { return `${Math.round(absDays / 7)}w ago`; }
+    const date = new Date(timestamp);
+    return `${date.getDate()} ${MONTH_NAMES[date.getMonth()]}`;
   }
 
   if (days === 0) { return 'Today'; }
@@ -92,7 +97,9 @@ export function formatTime(timestamp: number): string {
 }
 
 export function formatDeadline(timestamp: number): string {
+  if (!timestamp || !isFinite(timestamp)) return '';
   const date = new Date(timestamp);
+  if (isNaN(date.getTime())) return '';
   const relativeDate = formatRelativeDate(timestamp);
 
   // If it's set to end-of-day (23:59), don't show time
@@ -104,6 +111,7 @@ export function formatDeadline(timestamp: number): string {
 }
 
 export function formatCompletedDate(timestamp: number): string {
+  if (!timestamp || !isFinite(timestamp)) return 'Done';
   if (isToday(timestamp)) { return `Done ${formatTime(timestamp)}`; }
   if (daysFromNow(timestamp) === -1) { return 'Done yesterday'; }
   const date = new Date(timestamp);

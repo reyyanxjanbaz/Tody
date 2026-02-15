@@ -87,12 +87,12 @@ const createStyles = (c: ThemeColors) => StyleSheet.create({
   },
   title: {
     ...Typography.body,
-    color: c.gray500,
+    color: c.gray600,
     textAlign: 'center',
   },
   subtitle: {
     ...Typography.caption,
-    color: c.gray400,
+    color: c.gray500,
     textAlign: 'center',
     marginTop: Spacing.sm,
   },

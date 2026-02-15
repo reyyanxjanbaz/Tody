@@ -2,9 +2,21 @@ import { StyleSheet, ViewStyle, Platform } from 'react-native';
 
 // ── Font Family ─────────────────────────────────────────────────────────────
 
+// On iOS, the font family name matches the internal PostScript/family name.
+// On Android, React Native resolves by filename. Some devices fail to find
+// "CharisSIL" because the file is "CharisSIL-Regular.ttf". We use the
+// full filename (without extension) on Android so ALL devices resolve it.
+// Bold/italic variants are handled by React Native's weight-to-suffix mapping.
 export const FontFamily = Platform.select({
   ios: 'CharisSIL',
-  android: 'CharisSIL',
+  android: 'CharisSIL-Regular',
+  default: 'CharisSIL',
+}) as string;
+
+// Font family variants for explicit use when weight mapping fails on Android
+export const FontFamilyBold = Platform.select({
+  ios: 'CharisSIL',
+  android: 'CharisSIL-Bold',
   default: 'CharisSIL',
 }) as string;
 
@@ -184,14 +196,14 @@ export const Typography = StyleSheet.create({
     fontFamily: FontFamily,
   },
   caption: {
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: '400',
     color: Colors.textSecondary,
     fontFamily: FontFamily,
   },
   small: {
-    fontSize: 11,
-    fontWeight: '400',
+    fontSize: 12,
+    fontWeight: '500',
     letterSpacing: 0.2,
     color: Colors.textTertiary,
     fontFamily: FontFamily,

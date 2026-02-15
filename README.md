@@ -1,97 +1,144 @@
-This is a new [**React Native**](https://reactnative.dev) project, bootstrapped using [`@react-native-community/cli`](https://github.com/react-native-community/cli).
+# Tody 
 
-# Getting Started
+> **The human-centric to-do list that respects your psychology.**
 
-> **Note**: Make sure you have completed the [Set Up Your Environment](https://reactnative.dev/docs/set-up-your-environment) guide before proceeding.
+<div align="center">
+  <img src="T DY.jpg" alt="Tody Logo" width="200"/>
+</div>
 
-## Step 1: Start Metro
+Tody is not just another checklist. It's a premium, gesture-driven task manager built effectively for the way your brain actually works. By combining subtle haptics, adaptive interfaces, and "calm" design principles, Tody helps you flow through your day without the anxiety typical of productivity tools.
 
-First, you will need to run **Metro**, the JavaScript build tool for React Native.
+---
 
-To start the Metro dev server, run the following command from the root of your React Native project:
+## ✨ Philosophy & Key Features
 
-```sh
-# Using npm
-npm start
+Tody is designed around *reducing friction* and *cognitive load*.
 
-# OR using Yarn
-yarn start
+### 🧠 Human-Centric Design
+*   **Magnetic Deadline Snapping:** Time pickers that "snap" to logical times (9:00 AM, 5:00 PM) with satisfying haptic feedback, because nobody actually means "4:43 PM".
+*   **The Today Line:** A persistent, sticky horizon line that physically separates "Now" from "Later".
+*   **Pull-to-Focus:** Overwhelmed? Just pull down on your list to enter a distraction-free mode showing only your top 3 tasks.
+*   **Swipe Action Memory:** The app learns which swipe actions you use most and reorders them to build muscle memory.
+*   **Contextual Empty States:** Instead of blank screens, Tody offers helpful suggestions on what to do next based on the context.
+
+### ⚡ Power User Workflow
+*   **Smart Keyboard Toolbar:** Context-aware keys appear above your keyboard. Typing a time? You get "+1hr" buttons. Typing a title? You get priority tags.
+*   **Long-Press Preview:** Peek at full task details without opening the edit screen—perfect for skimming.
+*   **Batch Mode:** Instantly turn your list into a multi-select interface for rapid cleanup.
+*   **Process Inbox:** A dedicated GTD-style mode to rapidly triage new thoughts into actionable tasks.
+*   **Reality Score:** (Experimental) A metric that helps you understand how realistic your planning is based on completion history.
+
+### 🎨 Premium Feel
+*   **Zero-State Onboarding:** No blank canvas paralysis. Start with "Work Day", "Personal Goals", or "Weekly Habits" templates.
+*   **Undo Toasts:** specific, gesture-based undo actions that let you play fast and loose with your list, knowing you have a safety net.
+
+---
+
+## 🛠 Tech Stack
+
+**Mobile (React Native)**
+*   **Core:** React Native 0.84 (New Architecture), React 19, TypeScript
+*   **Performance:** `react-native-reanimated` (v4), `@shopify/flash-list`
+*   **DX/UX:** `react-native-gesture-handler`, `react-native-haptic-feedback`
+*   **Navigation:** React Navigation v7
+*   **Data:** Supabase JS Client, AsyncStorage
+
+**Backend (Hybrid)**
+*   **Database:** Supabase (PostgreSQL) with Row Level Security.
+*   **Server:** Python FastAPI (located in `/server`).
+    *   Used for complex business logic, analytics, and "Reality Score" calculations.
+    *   Proxies specific requests to Supabase or handles background jobs.
+
+---
+
+## 🚀 Getting Started
+
+### Prerequisites
+*   Node.js >= 22
+*   Ruby (for CocoaPods)
+*   Python 3.10+ (for backend)
+*   Xcode (iOS) or Android Studio (Android)
+
+### Installation
+
+1.  **Clone the repository**
+    ```bash
+    git clone https://github.com/yourusername/tody.git
+    cd tody
+    ```
+
+2.  **Install JS dependencies**
+    ```bash
+    npm install
+    ```
+
+3.  **Install iOS dependencies**
+    ```bash
+    cd ios && pod install && cd ..
+    ```
+
+4.  **Setup Environment Variables**
+    *   Create a `.env` file in the root directory (refer to `.env.example` if available) or configure `src/lib/supabase.ts` with your Supabase credentials.
+
+### Running the App
+
+*   **iOS:**
+    ```bash
+    npm run ios
+    ```
+
+*   **Android:**
+    ```bash
+    npm run android
+    ```
+
+### Running the Backend Server
+The Python server is optional for basic CRUD but required for advanced features.
+
+```bash
+cd server
+python3 -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+uvicorn main:app --reload --port 8000
 ```
 
-## Step 2: Build and run your app
+---
 
-With Metro running, open a new terminal window/pane from the root of your React Native project, and use one of the following commands to build and run your Android or iOS app:
+## 📂 Project Structure
 
-### Android
-
-```sh
-# Using npm
-npm run android
-
-# OR using Yarn
-yarn android
+```
+Tody/
+├── src/
+│   ├── components/      # UI atoms (FocusOrb, DeadlineSnapper, etc.)
+│   ├── context/         # React Context (Auth, Theme, Inbox)
+│   ├── lib/             # Supabase clients and sync logic
+│   ├── navigation/      # RootNavigator and stack config
+│   ├── screens/         # Full screen views (Home, Profile, Archive)
+│   ├── types/           # TS interfaces
+│   └── utils/           # Helper functions
+├── server/              # Python FastAPI backend
+│   ├── routers/         # API endpoints
+│   └── main.py          # Entry point
+├── android/             # Native Android code
+├── ios/                 # Native iOS code
+└── supabase/            # SQL schemas and backups
 ```
 
-### iOS
+---
 
-For iOS, remember to install CocoaPods dependencies (this only needs to be run on first clone or after updating native deps).
+## 🤝 Contributing
 
-The first time you create a new project, run the Ruby bundler to install CocoaPods itself:
+We welcome contributions that align with our "calm computing" philosophy.
 
-```sh
-bundle install
-```
+1.  Fork the Project
+2.  Create your Feature Branch (`git checkout -b feature/AmazingFeature`)
+3.  Commit your Changes (`git commit -m 'Add some AmazingFeature'`)
+4.  Push to the Branch (`git push origin feature/AmazingFeature`)
+5.  Open a Pull Request
 
-Then, and every time you update your native dependencies, run:
+---
 
-```sh
-bundle exec pod install
-```
+## 📄 License
 
-For more information, please visit [CocoaPods Getting Started guide](https://guides.cocoapods.org/using/getting-started.html).
-
-```sh
-# Using npm
-npm run ios
-
-# OR using Yarn
-yarn ios
-```
-
-If everything is set up correctly, you should see your new app running in the Android Emulator, iOS Simulator, or your connected device.
-
-This is one way to run your app — you can also build it directly from Android Studio or Xcode.
-
-## Step 3: Modify your app
-
-Now that you have successfully run the app, let's make changes!
-
-Open `App.tsx` in your text editor of choice and make some changes. When you save, your app will automatically update and reflect these changes — this is powered by [Fast Refresh](https://reactnative.dev/docs/fast-refresh).
-
-When you want to forcefully reload, for example to reset the state of your app, you can perform a full reload:
-
-- **Android**: Press the <kbd>R</kbd> key twice or select **"Reload"** from the **Dev Menu**, accessed via <kbd>Ctrl</kbd> + <kbd>M</kbd> (Windows/Linux) or <kbd>Cmd ⌘</kbd> + <kbd>M</kbd> (macOS).
-- **iOS**: Press <kbd>R</kbd> in iOS Simulator.
-
-## Congratulations! :tada:
-
-You've successfully run and modified your React Native App. :partying_face:
-
-### Now what?
-
-- If you want to add this new React Native code to an existing application, check out the [Integration guide](https://reactnative.dev/docs/integration-with-existing-apps).
-- If you're curious to learn more about React Native, check out the [docs](https://reactnative.dev/docs/getting-started).
-
-# Troubleshooting
-
-If you're having issues getting the above steps to work, see the [Troubleshooting](https://reactnative.dev/docs/troubleshooting) page.
-
-# Learn More
-
-To learn more about React Native, take a look at the following resources:
-
-- [React Native Website](https://reactnative.dev) - learn more about React Native.
-- [Getting Started](https://reactnative.dev/docs/environment-setup) - an **overview** of React Native and how setup your environment.
-- [Learn the Basics](https://reactnative.dev/docs/getting-started) - a **guided tour** of the React Native **basics**.
-- [Blog](https://reactnative.dev/blog) - read the latest official React Native **Blog** posts.
-- [`@facebook/react-native`](https://github.com/facebook/react-native) - the Open Source; GitHub **repository** for React Native.
+Distributed under the MIT License. See `LICENSE` for more information.
