@@ -995,8 +995,8 @@ const createStyles = (c: ThemeColors, isDark: boolean) => StyleSheet.create({
         justifyContent: 'space-between',
         alignItems: 'flex-end',
         paddingHorizontal: Spacing.xxl,
-        paddingTop: Spacing.xl,
-        paddingBottom: Spacing.lg,
+        paddingTop: Spacing.sm,
+        paddingBottom: Spacing.xs,
     },
     headerTitleWrap: {
         flex: 1,
@@ -1048,13 +1048,13 @@ const createStyles = (c: ThemeColors, isDark: boolean) => StyleSheet.create({
         gap: Spacing.xs,
     },
     topHeaderButton: {
-        padding: Spacing.sm,
+        padding: Spacing.xs,
     },
     searchHeader: {
         flexDirection: 'row',
         alignItems: 'center',
         paddingHorizontal: Spacing.lg,
-        paddingVertical: Spacing.md,
+        paddingVertical: Spacing.sm,
         gap: Spacing.md,
     },
     searchInput: {
@@ -1150,7 +1150,7 @@ const createStyles = (c: ThemeColors, isDark: boolean) => StyleSheet.create({
     sortFab: {
         position: 'absolute',
         right: Spacing.lg,
-        top: 190,
+        bottom: 200,
         width: 38,
         height: 38,
         borderRadius: 19,
@@ -1158,8 +1158,8 @@ const createStyles = (c: ThemeColors, isDark: boolean) => StyleSheet.create({
         justifyContent: 'center',
         alignItems: 'center',
         shadowColor: '#000',
-        shadowOffset: { width: 0, height: 3 },
-        shadowOpacity: isDark ? 0.4 : 0.15,
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: isDark ? 0.5 : 0.18,
         shadowRadius: 8,
         elevation: 6,
         zIndex: 50,
