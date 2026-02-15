@@ -1,15 +1,15 @@
 /**
- * SubtaskModal — Unified popup for adding subtasks.
+ * SubtaskModal — Floating island card for adding subtasks.
+ *
+ * A uniformly-rounded card that springs into the center of the screen
+ * with a soft backdrop blur. No bottom-sheet tropes — no drag handle,
+ * no asymmetric corners. Just a clean, centered floating form.
  *
  * Uses the full TaskInput component so subtasks get the same
- * creation experience as top-level tasks (energy, priority,
- * category, estimate, deadline pills).
- *
- * Used in both HomeScreen (via long-press / swipe) and
- * TaskDetailScreen (inline "Add subtask" button).
+ * creation experience as top-level tasks.
  */
 
-import React, { memo } from 'react';
+import React, { memo, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -18,20 +18,41 @@ import {
   StyleSheet,
   Platform,
   KeyboardAvoidingView,
+  Dimensions,
 } from 'react-native';
-import Animated, { FadeIn } from 'react-native-reanimated';
-import { Spacing, Typography, BorderRadius, FontFamily, type ThemeColors } from '../utils/colors';
+import Animated, {
+  FadeIn,
+  FadeOut,
+  SlideInUp,
+  SlideOutDown,
+  useSharedValue,
+  useAnimatedStyle,
+  withSpring,
+  withDelay,
+  withTiming,
+  interpolate,
+  Extrapolation,
+} from 'react-native-reanimated';
+import Icon from 'react-native-vector-icons/Ionicons';
+import {
+  Spacing,
+  Typography,
+  BorderRadius,
+  FontFamily,
+  type ThemeColors,
+} from '../utils/colors';
 import { useTheme } from '../context/ThemeContext';
 import { TaskInput, TaskInputParams } from './TaskInput';
 import { Category } from '../types';
+
+const { width: SCREEN_W } = Dimensions.get('window');
+const CARD_WIDTH = Math.min(SCREEN_W - 32, 400);
 
 interface SubtaskModalProps {
   visible: boolean;
   onClose: () => void;
   onSubmit: (text: string, params?: TaskInputParams) => void;
-  /** Available categories (excluding Overview) */
   categories?: Category[];
-  /** Default category inherited from parent task */
   defaultCategory?: string;
 }
 
@@ -42,72 +63,178 @@ export const SubtaskModal = memo(function SubtaskModal({
   categories,
   defaultCategory,
 }: SubtaskModalProps) {
-  const { colors } = useTheme();
-  const styles = React.useMemo(() => createStyles(colors), [colors]);
+  const { colors, isDark } = useTheme();
+  const styles = React.useMemo(() => createStyles(colors, isDark), [colors, isDark]);
+
+  // Card entrance animation
+  const progress = useSharedValue(0);
+
+  useEffect(() => {
+    if (visible) {
+      progress.value = withSpring(1, {
+        damping: 18,
+        stiffness: 200,
+        mass: 0.8,
+      });
+    } else {
+      progress.value = withTiming(0, { duration: 180 });
+    }
+  }, [visible, progress]);
+
+  const cardAnimStyle = useAnimatedStyle(() => ({
+    opacity: interpolate(progress.value, [0, 0.4, 1], [0, 1, 1], Extrapolation.CLAMP),
+    transform: [
+      {
+        scale: interpolate(
+          progress.value,
+          [0, 1],
+          [0.85, 1],
+          Extrapolation.CLAMP,
+        ),
+      },
+      {
+        translateY: interpolate(
+          progress.value,
+          [0, 1],
+          [-30, 0],
+          Extrapolation.CLAMP,
+        ),
+      },
+    ],
+  }));
+
+  const backdropAnimStyle = useAnimatedStyle(() => ({
+    opacity: interpolate(progress.value, [0, 1], [0, 1], Extrapolation.CLAMP),
+  }));
+
+  // Accent line color — subtle glow
+  const accentColor = isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)';
 
   return (
     <Modal
       visible={visible}
       transparent
-      animationType="fade"
+      animationType="none"
+      statusBarTranslucent
       onRequestClose={onClose}
     >
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        style={styles.overlay}
+        style={styles.root}
       >
-        <Animated.View
-          entering={FadeIn.duration(250)}
-          style={styles.card}
-        >
-          <Text style={styles.title}>Add subtask</Text>
-          <TaskInput
-            onSubmit={(text, params) => {
-              onSubmit(text, params);
-            }}
-            placeholder="Subtask title..."
-            autoFocus
-            defaultCategory={defaultCategory}
-            categories={categories}
-          />
-          <Pressable style={styles.cancelButton} onPress={onClose}>
-            <Text style={styles.cancelText}>Cancel</Text>
-          </Pressable>
+        {/* Backdrop */}
+        <Animated.View style={[styles.backdrop, backdropAnimStyle]}>
+          <Pressable style={StyleSheet.absoluteFill} onPress={onClose} />
+        </Animated.View>
+
+        {/* Floating card */}
+        <Animated.View style={[styles.card, cardAnimStyle]}>
+          {/* Header row */}
+          <View style={styles.header}>
+            <View style={styles.headerLabel}>
+              <Icon
+                name="git-branch-outline"
+                size={16}
+                color={colors.textTertiary}
+                style={{ marginRight: 6 }}
+              />
+              <Text style={styles.headerText}>New subtask</Text>
+            </View>
+            <Pressable
+              onPress={onClose}
+              hitSlop={12}
+              style={styles.closeBtn}
+            >
+              <Icon name="close" size={18} color={colors.textTertiary} />
+            </Pressable>
+          </View>
+
+          {/* Divider */}
+          <View style={[styles.divider, { backgroundColor: accentColor }]} />
+
+          {/* Task Input */}
+          <View style={styles.inputWrap}>
+            <TaskInput
+              onSubmit={(text, params) => {
+                onSubmit(text, params);
+              }}
+              placeholder="What's the subtask?"
+              autoFocus
+              compact
+              defaultCategory={defaultCategory}
+              categories={categories}
+            />
+          </View>
         </Animated.View>
       </KeyboardAvoidingView>
     </Modal>
   );
 });
 
-const createStyles = (c: ThemeColors) =>
+// ── Styles ──────────────────────────────────────────────────────────────────
+
+const createStyles = (c: ThemeColors, isDark: boolean) =>
   StyleSheet.create({
-    overlay: {
+    root: {
       flex: 1,
-      backgroundColor: 'rgba(0,0,0,0.4)',
       justifyContent: 'center',
       alignItems: 'center',
     },
+    backdrop: {
+      ...StyleSheet.absoluteFillObject,
+      backgroundColor: isDark ? 'rgba(0,0,0,0.65)' : 'rgba(0,0,0,0.35)',
+    },
     card: {
-      width: '85%',
-      backgroundColor: c.surface,
-      borderRadius: BorderRadius.card,
-      paddingVertical: Spacing.xxl,
-      paddingHorizontal: Spacing.xxl,
-      borderWidth: 1,
-      borderColor: c.border,
+      width: CARD_WIDTH,
+      backgroundColor: isDark ? '#1A1A1C' : '#FFFFFF',
+      borderRadius: 20,
+      overflow: 'hidden',
+      // Uniform shadow on all sides
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 8 },
+      shadowOpacity: isDark ? 0.5 : 0.15,
+      shadowRadius: 24,
+      elevation: 20,
+      // Subtle border ring
+      borderWidth: StyleSheet.hairlineWidth,
+      borderColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.08)',
     },
-    title: {
-      ...Typography.bodyMedium,
-      color: c.text,
-      textAlign: 'center',
-    },
-    cancelButton: {
-      paddingVertical: Spacing.sm,
+    header: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
       paddingHorizontal: Spacing.xl,
-      alignSelf: 'center',
+      paddingTop: Spacing.lg,
+      paddingBottom: Spacing.sm,
     },
-    cancelText: {
-      ...Typography.body,
+    headerLabel: {
+      flexDirection: 'row',
+      alignItems: 'center',
+    },
+    headerText: {
+      fontSize: 14,
+      fontWeight: '600',
+      letterSpacing: 0.3,
       color: c.textTertiary,
+      fontFamily: FontFamily,
+      textTransform: 'uppercase',
+    },
+    closeBtn: {
+      width: 28,
+      height: 28,
+      borderRadius: 14,
+      backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.05)',
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    divider: {
+      height: 1,
+      marginHorizontal: Spacing.lg,
+    },
+    inputWrap: {
+      paddingBottom: Spacing.md,
+      paddingTop: Spacing.xs,
+      // Offset left margin from TaskInput's own margins
+      marginHorizontal: -Spacing.lg + 4,
     },
   });
