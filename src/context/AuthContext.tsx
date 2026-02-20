@@ -8,6 +8,7 @@ import React, {
 import { AuthState, User, DEFAULT_PREFERENCES } from '../types';
 import { supabase } from '../lib/supabase';
 import { clearAll, saveUserPreferences } from '../utils/storage';
+import { resetSwipeMemoryCache } from '../utils/swipeMemory';
 import { useTheme } from './ThemeContext';
 
 // ── Actions ──────────────────────────────────────────────────────────────────
@@ -190,6 +191,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const logout = useCallback(async () => {
+    resetSwipeMemoryCache();               // clear in-memory swipe stats before wipe
     await supabase.auth.signOut();
     await clearAll();
     // Reset theme to light mode and seed defaults for next user

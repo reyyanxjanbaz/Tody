@@ -1,6 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-
-const SWIPE_STATS_KEY = '@tody_swipe_action_stats';
+import { KEYS } from './storage';
+import { api } from '../lib/api';
 
 export type SwipeAction = 'complete' | 'defer' | 'start' | 'subtask' | 'revive' | 'delete';
 
@@ -25,23 +25,55 @@ const DEFAULT_STATS: SwipeStats = {
 
 let cachedStats: SwipeStats | null = null;
 
+/** Called on logout to prevent cross-user stat bleed. */
+export function resetSwipeMemoryCache(): void {
+  cachedStats = null;
+}
+
+// ── Cloud sync helpers ────────────────────────────────────────────────────────
+
+/** Pull swipe_stats from the user’s profile row and hydrate local storage (best-effort). */
+export async function syncSwipeStatsFromCloud(): Promise<void> {
+  try {
+    const { data } = await api.get<{ swipe_stats?: SwipeStats | null }>('/profile');
+    if (!data?.swipe_stats) return;
+    cachedStats = data.swipe_stats as SwipeStats;
+    await AsyncStorage.setItem(KEYS.SWIPE_STATS, JSON.stringify(cachedStats));
+  } catch { /* best-effort */ }
+}
+
+async function pushSwipeStatsToCloud(stats: SwipeStats): Promise<void> {
+  try {
+    await api.patch('/profile', { swipe_stats: stats });
+  } catch { /* best-effort */ }
+}
 /**
- * Feature 4: Swipe Action Memory
- * 
+ * Feature: Swipe Action Memory
+ *
  * Tracks which swipe actions the user performs most frequently.
- * After every 20 swipes, ranking is recalculated.
- * Resets every 100 swipes to adapt to changing behavior.
+ * Soft-resets every 100 swipes to adapt to changing behaviour.
+ * Stats are persisted locally (KEYS.SWIPE_STATS) and synced to the cloud.
  */
 export async function loadSwipeStats(): Promise<SwipeStats> {
   if (cachedStats) return cachedStats;
 
   try {
-    const data = await AsyncStorage.getItem(SWIPE_STATS_KEY);
+    const data = await AsyncStorage.getItem(KEYS.SWIPE_STATS);
     if (data) {
-      cachedStats = JSON.parse(data);
-      return cachedStats!;
+      cachedStats = JSON.parse(data) as SwipeStats;
+      return cachedStats;
     }
-  } catch { }
+  } catch { /* fall through */ }
+
+  // Nothing locally — try cloud once
+  try {
+    const { data: profile } = await api.get<{ swipe_stats?: SwipeStats | null }>('/profile');
+    if (profile?.swipe_stats) {
+      cachedStats = profile.swipe_stats as SwipeStats;
+      await AsyncStorage.setItem(KEYS.SWIPE_STATS, JSON.stringify(cachedStats));
+      return cachedStats;
+    }
+  } catch { /* best-effort */ }
 
   cachedStats = { ...DEFAULT_STATS };
   return cachedStats;
@@ -63,7 +95,9 @@ export async function recordSwipeAction(action: SwipeAction): Promise<void> {
   }
 
   cachedStats = stats;
-  await AsyncStorage.setItem(SWIPE_STATS_KEY, JSON.stringify(stats));
+  await AsyncStorage.setItem(KEYS.SWIPE_STATS, JSON.stringify(stats));
+  // Async cloud sync — non-blocking
+  pushSwipeStatsToCloud(stats).catch(() => {});
 }
 
 /**

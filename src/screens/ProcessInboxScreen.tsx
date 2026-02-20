@@ -264,16 +264,32 @@ export function ProcessInboxScreen({ navigation }: Props) {
 
   const handleQuickComplete = useCallback(() => {
     if (!activeTask) return;
-    addTask(activeTask.rawText, {
-      isCompleted: true,
-      completedAt: Date.now(),
-    });
-    removeInboxTask(activeTask.id);
+
+    // Capture stable refs before the async flow
+    const taskId  = activeTask.id;
+    const rawText = activeTask.rawText;
+
+    // Optimistic local update
+    removeInboxTask(taskId);
     resetForm();
     setSelectedGridTaskId(null);
     setCurrentIndex(prev => {
       if (inboxTasks.length <= 1) return 0;
       return Math.min(prev, inboxTasks.length - 2);
+    });
+
+    // Single atomic backend call — converts the inbox item and marks it completed
+    api.post(`/inbox/${taskId}/convert`, {
+      title:        rawText,
+      is_completed: true,
+    }).then(({ isBackendDown }) => {
+      if (isBackendDown) {
+        // Fallback: create completed task locally (inbox already removed above)
+        addTask(rawText, { isCompleted: true, completedAt: Date.now() });
+      }
+      // Success: backend persisted the completed task; no local addTask needed
+    }).catch(() => {
+      addTask(rawText, { isCompleted: true, completedAt: Date.now() });
     });
   }, [activeTask, addTask, removeInboxTask, resetForm, inboxTasks.length]);
 

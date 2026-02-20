@@ -34,6 +34,7 @@ class ProfileUpdate(BaseModel):
     date_format: Optional[str] = None
     time_format: Optional[str] = None
     week_starts_on: Optional[str] = None
+    swipe_stats: Optional[dict] = None   # persisted JSONB; synced from the app
 
     @field_validator("date_format")
     @classmethod
@@ -117,6 +118,107 @@ def get_stats(user_id: str = Depends(get_current_user_id)):
             "active_days": 0,
         }
     return result.data
+
+
+@router.delete("", status_code=204)
+def delete_account(user_id: str = Depends(get_current_user_id)):
+    """
+    Permanently delete the authenticated user, their profile, and all user data.
+    Uses the service-role client to call auth.admin.delete_user which cascades
+    all FK-linked application data via ON DELETE CASCADE.
+    """
+    from db import get_service_client
+    sb = get_service_client()
+
+    logger.info("Account deletion requested for user %s", user_id[:8])
+
+    # Hard-delete application data (belt + suspenders; FK cascades cover most of this)
+    for table, col in [
+        ("tasks",       "user_id"),
+        ("inbox_tasks", "user_id"),
+        ("categories",  "user_id"),
+        ("task_patterns", "user_id"),
+        ("profiles",    "id"),
+    ]:
+        try:
+            sb.table(table).delete().eq(col, user_id).execute()
+        except Exception as e:
+            logger.warning("Could not delete from %s for user %s: %s", table, user_id[:8], e)
+
+    # Delete the Supabase Auth user record — requires service-role admin client
+    try:
+        sb.auth.admin.delete_user(user_id)
+    except Exception as e:
+        logger.error("Failed to delete auth user %s: %s", user_id[:8], e)
+        raise HTTPException(status_code=500, detail="Could not delete authentication record")
+
+    logger.info("Successfully deleted account for user %s", user_id[:8])
+    return None
+
+
+@router.get("/reality-score")
+def get_reality_score(user_id: str = Depends(get_current_user_id)):
+    """
+    Returns estimation-accuracy stats derived from tasks that have both
+    estimated_minutes and actual_minutes set.
+    """
+    sb = get_supabase()
+
+    result = (
+        sb.table("tasks")
+        .select("id, title, estimated_minutes, actual_minutes, completed_at")
+        .eq("user_id", user_id)
+        .eq("is_completed", True)
+        .not_.is_("estimated_minutes", "null")
+        .not_.is_("actual_minutes", "null")
+        .order("completed_at", desc=True)
+        .execute()
+    )
+    rows = result.data or []
+
+    if not rows:
+        return {
+            "reality_score": 100,
+            "underestimation_rate": 0,
+            "total_estimated_minutes": 0,
+            "total_actual_minutes": 0,
+            "recent_tasks": [],
+        }
+
+    total_estimated = sum(r["estimated_minutes"] for r in rows)
+    total_actual = sum(r["actual_minutes"] for r in rows)
+
+    # reality_score: how close actual is to estimated (100 = perfect)
+    if total_estimated > 0:
+        ratio = total_actual / total_estimated
+        reality_score = max(0, round(100 - abs(ratio - 1) * 100))
+    else:
+        reality_score = 100
+
+    # underestimation_rate > 0 means user took longer than estimated
+    if total_estimated > 0:
+        underestimation_rate = round(((total_actual - total_estimated) / total_estimated) * 100)
+    else:
+        underestimation_rate = 0
+
+    recent_tasks = [
+        {
+            "id": r["id"],
+            "title": r["title"],
+            "estimated_minutes": r["estimated_minutes"],
+            "actual_minutes": r["actual_minutes"],
+            "completed_at": r["completed_at"],
+        }
+        for r in rows[:20]
+    ]
+
+    return {
+        "reality_score": reality_score,
+        "underestimation_rate": underestimation_rate,
+        "total_estimated_minutes": total_estimated,
+        "total_actual_minutes": total_actual,
+        "recent_tasks": recent_tasks,
+    }
 
 
 @router.get("/analytics")

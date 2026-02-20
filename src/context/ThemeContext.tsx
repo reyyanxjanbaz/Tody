@@ -51,29 +51,32 @@ const ThemeContext = createContext<ThemeContextValue>({
 // ── Provider ────────────────────────────────────────────────────────────────
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
-  const [isDark, setIsDark] = useState(true);
+  // null = preference not yet loaded from storage; avoids rendering with a wrong theme
+  const [isDark, setIsDark] = useState<boolean | null>(null);
   const [loaded, setLoaded] = useState(false);
 
   // Load persisted preference on mount; seed defaults for new users
   useEffect(() => {
     (async () => {
-      const prefs = await getUserPreferences<UserPreferences>();
-      if (prefs) {
-        // Respect the persisted preference (could be light or dark)
-        setIsDark(prefs.darkMode ?? true);
-      } else {
-        // First launch – persist default preferences (dark mode on)
-        await saveUserPreferences(DEFAULT_PREFERENCES);
-        setIsDark(true);
+      try {
+        const prefs = await getUserPreferences<UserPreferences>();
+        if (prefs) {
+          setIsDark(prefs.darkMode ?? true);
+        } else {
+          await saveUserPreferences(DEFAULT_PREFERENCES);
+          setIsDark(true);
+        }
+      } catch {
+        setIsDark(true); // safe fallback
+      } finally {
+        setLoaded(true);
       }
-      setLoaded(true);
     })();
   }, []);
 
   const toggleTheme = useCallback(async () => {
-    const next = !isDark;
+    const next = !(isDark ?? true);
     setIsDark(next);
-    // Persist to storage
     const prefs = await getUserPreferences<UserPreferences>();
     await saveUserPreferences({ ...(prefs ?? DEFAULT_PREFERENCES), darkMode: next });
   }, [isDark]);
@@ -85,9 +88,9 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
 
   const value = useMemo<ThemeContextValue>(
     () => ({
-      colors: isDark ? DarkColors : LightColors,
-      shadows: isDark ? DarkShadows : Shadows,
-      isDark,
+      colors: (isDark ?? true) ? DarkColors : LightColors,
+      shadows: (isDark ?? true) ? DarkShadows : Shadows,
+      isDark: isDark ?? true,
       toggleTheme,
       resetTheme,
       fontFamily: FontFamily,
@@ -95,11 +98,14 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     [isDark, toggleTheme, resetTheme],
   );
 
+  // Render nothing until the stored preference is resolved — eliminates theme flash.
+  if (!loaded) return null;
+
   return (
     <ThemeContext.Provider value={value}>
       <StatusBar
-        barStyle={isDark ? 'light-content' : 'dark-content'}
-        backgroundColor={isDark ? '#000000' : '#FFFFFF'}
+        barStyle={(isDark ?? true) ? 'light-content' : 'dark-content'}
+        backgroundColor={(isDark ?? true) ? '#000000' : '#FFFFFF'}
       />
       {children}
     </ThemeContext.Provider>

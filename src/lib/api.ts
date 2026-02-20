@@ -142,6 +142,9 @@ export const api = {
   patch: <T = unknown>(path: string, body: unknown): Promise<ApiResult<T>> =>
     apiRequest<T>('PATCH', path, body),
 
+  put: <T = unknown>(path: string, body?: unknown): Promise<ApiResult<T>> =>
+    apiRequest<T>('PUT', path, body),
+
   delete: <T = unknown>(path: string): Promise<ApiResult<T>> =>
     apiRequest<T>('DELETE', path),
 };

@@ -1,14 +1,13 @@
 /**
  * Profile Statistics & Gamification Engine
  *
- * XP, level-up calculations and calendar data.
+ * XP, level-up calculations and monthly calendar data.
  * All computations are pure — no side effects.
  *
- * NOTE: calculateStreaks() and calculateProfileStats() have been removed.
- * Streak and stats data now come from the Render backend via
- *   GET /profile/analytics  (streaks, distribution, daily trend)
- *   GET /profile/stats      (totals, completion %, time invested)
- * in ProfileScreen.tsx.
+ * Streaks and aggregate stats are served by the Render backend:
+ *   GET /profile/analytics  — streaks, distribution, daily trend
+ *   GET /profile/stats      — totals, completion %, time invested
+ * See ProfileScreen.tsx for the fetch logic.
  */
 
 import { Task, DayTaskStatus, XPData } from '../types';

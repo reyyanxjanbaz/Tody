@@ -46,6 +46,7 @@ class InboxConvert(BaseModel):
     category_id: Optional[str] = None
     deadline: Optional[str] = None
     estimated_minutes: Optional[int] = None
+    is_completed: bool = False   # True → create task as already-completed (quick-complete flow)
 
 
 @router.get("")
@@ -137,17 +138,20 @@ def convert_inbox_to_task(
 
     # 2. Create the task
     task_data = {
-        "user_id": user_id,
-        "title": title,
-        "priority": body.priority,
+        "user_id":      user_id,
+        "title":        title,
+        "priority":     body.priority,
         "energy_level": body.energy_level,
-        "category_id": body.category_id,
-        "deadline": body.deadline,
-        "estimated_minutes": body.estimated_minutes,
         "created_hour": datetime.utcnow().hour,
     }
-    # Remove None values
-    task_data = {k: v for k, v in task_data.items() if v is not None}
+    if body.category_id:       task_data["category_id"]       = body.category_id
+    if body.deadline:          task_data["deadline"]           = body.deadline
+    if body.estimated_minutes: task_data["estimated_minutes"]  = body.estimated_minutes
+
+    # Support quick-complete flow: mark task as done on creation
+    if body.is_completed:
+        task_data["is_completed"] = True
+        task_data["completed_at"] = datetime.utcnow().isoformat()
 
     task_result = sb.table("tasks").insert(task_data).execute()
     if not task_result.data:
@@ -156,8 +160,10 @@ def convert_inbox_to_task(
     # 3. Delete the inbox item
     sb.table("inbox_tasks").delete().eq("id", inbox_id).eq("user_id", user_id).execute()
 
-    logger.info("Converted inbox %s → task %s for user %s",
-                inbox_id, task_result.data[0]["id"], user_id[:8])
+    logger.info(
+        "Converted inbox %s → task %s (completed=%s) for user %s",
+        inbox_id, task_result.data[0]["id"], body.is_completed, user_id[:8],
+    )
     return task_result.data[0]
 
 

@@ -101,7 +101,11 @@ export function ProfileScreen({ navigation }: Props) {
 
   // Merge active + archived tasks for local computations (XP, calendar)
   const allTasks = useMemo(() => [...tasks, ...archivedTasks], [tasks, archivedTasks]);
-
+  // Re-fetch backend stats whenever the number of tasks or completed tasks changes
+  const statsRefreshKey = useMemo(
+    () => `${allTasks.length}:${allTasks.filter(t => t.isCompleted).length}`,
+    [allTasks],
+  );
   // ── Fetch stats + analytics from backend ────────────────────────────────────
   useEffect(() => {
     let cancelled = false;
@@ -133,7 +137,7 @@ export function ProfileScreen({ navigation }: Props) {
       }
     })();
     return () => { cancelled = true; };
-  }, []);
+  }, [statsRefreshKey]);
 
   // XP uses the backend-sourced current streak
   const xpData = useMemo(

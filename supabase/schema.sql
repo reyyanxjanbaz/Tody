@@ -485,3 +485,34 @@ EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 DO $$ BEGIN
   ALTER TABLE public.tasks ADD CONSTRAINT depth_max CHECK (depth >= 0 AND depth <= 3);
 EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+
+-- ── swipe_stats: JSONB column for persisted swipe-action preferences ─────────
+ALTER TABLE public.profiles
+  ADD COLUMN IF NOT EXISTS swipe_stats JSONB DEFAULT NULL;
+
+-- ── user_task_patterns — Pattern Learning sync ────────────────────────────────
+-- Stores per-user ML patterns so they survive reinstalls and sync across devices.
+
+CREATE TABLE IF NOT EXISTS public.user_task_patterns (
+    id                     UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id                UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+    keywords               TEXT[]   NOT NULL DEFAULT '{}',
+    average_actual_minutes INTEGER  NOT NULL DEFAULT 0,
+    sample_size            INTEGER  NOT NULL DEFAULT 1,
+    accuracy_score         INTEGER  NOT NULL DEFAULT 50,
+    created_at             TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at             TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_user_task_patterns_user
+    ON public.user_task_patterns(user_id);
+
+ALTER TABLE public.user_task_patterns ENABLE ROW LEVEL SECURITY;
+
+DO $$ BEGIN
+  CREATE POLICY "Users manage own patterns"
+      ON public.user_task_patterns
+      FOR ALL
+      USING  (auth.uid() = user_id)
+      WITH CHECK (auth.uid() = user_id);
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;

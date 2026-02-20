@@ -1,11 +1,15 @@
 /**
- * Time Block Integrity System - Pattern Learning
+ * Time Block Integrity System – Pattern Learning
  * Learn patterns from completed tasks to provide reality-based estimates.
+ * Patterns are stored locally (KEYS.TASK_PATTERNS) and synced to the cloud
+ * via POST /patterns/sync after every update.
  */
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Task, TaskPattern } from '../types';
+import { KEYS } from './storage';
+import { api } from '../lib/api';
 
-const PATTERNS_KEY = '@tody_task_patterns';
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 const PATTERN_MAX_AGE_DAYS = 90;
 
 // Stop words to filter from task titles
@@ -50,12 +54,48 @@ function keywordSimilarity(a: string[], b: string[]): number {
   return union > 0 ? intersection / union : 0;
 }
 
+// ── Cloud sync helpers ────────────────────────────────────────────────────────
+
+/** Pull patterns from the cloud and overwrite local storage (best-effort). */
+export async function syncPatternsFromCloud(): Promise<void> {
+  try {
+    const { data } = await api.get<Array<{
+      keywords: string[];
+      average_actual_minutes: number;
+      sample_size: number;
+      accuracy_score: number;
+    }>>('/patterns');
+    if (!data || data.length === 0) return;
+    const mapped: TaskPattern[] = data.map(p => ({
+      keywords:             p.keywords,
+      averageActualMinutes: p.average_actual_minutes,
+      sampleSize:           p.sample_size,
+      accuracyScore:        p.accuracy_score,
+    }));
+    await AsyncStorage.setItem(KEYS.TASK_PATTERNS, JSON.stringify(mapped));
+  } catch { /* best-effort */ }
+}
+
+/** Push local patterns to the cloud after every save (best-effort). */
+async function pushPatternsToCloud(patterns: TaskPattern[]): Promise<void> {
+  try {
+    await api.post('/patterns/sync', patterns.map(p => ({
+      keywords:               p.keywords,
+      average_actual_minutes: p.averageActualMinutes,
+      sample_size:            p.sampleSize,
+      accuracy_score:         p.accuracyScore,
+    })));
+  } catch { /* best-effort */ }
+}
+
+// ── Local CRUD ────────────────────────────────────────────────────────────────
+
 /**
  * Load task patterns from storage.
  */
 async function loadPatterns(): Promise<TaskPattern[]> {
   try {
-    const data = await AsyncStorage.getItem(PATTERNS_KEY);
+    const data = await AsyncStorage.getItem(KEYS.TASK_PATTERNS);
     return data ? JSON.parse(data) : [];
   } catch {
     return [];
@@ -63,10 +103,12 @@ async function loadPatterns(): Promise<TaskPattern[]> {
 }
 
 /**
- * Save task patterns to storage.
+ * Save task patterns to storage and trigger a cloud sync.
  */
 async function savePatterns(patterns: TaskPattern[]): Promise<void> {
-  await AsyncStorage.setItem(PATTERNS_KEY, JSON.stringify(patterns));
+  await AsyncStorage.setItem(KEYS.TASK_PATTERNS, JSON.stringify(patterns));
+  // Fire-and-forget cloud sync after every local save
+  pushPatternsToCloud(patterns).catch(() => {});
 }
 
 /**

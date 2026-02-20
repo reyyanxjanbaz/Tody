@@ -1,17 +1,14 @@
 /**
  * Supabase client singleton.
  *
- * 1. Replace SUPABASE_URL and SUPABASE_ANON_KEY with your project values
- *    (Dashboard → Settings → API).
- * 2. We use AsyncStorage as the auth persistence layer so sessions survive
- *    app restarts automatically.
+ * Credentials are loaded from ./env (git-ignored).
+ * Copy src/lib/env.example.ts → src/lib/env.ts and fill in your values
+ * from Supabase Dashboard → Settings → API.
  */
 import 'react-native-url-polyfill/auto';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createClient } from '@supabase/supabase-js';
-
-const SUPABASE_URL = 'https://zforpxbowpiotzmoqeif.supabase.co';        // e.g. https://xyzcompany.supabase.co
-const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inpmb3JweGJvd3Bpb3R6bW9xZWlmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzEwNzQ4OTUsImV4cCI6MjA4NjY1MDg5NX0.aTbcLBiYQzj_ddm5deTcMP9COZkIlCVQci744_azzFs'; // e.g. eyJhbGciOiJIUz...
+import { SUPABASE_URL, SUPABASE_ANON_KEY } from './env';
 
 export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
   auth: {

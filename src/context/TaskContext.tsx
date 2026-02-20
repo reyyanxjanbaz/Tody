@@ -338,6 +338,38 @@ export function TaskProvider({ children }: { children: React.ReactNode }) {
     }
   }, [activeCategory, isLoading]);
 
+  // ── Backend payload builder ───────────────────────────────────────────────────────
+  // Maps an in-memory Task to the snake_case payload the FastAPI /tasks endpoint expects.
+  function buildTaskPayload(task: Task) {
+    const catMap = catMapRef.current;
+    return {
+      id:                   task.id,
+      title:                task.title,
+      description:          task.description || '',
+      priority:             task.priority,
+      energy_level:         task.energyLevel,
+      category_id:          catMap.toUUID[task.category] ?? null,
+      deadline:             task.deadline         ? new Date(task.deadline).toISOString()         : null,
+      completed_at:         task.completedAt      ? new Date(task.completedAt).toISOString()      : null,
+      archived_at:          task.archivedAt       ? new Date(task.archivedAt).toISOString()       : null,
+      overdue_start_date:   task.overdueStartDate ? new Date(task.overdueStartDate).toISOString() : null,
+      revived_at:           task.revivedAt        ? new Date(task.revivedAt).toISOString()        : null,
+      started_at:           task.startedAt        ? new Date(task.startedAt).toISOString()        : null,
+      created_at:           task.createdAt        ? new Date(task.createdAt).toISOString()        : null,
+      updated_at:           task.updatedAt        ? new Date(task.updatedAt).toISOString()        : null,
+      estimated_minutes:    task.estimatedMinutes    ?? null,
+      actual_minutes:       task.actualMinutes       ?? null,
+      parent_id:            task.parentId            ?? null,
+      depth:                task.depth,
+      created_hour:         task.createdHour,
+      is_recurring:         task.isRecurring,
+      recurring_frequency:  task.recurringFrequency  ?? null,
+      is_completed:         task.isCompleted,
+      is_archived:          task.isArchived,
+      defer_count:          task.deferCount,
+    };
+  }
+
   const addTask = useCallback((input: string, overrides?: Partial<Task>): Task => {
     const parsed = parseTaskInput(input);
     const now = Date.now();
@@ -375,9 +407,14 @@ export function TaskProvider({ children }: { children: React.ReactNode }) {
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
     setTasks(prev => [task, ...prev]);
 
-    // Sync to Supabase (fire-and-forget)
+    // Route through API; fall back to direct Supabase if backend is down
     if (user) {
-      upsertTask(task, user.id, catMapRef.current).catch(() => {});
+      const uid = user.id;
+      api.post('/tasks', buildTaskPayload(task))
+        .then(({ error, isBackendDown }) => {
+          if (error || isBackendDown) upsertTask(task, uid, catMapRef.current).catch(() => {});
+        })
+        .catch(() => { upsertTask(task, uid, catMapRef.current).catch(() => {}); });
     }
 
     return task;
@@ -434,17 +471,24 @@ export function TaskProvider({ children }: { children: React.ReactNode }) {
       return updated;
     });
 
-    // Sync subtask + updated parent to Supabase
-    // Upsert parent first so the FK constraint on parent_id is satisfied
+    // Route through API; parent_id FK is in the payload so backend persists correctly.
+    // Fall back to direct Supabase upsert (parent first) if backend is down.
     if (user) {
-      const parentTask = tasksRef.current.find(t => t.id === parentId);
-      if (parentTask) {
-        upsertTask({ ...parentTask, childIds: [...parentTask.childIds, subtask.id], updatedAt: now }, user.id, catMapRef.current)
-          .then(() => upsertTask(subtask, user.id, catMapRef.current))
-          .catch(() => {});
-      } else {
-        upsertTask(subtask, user.id, catMapRef.current, tasksRef.current).catch(() => {});
-      }
+      const uid = user.id;
+      api.post('/tasks', buildTaskPayload(subtask))
+        .then(({ error, isBackendDown }) => {
+          if (error || isBackendDown) {
+            const parentTask = tasksRef.current.find(t => t.id === parentId);
+            if (parentTask) {
+              upsertTask({ ...parentTask, childIds: [...parentTask.childIds, subtask.id], updatedAt: now }, uid, catMapRef.current)
+                .then(() => upsertTask(subtask, uid, catMapRef.current))
+                .catch(() => {});
+            } else {
+              upsertTask(subtask, uid, catMapRef.current, tasksRef.current).catch(() => {});
+            }
+          }
+        })
+        .catch(() => { upsertTask(subtask, uid, catMapRef.current, tasksRef.current).catch(() => {}); });
     }
 
     return subtask;
@@ -642,8 +686,14 @@ export function TaskProvider({ children }: { children: React.ReactNode }) {
           if (parent) upsertTask(parent, user.id, catMapRef.current).catch(() => {});
         }
       }
-      // Delete from Supabase
-      if (user) deleteTaskFromDb(id).catch(() => {});
+      // Route through API; fall back to direct Supabase delete
+      if (user) {
+        api.delete(`/tasks/${id}`)
+          .then(({ error, isBackendDown }) => {
+            if (error || isBackendDown) deleteTaskFromDb(id).catch(() => {});
+          })
+          .catch(() => { deleteTaskFromDb(id).catch(() => {}); });
+      }
       return updated.filter(t => t.id !== id);
     });
   }, [user]);
@@ -668,8 +718,23 @@ export function TaskProvider({ children }: { children: React.ReactNode }) {
           if (parent) upsertTask(parent, user.id, catMapRef.current).catch(() => {});
         }
       }
-      // Delete all from Supabase
-      if (user) deleteTasksFromDb(Array.from(idsToRemove)).catch(() => {});
+      // Backend DELETE /tasks/{id} cascades one level of children; clean up deeper
+      // descendants with a batch delete.  Fall back entirely to direct Supabase.
+      if (user) {
+        api.delete(`/tasks/${id}`)
+          .then(({ error, isBackendDown }) => {
+            if (error || isBackendDown) {
+              deleteTasksFromDb(Array.from(idsToRemove)).catch(() => {});
+            } else if (descendantIds.length > 0) {
+              const deeper = descendantIds.filter(did => {
+                const d = prev.find(t => t.id === did);
+                return d && d.depth > (prev.find(t => t.id === id)?.depth ?? 0) + 1;
+              });
+              if (deeper.length > 0) deleteTasksFromDb(deeper).catch(() => {});
+            }
+          })
+          .catch(() => { deleteTasksFromDb(Array.from(idsToRemove)).catch(() => {}); });
+      }
       return updated.filter(t => !idsToRemove.has(t.id));
     });
   }, [user]);
@@ -863,9 +928,18 @@ export function TaskProvider({ children }: { children: React.ReactNode }) {
       order: categories.length,
     };
     setCategories(prev => [...prev, newCat]);
-    // Sync to Supabase
+    // Route through API; fall back to direct Supabase upsert
     if (user) {
-      upsertCategory(newCat, user.id).catch(() => {});
+      const uid = user.id;
+      api.post('/categories', {
+        id:         newCat.id,
+        name:       newCat.name,
+        icon:       newCat.icon,
+        color:      newCat.color,
+        sort_order: newCat.order,
+      }).then(({ error, isBackendDown }) => {
+        if (error || isBackendDown) upsertCategory(newCat, uid).catch(() => {});
+      }).catch(() => { upsertCategory(newCat, uid).catch(() => {}); });
     }
     return newCat;
   }, [categories.length, user]);
@@ -875,7 +949,22 @@ export function TaskProvider({ children }: { children: React.ReactNode }) {
       const updated = prev.map(c => c.id === id ? { ...c, ...updates } : c);
       const cat = updated.find(c => c.id === id);
       if (cat && user) {
-        upsertCategory(cat, user.id).catch(() => {});
+        const catUUID = catMapRef.current.toUUID[id] || (UUID_RE.test(id) ? id : null);
+        const patchBody: Record<string, unknown> = {};
+        if (updates.name  !== undefined) patchBody.name       = updates.name;
+        if (updates.icon  !== undefined) patchBody.icon       = updates.icon;
+        if (updates.color !== undefined) patchBody.color      = updates.color;
+        if (updates.order !== undefined) patchBody.sort_order = updates.order;
+        const uid = user.id;
+        if (catUUID && Object.keys(patchBody).length > 0) {
+          api.patch(`/categories/${catUUID}`, patchBody)
+            .then(({ error, isBackendDown }) => {
+              if (error || isBackendDown) upsertCategory(cat, uid).catch(() => {});
+            })
+            .catch(() => { upsertCategory(cat, uid).catch(() => {}); });
+        } else {
+          upsertCategory(cat, uid).catch(() => {});
+        }
       }
       return updated;
     });
@@ -889,9 +978,18 @@ export function TaskProvider({ children }: { children: React.ReactNode }) {
     ));
     // If the active tab was the deleted category, go to overview
     setActiveCategory(prev => prev === id ? 'overview' : prev);
-    // Delete from Supabase so it doesn't come back on next sync
+    // Route through API; fall back to direct Supabase delete
     if (user) {
-      deleteCategoryFromDb(id).catch(() => {});
+      const catUUID = catMapRef.current.toUUID[id] || (UUID_RE.test(id) ? id : null);
+      if (catUUID) {
+        api.delete(`/categories/${catUUID}`)
+          .then(({ error, isBackendDown }) => {
+            if (error || isBackendDown) deleteCategoryFromDb(id).catch(() => {});
+          })
+          .catch(() => { deleteCategoryFromDb(id).catch(() => {}); });
+      } else {
+        deleteCategoryFromDb(id).catch(() => {});
+      }
     }
   }, [user]);
 

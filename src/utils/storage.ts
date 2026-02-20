@@ -1,13 +1,15 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-const KEYS = {
-  TASKS: '@tody_tasks',
-  INBOX_TASKS: '@tody_inbox_tasks',
-  ARCHIVED_TASKS: '@tody_archived_tasks',
-  CATEGORIES: '@tody_categories',
-  ACTIVE_CATEGORY: '@tody_active_category',
-  USER_PREFERENCES: '@tody_user_preferences',
-  AVATAR_URI: '@tody_avatar_uri',
+export const KEYS = {
+  TASKS:              '@tody_tasks',
+  INBOX_TASKS:        '@tody_inbox_tasks',
+  ARCHIVED_TASKS:     '@tody_archived_tasks',
+  CATEGORIES:         '@tody_categories',
+  ACTIVE_CATEGORY:    '@tody_active_category',
+  USER_PREFERENCES:   '@tody_user_preferences',
+  AVATAR_URI:         '@tody_avatar_uri',
+  TASK_PATTERNS:      '@tody_task_patterns',
+  SWIPE_STATS:        '@tody_swipe_action_stats',
 } as const;
 
 export async function saveTasks(tasks: object[]): Promise<void> {

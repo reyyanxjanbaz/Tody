@@ -2,7 +2,7 @@
  * Reality Score Dashboard Screen
  * Shows estimation accuracy analytics and trends.
  */
-import React, { useMemo } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -10,6 +10,7 @@ import {
   ScrollView,
   StyleSheet,
   Dimensions,
+  ActivityIndicator,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -19,6 +20,21 @@ import { formatMinutes } from '../utils/timeTracking';
 import { Spacing, Typography, FontFamily, type ThemeColors } from '../utils/colors';
 import { useTheme } from '../context/ThemeContext';
 import { RootStackParamList } from '../types';
+import { api } from '../lib/api';
+
+type BackendRealityScore = {
+  reality_score: number;
+  underestimation_rate: number;
+  total_estimated_minutes: number;
+  total_actual_minutes: number;
+  recent_tasks: Array<{
+    id: string;
+    title: string;
+    estimated_minutes: number;
+    actual_minutes: number;
+    completed_at: string;
+  }>;
+};
 
 type Props = {
   navigation: NativeStackNavigationProp<RootStackParamList, 'RealityScore'>;
@@ -37,17 +53,57 @@ export function RealityScoreScreen({ navigation }: Props) {
   // Include archived tasks in stats calculation (prompt: "Regardless of archive status")
   const allTasks = useMemo(() => [...tasks, ...archivedTasks], [tasks, archivedTasks]);
 
-  const stats = useMemo(() => calculateUserStats(allTasks), [allTasks]);
-  const recentTasks = useMemo(() => getRecentEstimatedTasks(allTasks, 10), [allTasks]);
+  // Local fallbacks
+  const localStats = useMemo(() => calculateUserStats(allTasks), [allTasks]);
+  const localRecentTasks = useMemo(() => getRecentEstimatedTasks(allTasks, 10), [allTasks]);
   const hasEnoughData = useMemo(() => hasEnoughDataForStats(allTasks), [allTasks]);
+
+  // Backend data
+  const [backendData, setBackendData] = useState<BackendRealityScore | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const { data } = await api.get<BackendRealityScore>('/profile/reality-score');
+      if (!cancelled && data) {
+        setBackendData(data);
+      }
+      if (!cancelled) setLoading(false);
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
+  // Resolved stats — prefer backend, fall back to local
+  const stats = backendData
+    ? {
+        realityScore: backendData.reality_score,
+        underestimationRate: backendData.underestimation_rate,
+        totalEstimatedMinutes: backendData.total_estimated_minutes,
+        totalActualMinutes: backendData.total_actual_minutes,
+        totalCompletedTasks: localStats.totalCompletedTasks,
+      }
+    : {
+        realityScore: localStats.realityScore,
+        underestimationRate: localStats.underestimationRate,
+        totalEstimatedMinutes: localStats.totalEstimatedMinutes,
+        totalActualMinutes: localStats.totalActualMinutes,
+        totalCompletedTasks: localStats.totalCompletedTasks,
+      };
+
+  // Recent tasks for chart — prefer backend list, fall back to local
+  const recentTasks = backendData
+    ? backendData.recent_tasks.slice(0, 10).map(r => ({
+        estimatedMinutes: r.estimated_minutes,
+        actualMinutes: r.actual_minutes,
+      }))
+    : localRecentTasks;
 
   const handleBack = () => navigation.goBack();
 
   // Build simple chart data points
   const chartData = useMemo(() => {
     if (recentTasks.length < 2) { return null; }
-
-    // Reverse so oldest is first (left to right timeline)
     const ordered = [...recentTasks].reverse();
     const maxMinutes = Math.max(
       ...ordered.map(t => Math.max(t.estimatedMinutes || 0, t.actualMinutes || 0)),
@@ -73,6 +129,11 @@ export function RealityScoreScreen({ navigation }: Props) {
         </Pressable>
       </View>
 
+      {loading ? (
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="small" color={colors.textSecondary} />
+        </View>
+      ) : (
       <ScrollView
         style={styles.scrollView}
         contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 40 }]}>
@@ -234,6 +295,7 @@ export function RealityScoreScreen({ navigation }: Props) {
           </>
         )}
       </ScrollView>
+      )}
     </View>
   );
 }
@@ -242,6 +304,11 @@ const createStyles = (c: ThemeColors) => StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: c.background,
+  },
+  loadingContainer: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   header: {
     flexDirection: 'row',

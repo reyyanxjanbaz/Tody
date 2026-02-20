@@ -163,10 +163,24 @@ export function SettingsScreen({ navigation }: Props) {
   const confirmDeleteAccount = useCallback(async () => {
     haptic('heavy');
     setShowDeleteModal(false);
-    // Note: account deletion via the client SDK requires the user to be
-    // authenticated. For full deletion (removing the auth.users row),
-    // you will need a Supabase Edge Function or service-role call.
-    // For now we sign the user out and clear local data.
+
+    // Call the backend DELETE /profile endpoint which removes the user from
+    // auth.users and all their data via the service-role client.
+    const { error, isBackendDown } = await api.delete('/profile');
+
+    if (isBackendDown) {
+      Alert.alert(
+        'Could not reach server',
+        'Please check your connection and try again. Your account was NOT deleted.',
+      );
+      return;
+    }
+    if (error) {
+      Alert.alert('Deletion failed', error.message);
+      return;
+    }
+
+    // Backend confirmed deletion — sign out locally
     await logout();
   }, [logout]);
 
