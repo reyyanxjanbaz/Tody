@@ -24,21 +24,64 @@ import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import Icon from 'react-native-vector-icons/Ionicons';
 import { useAuth } from '../context/AuthContext';
 import { useTasks } from '../context/TaskContext';
-import { RootStackParamList } from '../types';
+import { RootStackParamList, ProfileStats } from '../types';
 import { ProfileHeader } from '../components/profile/ProfileHeader';
 import { XPSection } from '../components/profile/XPSection';
 import { MonthlyCalendar } from '../components/profile/MonthlyCalendar';
 import { PerformanceFusionSection } from '../components/profile/PerformanceFusionSection';
 import { AnimatedPressable, PromptModal } from '../components/ui';
-import {
-  calculateProfileStats,
-  calculateStreaks,
-  calculateXP,
-} from '../utils/profileStats';
+import { calculateXP } from '../utils/profileStats';
 import { getAvatarUri, saveAvatarUri } from '../utils/storage';
 import { Spacing, Typography, FontFamily, type ThemeColors } from '../utils/colors';
 import { useTheme } from '../context/ThemeContext';
 import { haptic } from '../utils/haptics';
+import { api } from '../lib/api';
+
+// ── Backend response shapes ──────────────────────────────────────────────────
+
+interface BackendStats {
+  total_created: number;
+  total_completed: number;
+  total_incomplete: number;
+  total_minutes_spent: number;
+  avg_minutes_per_task: number;
+  completion_percentage: number;
+  active_days: number;
+}
+
+interface BackendAnalytics {
+  current_streak: number;
+  best_streak: number;
+  daily_trend: Array<{ date: string; created: number; completed: number }>;
+}
+
+const ZERO_STATS: ProfileStats = {
+  totalCreated: 0,
+  totalCompleted: 0,
+  totalIncomplete: 0,
+  completionPercentage: 0,
+  currentStreak: 0,
+  bestStreak: 0,
+  averageTasksPerDay: 0,
+  totalMinutesSpent: 0,
+  averageMinutesPerTask: 0,
+  mostProductiveDay: '\u2014',
+};
+
+const DOW_LABELS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+
+function mostProductiveDayFromTrend(
+  trend: BackendAnalytics['daily_trend'],
+): string {
+  const totals = new Array(7).fill(0);
+  for (const row of trend) {
+    // Parse YYYY-MM-DD as UTC midnight to avoid DST offset issues
+    const d = new Date(row.date + 'T00:00:00Z');
+    totals[d.getUTCDay()] += row.completed;
+  }
+  const max = Math.max(...totals);
+  return max > 0 ? DOW_LABELS[totals.indexOf(max)] : '\u2014';
+}
 
 type Props = {
   navigation: NativeStackNavigationProp<RootStackParamList, 'Profile'>;
@@ -53,22 +96,64 @@ export function ProfileScreen({ navigation }: Props) {
   const [avatarUri, setAvatarUri] = useState<string | null>(null);
   const [avatarPromptVisible, setAvatarPromptVisible] = useState(false);
 
-  // Merge active + archived tasks for full picture
+  // Profile stats & analytics fetched from the Render backend
+  const [profileStats, setProfileStats] = useState<ProfileStats>(ZERO_STATS);
+
+  // Merge active + archived tasks for local computations (XP, calendar)
   const allTasks = useMemo(() => [...tasks, ...archivedTasks], [tasks, archivedTasks]);
 
-  // Compute stats, streaks, XP
-  const profileStats = useMemo(() => calculateProfileStats(allTasks), [allTasks]);
-  const streaks = useMemo(() => calculateStreaks(allTasks), [allTasks]);
+  // ── Fetch stats + analytics from backend ────────────────────────────────────
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const [statsRes, analyticsRes] = await Promise.all([
+        api.get<BackendStats>('/profile/stats'),
+        api.get<BackendAnalytics>('/profile/analytics'),
+      ]);
+      if (cancelled) return;
+
+      const s = statsRes.data;
+      const a = analyticsRes.data;
+      if (s && a) {
+        setProfileStats({
+          totalCreated: s.total_created ?? 0,
+          totalCompleted: s.total_completed ?? 0,
+          totalIncomplete: s.total_incomplete ?? 0,
+          completionPercentage: s.completion_percentage ?? 0,
+          currentStreak: a.current_streak ?? 0,
+          bestStreak: a.best_streak ?? 0,
+          averageTasksPerDay:
+            s.active_days > 0
+              ? Math.round((s.total_created / s.active_days) * 10) / 10
+              : 0,
+          totalMinutesSpent: s.total_minutes_spent ?? 0,
+          averageMinutesPerTask: s.avg_minutes_per_task ?? 0,
+          mostProductiveDay: mostProductiveDayFromTrend(a.daily_trend ?? []),
+        });
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
+  // XP uses the backend-sourced current streak
   const xpData = useMemo(
-    () => calculateXP(allTasks, streaks.current),
-    [allTasks, streaks.current],
+    () => calculateXP(allTasks, profileStats.currentStreak),
+    [allTasks, profileStats.currentStreak],
   );
 
-  // Load saved avatar
+  // Load saved avatar; also check backend for reinstall recovery
   useEffect(() => {
     (async () => {
-      const uri = await getAvatarUri();
-      if (uri) setAvatarUri(uri);
+      const localUri = await getAvatarUri();
+      if (localUri) setAvatarUri(localUri);
+
+      // Fetch profile from backend — if it has an avatar_url and we don't
+      // have one locally, apply and save it (survives reinstalls).
+      const { data } = await api.get<{ avatar_url?: string | null }>('/profile');
+      if (data?.avatar_url && !localUri) {
+        setAvatarUri(data.avatar_url);
+        await saveAvatarUri(data.avatar_url);
+      }
     })();
   }, []);
 
@@ -81,13 +166,16 @@ export function ProfileScreen({ navigation }: Props) {
 
   const handleChangeAvatar = useCallback(() => {
     const handleSave = async (value: string) => {
-      if (value.trim()) {
-        setAvatarUri(value.trim());
-        await saveAvatarUri(value.trim());
+      const url = value.trim();
+      if (url) {
+        setAvatarUri(url);
+        await saveAvatarUri(url);
       } else {
         setAvatarUri(null);
         await saveAvatarUri('');
       }
+      // Sync avatar URL to backend so it survives reinstalls
+      api.patch('/profile', { avatar_url: url || null }).catch(() => {});
       haptic('success');
     };
 
@@ -134,7 +222,7 @@ export function ProfileScreen({ navigation }: Props) {
         <ProfileHeader
           email={user.email}
           avatarUri={avatarUri}
-          currentStreak={streaks.current}
+          currentStreak={profileStats.currentStreak}
           onChangeAvatar={handleChangeAvatar}
         />
 

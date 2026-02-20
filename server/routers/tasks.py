@@ -386,20 +386,33 @@ def get_children(task_id: str, user_id: str = Depends(get_current_user_id)):
     return result.data
 
 
+class TaskCompleteBody(BaseModel):
+    """Optional body for the /complete convenience endpoint."""
+    actual_minutes: Optional[int] = None
+
+
 @router.post("/{task_id}/complete")
-def complete_task(task_id: str, user_id: str = Depends(get_current_user_id)):
-    """Convenience: mark a task as completed."""
+def complete_task(
+    task_id: str,
+    body: TaskCompleteBody = TaskCompleteBody(),
+    user_id: str = Depends(get_current_user_id),
+):
+    """Convenience: mark a task as completed.  Optionally records actual_minutes."""
     sb = get_supabase()
     now = datetime.utcnow().isoformat()
+    update_data: dict = {"is_completed": True, "completed_at": now, "updated_at": now}
+    if body.actual_minutes is not None:
+        update_data["actual_minutes"] = body.actual_minutes
     result = (
         sb.table("tasks")
-        .update({"is_completed": True, "completed_at": now})
+        .update(update_data)
         .eq("id", task_id)
         .eq("user_id", user_id)
         .execute()
     )
     if not result.data:
         raise HTTPException(status_code=404, detail="Task not found")
+    logger.info("Completed task %s for user %s", task_id, user_id[:8])
     return result.data[0]
 
 
@@ -407,15 +420,17 @@ def complete_task(task_id: str, user_id: str = Depends(get_current_user_id)):
 def uncomplete_task(task_id: str, user_id: str = Depends(get_current_user_id)):
     """Convenience: un-complete a task."""
     sb = get_supabase()
+    now = datetime.utcnow().isoformat()
     result = (
         sb.table("tasks")
-        .update({"is_completed": False, "completed_at": None, "actual_minutes": None})
+        .update({"is_completed": False, "completed_at": None, "actual_minutes": None, "updated_at": now})
         .eq("id", task_id)
         .eq("user_id", user_id)
         .execute()
     )
     if not result.data:
         raise HTTPException(status_code=404, detail="Task not found")
+    logger.info("Uncompleted task %s for user %s", task_id, user_id[:8])
     return result.data[0]
 
 
@@ -426,13 +441,14 @@ def archive_task(task_id: str, user_id: str = Depends(get_current_user_id)):
     now = datetime.utcnow().isoformat()
     result = (
         sb.table("tasks")
-        .update({"is_archived": True, "archived_at": now})
+        .update({"is_archived": True, "archived_at": now, "updated_at": now})
         .eq("id", task_id)
         .eq("user_id", user_id)
         .execute()
     )
     if not result.data:
         raise HTTPException(status_code=404, detail="Task not found")
+    logger.info("Archived task %s for user %s", task_id, user_id[:8])
     return result.data[0]
 
 

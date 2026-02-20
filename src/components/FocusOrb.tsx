@@ -275,8 +275,6 @@ export const FocusOrb = memo(function FocusOrb({
     };
   });
 
-  if (taskCount === 0) return null;
-
   return (
     <View style={styles.wrapper}>
       {/* Floating progress pill */}

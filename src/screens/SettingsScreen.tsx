@@ -35,6 +35,7 @@ import {
   getUserPreferences,
 } from '../utils/storage';
 import { supabase } from '../lib/supabase';
+import { api } from '../lib/api';
 import { Spacing, Typography, BorderRadius, FontFamily, type ThemeColors } from '../utils/colors';
 import { useTheme } from '../context/ThemeContext';
 import { haptic } from '../utils/haptics';
@@ -67,6 +68,11 @@ export function SettingsScreen({ navigation }: Props) {
   const [prefsLoaded, setPrefsLoaded] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
 
+  // Track whether the initial local-load has been completed so API syncs
+  // don't incorrectly fire a PATCH back with just-fetched server data.
+  const didFirstSave = React.useRef(false);
+  const hasLoadedServerPrefs = React.useRef(false);
+
   // Change password state (simulated – no real backend)
   const [currentPw, setCurrentPw] = useState('');
   const [newPw, setNewPw] = useState('');
@@ -81,10 +87,44 @@ export function SettingsScreen({ navigation }: Props) {
     })();
   }, []);
 
-  // Persist whenever prefs change
+  // Reinstall recovery: fetch profile settings from backend and apply them
+  // once local prefs are loaded. Server wins so settings survive a reinstall.
+  React.useEffect(() => {
+    if (!prefsLoaded || hasLoadedServerPrefs.current) return;
+    hasLoadedServerPrefs.current = true;
+    api.get<{
+      dark_mode?: boolean | null;
+      date_format?: string | null;
+      time_format?: string | null;
+      week_starts_on?: string | null;
+    }>('/profile').then(({ data }) => {
+      if (!data) return;
+      setPrefs(prev => ({
+        ...prev,
+        ...(data.dark_mode != null ? { darkMode: data.dark_mode as boolean } : {}),
+        ...(data.date_format ? { dateFormat: data.date_format as UserPreferences['dateFormat'] } : {}),
+        ...(data.time_format ? { timeFormat: data.time_format as UserPreferences['timeFormat'] } : {}),
+        ...(data.week_starts_on ? { weekStartsOn: data.week_starts_on as UserPreferences['weekStartsOn'] } : {}),
+      }));
+    }).catch(() => {});
+  }, [prefsLoaded]);
+
+  // Persist whenever prefs change; also PATCH backend on user-triggered changes
   React.useEffect(() => {
     if (prefsLoaded) {
       saveUserPreferences(prefs);
+      // Skip the very first fire (just after we loaded from storage) to avoid
+      // a redundant API call before the user has changed anything.
+      if (didFirstSave.current) {
+        api.patch('/profile', {
+          dark_mode: prefs.darkMode,
+          date_format: prefs.dateFormat,
+          time_format: prefs.timeFormat,
+          week_starts_on: prefs.weekStartsOn,
+        }).catch(() => {});
+      } else {
+        didFirstSave.current = true;
+      }
     }
   }, [prefs, prefsLoaded]);
 

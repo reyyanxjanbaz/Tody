@@ -19,10 +19,12 @@ import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import { useInbox } from '../context/InboxContext';
 import { useTasks } from '../context/TaskContext';
+import { useAuth } from '../context/AuthContext';
+import { api } from '../lib/api';
 import { Spacing, Typography, BorderRadius, FontFamily, type ThemeColors } from '../utils/colors';
 import { useTheme } from '../context/ThemeContext';
 import { formatDeadline } from '../utils/dateUtils';
-import { Priority, RootStackParamList, EnergyLevel } from '../types';
+import { Priority, RootStackParamList, EnergyLevel, Task } from '../types';
 import Icon from 'react-native-vector-icons/Ionicons';
 
 type Props = {
@@ -61,7 +63,8 @@ export function ProcessInboxScreen({ navigation }: Props) {
   const styles = React.useMemo(() => createStyles(colors), [colors]);
   const insets = useSafeAreaInsets();
   const { inboxTasks, captureTask, deleteInboxTask, removeInboxTask } = useInbox();
-  const { addTask } = useTasks();
+  const { addTask, addTaskLocal } = useTasks();
+  const { user } = useAuth();
 
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isExpanded, setIsExpanded] = useState(false);
@@ -179,23 +182,84 @@ export function ProcessInboxScreen({ navigation }: Props) {
       return;
     }
 
-    addTask(trimmedTitle, {
-      description,
-      priority,
-      energyLevel,
-      deadline,
-    });
+    // Capture current values for the async flow
+    const taskId = activeTask.id;
+    const taskPriority = priority;
+    const taskEnergyLevel = energyLevel;
+    const taskDeadline = deadline;
+    const taskDescription = description;
 
-    removeInboxTask(activeTask.id);
-    resetForm();
-    setSelectedGridTaskId(null);
-    setCurrentIndex(prev => {
-      if (inboxTasks.length <= 1) return 0;
-      return Math.min(prev, inboxTasks.length - 2);
-    });
+    // ── Try atomic backend convert ────────────────────────────────────────────
+    const doConvert = async () => {
+      const { data, isBackendDown } = await api.post<{
+        id: string;
+        created_at: string;
+      }>(`/inbox/${taskId}/convert`, {
+        title: trimmedTitle,
+        priority: taskPriority,
+        energy_level: taskEnergyLevel,
+        deadline: taskDeadline ? new Date(taskDeadline).toISOString() : undefined,
+      });
+
+      if (!isBackendDown && data) {
+        // Backend atomically created the task + deleted the inbox item
+        const now = Date.now();
+        const newTask: Task = {
+          id: data.id,
+          title: trimmedTitle,
+          description: taskDescription,
+          priority: taskPriority,
+          energyLevel: taskEnergyLevel,
+          deadline: taskDeadline,
+          isCompleted: false,
+          completedAt: null,
+          createdAt: data.created_at ? new Date(data.created_at).getTime() : now,
+          updatedAt: now,
+          category: 'personal',
+          deferCount: 0,
+          createdHour: new Date().getHours(),
+          overdueStartDate: null,
+          revivedAt: null,
+          archivedAt: null,
+          isArchived: false,
+          estimatedMinutes: null,
+          actualMinutes: null,
+          startedAt: null,
+          parentId: null,
+          childIds: [],
+          depth: 0,
+          isRecurring: false,
+          recurringFrequency: null,
+          userId: user?.id,
+        };
+        // Add to local state (no DB sync needed — backend already persisted it)
+        addTaskLocal(newTask);
+        // Remove from inbox local state; DB row already deleted by backend
+        removeInboxTask(taskId);
+      } else {
+        // ── Fallback: double-call (original behaviour) ─────────────────────────
+        addTask(trimmedTitle, {
+          description: taskDescription,
+          priority: taskPriority,
+          energyLevel: taskEnergyLevel,
+          deadline: taskDeadline,
+        });
+        removeInboxTask(taskId);
+      }
+
+      resetForm();
+      setSelectedGridTaskId(null);
+      setCurrentIndex(prev => {
+        if (inboxTasks.length <= 1) return 0;
+        return Math.min(prev, inboxTasks.length - 2);
+      });
+    };
+
+    doConvert();
   }, [
     activeTask, isExpanded, title, description, priority,
-    deadline, addTask, removeInboxTask, resetForm, inboxTasks.length, energyLevel,
+    deadline, addTask, addTaskLocal, removeInboxTask, resetForm,
+    inboxTasks.length, energyLevel, user,
   ]);
 
   const handleQuickComplete = useCallback(() => {

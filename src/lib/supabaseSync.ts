@@ -16,6 +16,7 @@
 
 import { supabase } from './supabase';
 import { Task, Category, InboxTask } from '../types';
+import { api } from './api';
 
 // ── Logging helper ──────────────────────────────────────────────────────────
 
@@ -393,14 +394,25 @@ export async function pushCategories(categories: Category[], userId: string): Pr
     is_default: c.isDefault,
     sort_order: c.order,
   }));
+
   try {
-    const { error } = await withRetry('pushCategories', () =>
-      supabase.from('categories').upsert(rows, { onConflict: 'id' }),
-    );
-    if (error) {
-      logError('pushCategories failed:', error.message);
+    // ── Try Render backend first (POST /categories/batch) ─────────────────────
+    const { error: apiError, isBackendDown } = await api.post('/categories/batch', rows);
+    if (isBackendDown) {
+      // ── Fallback: direct Supabase upsert ──────────────────────────────────────
+      logWarn('pushCategories: backend down, falling back to direct Supabase');
+      const { error } = await withRetry('pushCategories:fallback', () =>
+        supabase.from('categories').upsert(rows, { onConflict: 'id' }),
+      );
+      if (error) {
+        logError('pushCategories fallback failed:', error.message);
+      } else {
+        log(`Pushed ${rows.length} categories via Supabase fallback`);
+      }
+    } else if (apiError) {
+      logError('pushCategories API error:', apiError.message);
     } else {
-      log(`Pushed ${rows.length} categories`);
+      log(`Pushed ${rows.length} categories via backend batch API`);
     }
   } catch (e: any) {
     logError('pushCategories failed after retries:', e?.message ?? e);
@@ -444,16 +456,24 @@ export async function pushTasks(
 
   const rows = tasks.map(t => taskToDbRow(t, userId, catMap));
 
-  // Supabase has a limit on upsert size; chunk into 200
+  // Supabase / backend both have a 200-row limit per batch; chunk accordingly.
   const CHUNK = 200;
   for (let i = 0; i < rows.length; i += CHUNK) {
     const chunk = rows.slice(i, i + CHUNK);
     try {
-      const { error } = await withRetry(`pushTasks[${i}]`, () =>
-        supabase.from('tasks').upsert(chunk as any, { onConflict: 'id' }),
-      );
-      if (error) {
-        logError(`pushTasks chunk ${i}-${i + chunk.length} failed:`, error.message);
+      // ── Try Render backend first (POST /tasks/batch) ───────────────────────────
+      const { error: apiError, isBackendDown } = await api.post('/tasks/batch', chunk);
+      if (isBackendDown) {
+        // ── Fallback: direct Supabase upsert ────────────────────────────────────
+        logWarn(`pushTasks[${i}]: backend down, falling back to direct Supabase`);
+        const { error } = await withRetry(`pushTasks:fallback[${i}]`, () =>
+          supabase.from('tasks').upsert(chunk as any, { onConflict: 'id' }),
+        );
+        if (error) {
+          logError(`pushTasks fallback chunk ${i}-${i + chunk.length} failed:`, error.message);
+        }
+      } else if (apiError) {
+        logError(`pushTasks API chunk ${i}-${i + chunk.length} failed:`, apiError.message);
       }
     } catch (e: any) {
       logError(`pushTasks chunk ${i}-${i + chunk.length} failed after retries:`, e?.message ?? e);

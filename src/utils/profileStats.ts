@@ -1,12 +1,17 @@
 /**
  * Profile Statistics & Gamification Engine
  *
- * Calculates streaks, XP, levels, calendar data, and productivity metrics
- * from the task corpus. All computations are pure — no side effects.
+ * XP, level-up calculations and calendar data.
+ * All computations are pure — no side effects.
+ *
+ * NOTE: calculateStreaks() and calculateProfileStats() have been removed.
+ * Streak and stats data now come from the Render backend via
+ *   GET /profile/analytics  (streaks, distribution, daily trend)
+ *   GET /profile/stats      (totals, completion %, time invested)
+ * in ProfileScreen.tsx.
  */
 
-import { Task, ProfileStats, DayTaskStatus, XPData } from '../types';
-import { startOfDay } from './dateUtils';
+import { Task, DayTaskStatus, XPData } from '../types';
 
 // ── XP Constants ────────────────────────────────────────────────────────────
 
@@ -18,73 +23,9 @@ const XP_PER_LEVEL = 120;
 
 // ── Day helpers ─────────────────────────────────────────────────────────────
 
-const DAY_MS = 86_400_000;
-
 function dayKey(ts: number): string {
   const d = new Date(ts);
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-}
-
-const DAY_LABELS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-
-// ── Streak Calculation ──────────────────────────────────────────────────────
-
-/**
- * Calculate current and best streaks.
- * A streak day is any calendar day where at least one task was completed.
- */
-export function calculateStreaks(tasks: Task[]): { current: number; best: number } {
-  const completedDays = new Set<string>();
-  for (const t of tasks) {
-    if (t.isCompleted && t.completedAt) {
-      completedDays.add(dayKey(t.completedAt));
-    }
-  }
-
-  if (completedDays.size === 0) return { current: 0, best: 0 };
-
-  // Build sorted array of unique days
-  const sorted = Array.from(completedDays).sort();
-  const dayTimestamps = sorted.map(s => startOfDay(new Date(s)).getTime());
-
-  // Walk backwards from today
-  const todayTs = startOfDay().getTime();
-  let current = 0;
-  let checkTs = todayTs;
-
-  // Allow today or yesterday as streak start
-  if (completedDays.has(dayKey(todayTs))) {
-    current = 1;
-    checkTs = todayTs - DAY_MS;
-  } else if (completedDays.has(dayKey(todayTs - DAY_MS))) {
-    current = 1;
-    checkTs = todayTs - 2 * DAY_MS;
-  } else {
-    return { current: 0, best: calcBest(dayTimestamps) };
-  }
-
-  while (completedDays.has(dayKey(checkTs))) {
-    current++;
-    checkTs -= DAY_MS;
-  }
-
-  return { current, best: Math.max(current, calcBest(dayTimestamps)) };
-}
-
-function calcBest(sortedDayTs: number[]): number {
-  if (sortedDayTs.length === 0) return 0;
-  let best = 1;
-  let run = 1;
-  for (let i = 1; i < sortedDayTs.length; i++) {
-    const diff = sortedDayTs[i] - sortedDayTs[i - 1];
-    if (diff <= DAY_MS + 1000) { // tolerance for DST
-      run++;
-      if (run > best) best = run;
-    } else {
-      run = 1;
-    }
-  }
-  return best;
 }
 
 // ── XP / Level ──────────────────────────────────────────────────────────────
@@ -162,64 +103,4 @@ export function getMonthCalendarData(
   }
 
   return result;
-}
-
-// ── Full Profile Stats ──────────────────────────────────────────────────────
-
-export function calculateProfileStats(tasks: Task[]): ProfileStats {
-  const totalCreated = tasks.length;
-  const totalCompleted = tasks.filter(t => t.isCompleted).length;
-  const totalIncomplete = totalCreated - totalCompleted;
-  const completionPercentage = totalCreated > 0
-    ? Math.round((totalCompleted / totalCreated) * 100)
-    : 0;
-
-  const { current: currentStreak, best: bestStreak } = calculateStreaks(tasks);
-
-  // Average tasks per day (days that have at least one task)
-  const activeDays = new Set<string>();
-  for (const t of tasks) {
-    if (t.completedAt) activeDays.add(dayKey(t.completedAt));
-    if (t.createdAt) activeDays.add(dayKey(t.createdAt));
-  }
-  const averageTasksPerDay = activeDays.size > 0
-    ? Math.round((totalCreated / activeDays.size) * 10) / 10
-    : 0;
-
-  // Time stats
-  const tasksWithActual = tasks.filter(
-    t => t.isCompleted && t.actualMinutes != null && t.actualMinutes > 0,
-  );
-  const totalMinutesSpent = tasksWithActual.reduce(
-    (sum, t) => sum + (t.actualMinutes || 0), 0,
-  );
-  const averageMinutesPerTask = tasksWithActual.length > 0
-    ? Math.round(totalMinutesSpent / tasksWithActual.length)
-    : 0;
-
-  // Most productive day of the week (by completions)
-  const dayCountMap = new Array(7).fill(0);
-  for (const t of tasks) {
-    if (t.isCompleted && t.completedAt) {
-      const dow = new Date(t.completedAt).getDay();
-      dayCountMap[dow]++;
-    }
-  }
-  const maxDayCount = Math.max(...dayCountMap);
-  const mostProductiveDay = maxDayCount > 0
-    ? DAY_LABELS[dayCountMap.indexOf(maxDayCount)]
-    : '—';
-
-  return {
-    totalCreated,
-    totalCompleted,
-    totalIncomplete,
-    completionPercentage,
-    currentStreak,
-    bestStreak,
-    averageTasksPerDay,
-    totalMinutesSpent,
-    averageMinutesPerTask,
-    mostProductiveDay,
-  };
 }

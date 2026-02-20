@@ -32,6 +32,10 @@ import {
   buildCategoryMap,
   CategoryMap,
 } from '../lib/supabaseSync';
+import { api } from '../lib/api';
+
+// UUID validator used for category reorder
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 // Enable LayoutAnimation on Android
 if (Platform.OS === 'android') {
@@ -69,6 +73,8 @@ interface TaskContextType {
   completeTimedTask: (id: string, adjustedMinutes?: number) => void;
   moveTaskToParent: (taskId: string, newParentId: string | null) => void;
   restoreTasks: (snapshots: Task[]) => void;
+  /** Add a task to local state without syncing to the DB (for tasks already persisted by the backend). */
+  addTaskLocal: (task: Task) => void;
 }
 
 const TaskContext = createContext<TaskContextType | undefined>(undefined);
@@ -480,10 +486,20 @@ export function TaskProvider({ children }: { children: React.ReactNode }) {
         };
       });
 
-      // Sync completed task to Supabase
       const completedTask = updated.find(t => t.id === id);
       if (completedTask && user) {
-        upsertTask(completedTask, user.id, catMapRef.current, updated).catch(() => {});
+        const uid = user.id;
+        const catMap = catMapRef.current;
+        // ── POST /tasks/{id}/complete → fallback to direct Supabase if backend down ──
+        api.post(`/tasks/${id}/complete`, {
+          actual_minutes: completedTask.actualMinutes ?? undefined,
+        }).then(({ error, isBackendDown }) => {
+          if (error || isBackendDown) {
+            upsertTask(completedTask, uid, catMap, updated).catch(() => {});
+          }
+        }).catch(() => {
+          upsertTask(completedTask, uid, catMap, updated).catch(() => {});
+        });
       }
 
       // Run pattern learning in background
@@ -529,7 +545,17 @@ export function TaskProvider({ children }: { children: React.ReactNode }) {
 
       const completedTask = updated.find(t => t.id === id);
       if (completedTask && user) {
-        upsertTask(completedTask, user.id, catMapRef.current, updated).catch(() => {});
+        const uid = user.id;
+        const catMap = catMapRef.current;
+        api.post(`/tasks/${id}/complete`, {
+          actual_minutes: completedTask.actualMinutes ?? undefined,
+        }).then(({ error, isBackendDown }) => {
+          if (error || isBackendDown) {
+            upsertTask(completedTask, uid, catMap, updated).catch(() => {});
+          }
+        }).catch(() => {
+          upsertTask(completedTask, uid, catMap, updated).catch(() => {});
+        });
       }
       if (completedTask?.actualMinutes && !isTooShort(completedTask.actualMinutes)) {
         const allCompleted = updated.filter(t => t.isCompleted && t.actualMinutes && t.actualMinutes >= 1);
@@ -546,9 +572,20 @@ export function TaskProvider({ children }: { children: React.ReactNode }) {
     setTasks(prev =>
       prev.map(t => {
         if (t.id !== id) return t;
-        const updated = { ...t, isCompleted: false, completedAt: null, updatedAt: now };
-        if (user) upsertTask(updated, user.id, catMapRef.current, prev).catch(() => {});
-        return updated;
+        const updatedTask = { ...t, isCompleted: false, completedAt: null, updatedAt: now };
+        if (user) {
+          const uid = user.id;
+          const catMap = catMapRef.current;
+          // POST /tasks/{id}/uncomplete clears completed_at + actual_minutes atomically
+          api.post(`/tasks/${id}/uncomplete`).then(({ error, isBackendDown }) => {
+            if (error || isBackendDown) {
+              upsertTask(updatedTask, uid, catMap, prev).catch(() => {});
+            }
+          }).catch(() => {
+            upsertTask(updatedTask, uid, catMap, prev).catch(() => {});
+          });
+        }
+        return updatedTask;
       }),
     );
   }, [user]);
@@ -569,7 +606,18 @@ export function TaskProvider({ children }: { children: React.ReactNode }) {
           overdueStartDate: null,
           updatedAt: now,
         };
-        if (user) upsertTask(updated, user.id, catMapRef.current, prev).catch(() => {});
+        if (user) {
+          const uid = user.id;
+          const catMap = catMapRef.current;
+          // POST /tasks/{id}/defer lets the backend compute tomorrow + increment count atomically
+          api.post(`/tasks/${id}/defer`).then(({ error, isBackendDown }) => {
+            if (error || isBackendDown) {
+              upsertTask(updated, uid, catMap, prev).catch(() => {});
+            }
+          }).catch(() => {
+            upsertTask(updated, uid, catMap, prev).catch(() => {});
+          });
+        }
         return updated;
       }),
     );
@@ -772,16 +820,35 @@ export function TaskProvider({ children }: { children: React.ReactNode }) {
     setTasks(prev => prev.filter(t => !isFullyDecayed(t)));
     setArchivedTasks(prev => [...archivedItems, ...prev]);
 
-    // Sync archived tasks to Supabase
+    // POST /tasks/{id}/archive for each item → fallback to upsertTask if backend down
     if (user) {
+      const uid = user.id;
+      const catMap = catMapRef.current;
+      const snapshot = tasksRef.current;
       for (const t of archivedItems) {
-        upsertTask(t, user.id, catMapRef.current, tasksRef.current).catch(() => {});
+        api.post(`/tasks/${t.id}/archive`).then(({ error, isBackendDown }) => {
+          if (error || isBackendDown) {
+            upsertTask(t, uid, catMap, snapshot).catch(() => {});
+          }
+        }).catch(() => {
+          upsertTask(t, uid, catMap, snapshot).catch(() => {});
+        });
       }
     }
   }, [user]);
 
   const getTask = useCallback((id: string): Task | undefined => {
     return tasksRef.current.find(t => t.id === id);
+  }, []);
+
+  /**
+   * Add a task object to local state without triggering a DB sync.
+   * Use this when the backend has already persisted the task (e.g. after
+   * a successful POST /inbox/{id}/convert).
+   */
+  const addTaskLocal = useCallback((task: Task): void => {
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    setTasks(prev => [task, ...prev]);
   }, []);
 
   // ── Category CRUD ────────────────────────────────────────────────────
@@ -836,7 +903,19 @@ export function TaskProvider({ children }: { children: React.ReactNode }) {
         return cat ? { ...cat, order: i } : cat;
       }).filter(Boolean) as Category[];
     });
-  }, []);
+
+    // POST /categories/reorder — persist new order to backend
+    // Map local string IDs → DB UUIDs; skip any IDs that can't be resolved
+    if (user) {
+      const catMap = catMapRef.current;
+      const apiOrderedIds = orderedIds
+        .map(id => catMap.toUUID[id] || (UUID_RE.test(id) ? id : null))
+        .filter((id): id is string => id !== null);
+      if (apiOrderedIds.length > 0) {
+        api.post('/categories/reorder', { ordered_ids: apiOrderedIds }).catch(() => {});
+      }
+    }
+  }, [user]);
 
   return (
     <TaskContext.Provider
@@ -867,6 +946,7 @@ export function TaskProvider({ children }: { children: React.ReactNode }) {
         completeTimedTask,
         moveTaskToParent,
         restoreTasks,
+        addTaskLocal,
       }}>
       {children}
     </TaskContext.Provider>
