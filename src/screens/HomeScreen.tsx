@@ -27,15 +27,15 @@ import { ManageCategoriesModal } from '../components/ManageCategoriesModal';
 import { SortDropdown } from '../components/SortDropdown';
 import { SectionHeader } from '../components/SectionHeader';
 import { EmptyState } from '../components/EmptyState';
-import { InboxBadge } from '../components/InboxBadge';
 import { TaskPreviewOverlay } from '../components/TaskPreviewOverlay';
 import { ZeroStateOnboarding } from '../components/ZeroStateOnboarding';
 import { FocusMode } from '../components/FocusMode';
-import { FocusOrb } from '../components/FocusOrb';
+import { useInbox } from '../context/InboxContext';
 import { TodayLine } from '../components/TodayLine';
 import { CalendarStrip } from '../components/CalendarStrip';
 import { AnimatedPressable } from '../components/ui';
 import { SubtaskModal } from '../components/SubtaskModal';
+import { ExpandableActionMenu } from '../components/ExpandableActionMenu';
 import { useUndo } from '../components/UndoToast';
 import { organizeTasks, searchTasks } from '../utils/taskIntelligence';
 import { isFullyDecayed } from '../utils/decay';
@@ -105,6 +105,7 @@ export function HomeScreen({ navigation }: Props) {
         restoreTasks,
     } = useTasks();
     const { showUndo } = useUndo();
+    const { inboxCount } = useInbox();
     const [isSearching, setIsSearching] = useState(false);
     const [searchQuery, setSearchQuery] = useState('');
     const [showArchiveModal, setShowArchiveModal] = useState(false);
@@ -822,7 +823,7 @@ export function HomeScreen({ navigation }: Props) {
                     }
                     ListEmptyComponent={ListEmpty}
                     keyboardShouldPersistTaps="handled"
-                    contentContainerStyle={{ ...styles.listContent, paddingBottom: 180, paddingTop: 4 }}
+                    contentContainerStyle={{ ...styles.listContent, paddingBottom: 220, paddingTop: 4 }}
                     ListFooterComponent={ListFooter}
                 />
             )}
@@ -846,33 +847,52 @@ export function HomeScreen({ navigation }: Props) {
                 </Pressable>
             )}
 
-            {/* ── Bottom Controls ───────────────────────────────────────── */}
+            {/* ── Task Input ── positioned above the arc menu trigger ── */}
             {!isSearching && (
-                <View style={[styles.bottomControlsWrapper, { bottom: keyboardHeight }]}>
+                <View style={[styles.bottomControlsWrapper, { bottom: keyboardHeight > 0 ? keyboardHeight : insets.bottom + 80 }]}>
                     <TaskInput
                         onSubmit={handleAddTask}
                         defaultCategory={activeCategory !== 'overview' ? activeCategory : 'personal'}
                         categories={categories.filter(c => c.id !== 'overview')}
                     />
-
-                    {/* Bottom Nav Bar */}
-                    <View style={[styles.bottomNavBar, { paddingBottom: insets.bottom }]}>
-                        <InboxBadge onPress={handleOpenInbox} />
-
-                        <FocusOrb
-                            onActivate={() => setIsFocusMode(true)}
-                            taskCount={activeCount}
-                        />
-
-                        <AnimatedPressable
-                            onPress={() => navigation.navigate('Profile')}
-                            hitSlop={8}
-                            style={styles.navButton}>
-                            <Icon name="person-outline" size={24} color={colors.textTertiary} />
-                            <Text style={styles.navButtonText}>Profile</Text>
-                        </AnimatedPressable>
-                    </View>
                 </View>
+            )}
+
+            {/* ── Expandable Arc Menu (replaces bottom nav) ────────────── */}
+            {!isSearching && (
+                <ExpandableActionMenu
+                    actions={[
+                        {
+                            id: 'memos',
+                            label: 'Memos',
+                            icon: 'document-text-outline',
+                            onPress: handleOpenInbox,
+                            badge: inboxCount,
+                        },
+                        {
+                            id: 'activity',
+                            label: 'Track Activity',
+                            icon: 'analytics-outline',
+                            onPress: () => navigation.navigate('RealityScore'),
+                        },
+                        {
+                            id: 'focus',
+                            label: 'Focus',
+                            icon: 'flame-outline',
+                            onPress: () => setIsFocusMode(true),
+                            holdToActivate: true,
+                        },
+                        {
+                            id: 'profile',
+                            label: 'Profile',
+                            icon: 'person-outline',
+                            onPress: () => navigation.navigate('Profile'),
+                        },
+                    ]}
+                    bottomInset={insets.bottom}
+                    taskCount={activeCount}
+                    testID="expandable-action-menu"
+                />
             )}
 
             {/* Archive Confirmation Modal */}
@@ -1021,27 +1041,7 @@ const createStyles = (c: ThemeColors, isDark: boolean) => StyleSheet.create({
         right: 0,
         backgroundColor: 'transparent',
     },
-    bottomNavBar: {
-        flexDirection: 'row',
-        justifyContent: 'space-around',
-        alignItems: 'center',
-        backgroundColor: c.surface,
-        borderTopWidth: StyleSheet.hairlineWidth,
-        borderTopColor: c.border,
-        paddingTop: Spacing.sm,
-        paddingHorizontal: Spacing.md,
-    },
-    navButton: {
-        alignItems: 'center',
-        gap: 2,
-        paddingVertical: Spacing.xs,
-        paddingHorizontal: Spacing.sm,
-    },
-    navButtonText: {
-        ...Typography.caption,
-        fontWeight: '600',
-        color: c.textSecondary,
-    },
+
     headerActions: {
         flexDirection: 'row',
         alignItems: 'center',
@@ -1150,7 +1150,7 @@ const createStyles = (c: ThemeColors, isDark: boolean) => StyleSheet.create({
     sortFab: {
         position: 'absolute',
         right: Spacing.lg,
-        bottom: 200,
+        bottom: 160,
         width: 38,
         height: 38,
         borderRadius: 19,
