@@ -139,8 +139,8 @@ export function HomeScreen({ navigation }: Props) {
 
         const handleKeyboardShow = (event: KeyboardEvent) => {
             const kbHeight = event.endCoordinates?.height ?? 0;
-            // On iOS, keyboard height includes safe area
-            setKeyboardHeight(Math.max(0, kbHeight - insets.bottom));
+            // Shift task input higher by adding a buffer above the keyboard so options aren't obscured
+            setKeyboardHeight(kbHeight + 32);
         };
 
         const handleKeyboardHide = () => {
