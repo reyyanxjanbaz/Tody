@@ -348,7 +348,7 @@ export function TaskProvider({ children }: { children: React.ReactNode }) {
       description:          task.description || '',
       priority:             task.priority,
       energy_level:         task.energyLevel,
-      category_id:          catMap.toUUID[task.category] ?? null,
+      category_id:          task.category ? catMap.toUUID[task.category] ?? null : null,
       deadline:             task.deadline         ? new Date(task.deadline).toISOString()         : null,
       completed_at:         task.completedAt      ? new Date(task.completedAt).toISOString()      : null,
       archived_at:          task.archivedAt       ? new Date(task.archivedAt).toISOString()       : null,

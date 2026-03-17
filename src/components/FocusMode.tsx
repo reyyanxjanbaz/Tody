@@ -825,6 +825,21 @@ const createStyles = (c: ThemeColors) => StyleSheet.create({
         letterSpacing: 0.8,
         textTransform: 'uppercase',
     },
+    exitButton: {
+        marginTop: 24,
+        paddingVertical: 12,
+        paddingHorizontal: 24,
+        borderRadius: 20,
+        backgroundColor: 'rgba(255,255,255,0.1)',
+        borderWidth: 1,
+        borderColor: 'rgba(255,255,255,0.2)',
+    },
+    exitText: {
+        color: c.white,
+        fontWeight: '600',
+        fontSize: 14,
+        fontFamily: FontFamily,
+    },
     emptyFocusContainer: {
         flex: 1,
         justifyContent: 'center',

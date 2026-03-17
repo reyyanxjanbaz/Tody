@@ -480,7 +480,7 @@ export const ExpandableActionMenu = memo(function ExpandableActionMenu({
   triggerIcon = 'apps',
   triggerSize = 56,
   itemSize = 50,
-  arcRadius = 105,
+  arcRadius = 135,
   arcSpan = 160,
   bottomInset = 0,
   style,
@@ -755,7 +755,7 @@ const createActionStyles = (c: ThemeColors, isDark: boolean, itemSize: number) =
       elevation: 3,
     },
     labelText: {
-      fontSize: 13,
+      fontSize: 11,
       fontWeight: '700',
       letterSpacing: 0.3,
       color: isDark ? '#FFFFFF' : c.text,

@@ -859,7 +859,7 @@ export function HomeScreen({ navigation }: Props) {
             )}
 
             {/* ── Expandable Arc Menu (replaces bottom nav) ────────────── */}
-            {!isSearching && (
+            {!isSearching && !isFocusMode && (
                 <ExpandableActionMenu
                     actions={[
                         {
@@ -871,9 +871,15 @@ export function HomeScreen({ navigation }: Props) {
                         },
                         {
                             id: 'activity',
-                            label: 'Track Activity',
+                            label: 'Activity',
                             icon: 'analytics-outline',
                             onPress: () => navigation.navigate('RealityScore'),
+                        },
+                        {
+                            id: 'calendar',
+                            label: 'Calendar',
+                            icon: 'calendar-outline',
+                            onPress: () => {},
                         },
                         {
                             id: 'focus',
@@ -1150,7 +1156,7 @@ const createStyles = (c: ThemeColors, isDark: boolean) => StyleSheet.create({
     sortFab: {
         position: 'absolute',
         right: Spacing.lg,
-        bottom: 160,
+        bottom: 220,
         width: 38,
         height: 38,
         borderRadius: 19,
