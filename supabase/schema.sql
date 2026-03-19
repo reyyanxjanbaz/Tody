@@ -155,6 +155,8 @@ CREATE TABLE IF NOT EXISTS public.tasks (
   estimated_minutes   INT CHECK (estimated_minutes IS NULL OR estimated_minutes > 0),
   actual_minutes      INT CHECK (actual_minutes IS NULL OR actual_minutes >= 0),
   started_at          TIMESTAMPTZ,
+  scheduled_start_at  TIMESTAMPTZ,
+  scheduled_end_at    TIMESTAMPTZ,
 
   parent_id           UUID REFERENCES public.tasks(id) ON DELETE SET NULL,
   depth               SMALLINT NOT NULL DEFAULT 0,
@@ -469,6 +471,10 @@ BEGIN
     ALTER TABLE public.profiles ADD COLUMN display_name TEXT;
   END IF;
 END $$;
+
+ALTER TABLE public.tasks
+  ADD COLUMN IF NOT EXISTS scheduled_start_at TIMESTAMPTZ,
+  ADD COLUMN IF NOT EXISTS scheduled_end_at TIMESTAMPTZ;
 
 -- ═══════════════════════════════════════════════════════════════════════════
 -- UPGRADE HELPER: Force-apply constraints to existing tables

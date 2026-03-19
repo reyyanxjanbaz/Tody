@@ -63,6 +63,7 @@ interface TaskContextType {
   completeTask: (id: string) => void;
   uncompleteTask: (id: string) => void;
   deferTask: (id: string) => void;
+  archiveTask: (id: string) => void;
   deleteTask: (id: string) => void;
   deleteTaskWithCascade: (id: string) => void;
   getTask: (id: string) => Task | undefined;
@@ -125,6 +126,8 @@ export function TaskProvider({ children }: { children: React.ReactNode }) {
           childIds: t.childIds ?? [],
           depth: t.depth ?? 0,
           parentId: t.parentId ?? null,
+          scheduledStartAt: t.scheduledStartAt ?? null,
+          scheduledEndAt: t.scheduledEndAt ?? null,
           energyLevel: t.energyLevel ?? 'medium',
           category: t.category ?? 'personal',
         }));
@@ -133,7 +136,11 @@ export function TaskProvider({ children }: { children: React.ReactNode }) {
         setTasks(initialized);
 
         const storedArchived = await getArchivedTasks<Task>();
-        setArchivedTasks(storedArchived);
+        setArchivedTasks(storedArchived.map(t => ({
+          ...t,
+          scheduledStartAt: t.scheduledStartAt ?? null,
+          scheduledEndAt: t.scheduledEndAt ?? null,
+        })));
 
         // Load categories
         const storedCategories = await getCategories<Category>();
@@ -202,6 +209,8 @@ export function TaskProvider({ children }: { children: React.ReactNode }) {
           childIds: t.childIds ?? [],
           depth: t.depth ?? 0,
           parentId: t.parentId ?? null,
+          scheduledStartAt: t.scheduledStartAt ?? null,
+          scheduledEndAt: t.scheduledEndAt ?? null,
           energyLevel: t.energyLevel ?? 'medium',
           category: t.category ?? 'personal',
         }));
@@ -209,7 +218,11 @@ export function TaskProvider({ children }: { children: React.ReactNode }) {
         setTasks(initialized);
 
         const storedArchived = await getArchivedTasks<Task>();
-        setArchivedTasks(storedArchived);
+        setArchivedTasks(storedArchived.map(t => ({
+          ...t,
+          scheduledStartAt: t.scheduledStartAt ?? null,
+          scheduledEndAt: t.scheduledEndAt ?? null,
+        })));
 
         const storedCategories = await getCategories<Category>();
         if (storedCategories.length > 0) {
@@ -350,6 +363,8 @@ export function TaskProvider({ children }: { children: React.ReactNode }) {
       energy_level:         task.energyLevel,
       category_id:          task.category ? catMap.toUUID[task.category] ?? null : null,
       deadline:             task.deadline         ? new Date(task.deadline).toISOString()         : null,
+      scheduled_start_at:   task.scheduledStartAt ? new Date(task.scheduledStartAt).toISOString() : null,
+      scheduled_end_at:     task.scheduledEndAt   ? new Date(task.scheduledEndAt).toISOString()   : null,
       completed_at:         task.completedAt      ? new Date(task.completedAt).toISOString()      : null,
       archived_at:          task.archivedAt       ? new Date(task.archivedAt).toISOString()       : null,
       overdue_start_date:   task.overdueStartDate ? new Date(task.overdueStartDate).toISOString() : null,
@@ -381,6 +396,8 @@ export function TaskProvider({ children }: { children: React.ReactNode }) {
       createdAt: now,
       updatedAt: now,
       deadline: parsed.deadline,
+      scheduledStartAt: null,
+      scheduledEndAt: null,
       completedAt: null,
       priority: parsed.priority,
       energyLevel: 'medium',
@@ -434,6 +451,8 @@ export function TaskProvider({ children }: { children: React.ReactNode }) {
       createdAt: now,
       updatedAt: now,
       deadline: parsed.deadline,
+      scheduledStartAt: null,
+      scheduledEndAt: null,
       completedAt: null,
       priority: parsed.priority,
       energyLevel: parent.energyLevel ?? 'medium', // Inherit parent's energy level
@@ -646,6 +665,8 @@ export function TaskProvider({ children }: { children: React.ReactNode }) {
         const updated = {
           ...t,
           deadline: tomorrow.getTime(),
+          scheduledStartAt: null,
+          scheduledEndAt: null,
           deferCount: t.deferCount + 1,
           overdueStartDate: null,
           updatedAt: now,
@@ -665,6 +686,41 @@ export function TaskProvider({ children }: { children: React.ReactNode }) {
         return updated;
       }),
     );
+  }, [user]);
+
+  const archiveTask = useCallback((id: string) => {
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    const now = Date.now();
+
+    setTasks(prev => {
+      const task = prev.find(t => t.id === id);
+      if (!task) return prev;
+
+      const archivedTask = {
+        ...task,
+        isArchived: true,
+        archivedAt: now,
+        updatedAt: now,
+        scheduledStartAt: null,
+        scheduledEndAt: null,
+      };
+
+      setArchivedTasks(current => [archivedTask, ...current.filter(t => t.id !== id)]);
+
+      if (user) {
+        const uid = user.id;
+        const catMap = catMapRef.current;
+        api.post(`/tasks/${id}/archive`).then(({ error, isBackendDown }) => {
+          if (error || isBackendDown) {
+            upsertTask(archivedTask, uid, catMap, prev).catch(() => {});
+          }
+        }).catch(() => {
+          upsertTask(archivedTask, uid, catMap, prev).catch(() => {});
+        });
+      }
+
+      return prev.filter(t => t.id !== id);
+    });
   }, [user]);
 
   const deleteTask = useCallback((id: string) => {
@@ -1034,6 +1090,7 @@ export function TaskProvider({ children }: { children: React.ReactNode }) {
         completeTask,
         uncompleteTask,
         deferTask,
+        archiveTask,
         deleteTask,
         deleteTaskWithCascade,
         getTask,

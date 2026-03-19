@@ -179,6 +179,8 @@ interface DbTask {
   is_completed: boolean;
   completed_at: string | null;
   deadline: string | null;
+  scheduled_start_at: string | null;
+  scheduled_end_at: string | null;
   is_recurring: boolean;
   recurring_frequency: string | null;
   defer_count: number;
@@ -228,6 +230,8 @@ export function taskToDbRow(task: Task, userId: string, catMap: CategoryMap): Pa
     is_completed: task.isCompleted ?? false,
     completed_at: toISO(task.completedAt),
     deadline: toISO(task.deadline),
+    scheduled_start_at: toISO(task.scheduledStartAt),
+    scheduled_end_at: toISO(task.scheduledEndAt),
     is_recurring: task.isRecurring ?? false,
     recurring_frequency: task.recurringFrequency || null,
     defer_count: task.deferCount ?? 0,
@@ -265,6 +269,8 @@ export function dbRowToTask(row: DbTask, catMap: CategoryMap): Task {
     createdAt: fromISO(row.created_at) ?? Date.now(),
     updatedAt: fromISO(row.updated_at) ?? Date.now(),
     deadline: fromISO(row.deadline),
+    scheduledStartAt: fromISO(row.scheduled_start_at),
+    scheduledEndAt: fromISO(row.scheduled_end_at),
     completedAt: fromISO(row.completed_at),
     priority: (row.priority as Task['priority']) || 'none',
     energyLevel: (row.energy_level as Task['energyLevel']) || 'medium',

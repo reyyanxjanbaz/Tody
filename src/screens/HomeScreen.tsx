@@ -879,7 +879,7 @@ export function HomeScreen({ navigation }: Props) {
                             id: 'calendar',
                             label: 'Calendar',
                             icon: 'calendar-outline',
-                            onPress: () => {},
+                            onPress: () => navigation.navigate('Calendar'),
                         },
                         {
                             id: 'focus',

@@ -6,6 +6,7 @@ import { useAuth } from '../context/AuthContext';
 import { LoginScreen } from '../screens/LoginScreen';
 import { RegisterScreen } from '../screens/RegisterScreen';
 import { HomeScreen } from '../screens/HomeScreen';
+import { CalendarScreen } from '../screens/CalendarScreen';
 import { ArchiveScreen } from '../screens/ArchiveScreen';
 import { TaskDetailScreen } from '../screens/TaskDetailScreen';
 import { ProcessInboxScreen } from '../screens/ProcessInboxScreen';
@@ -67,6 +68,7 @@ export function RootNavigator() {
         {user ? (
           <>
             <Stack.Screen name="Home" component={HomeScreen} />
+            <Stack.Screen name="Calendar" component={CalendarScreen} options={DETAIL_SCREEN_OPTIONS} />
             <Stack.Screen name="Archive" component={ArchiveScreen} options={DETAIL_SCREEN_OPTIONS} />
             <Stack.Screen name="TaskDetail" component={TaskDetailScreen} options={DETAIL_SCREEN_OPTIONS} />
             <Stack.Screen name="ProcessInbox" component={ProcessInboxScreen} options={MODAL_SCREEN_OPTIONS} />

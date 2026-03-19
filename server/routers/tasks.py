@@ -41,6 +41,8 @@ class TaskCreate(BaseModel):
     energy_level: str = "medium"
     category_id: Optional[str] = None
     deadline: Optional[str] = None  # ISO timestamp string
+    scheduled_start_at: Optional[str] = None
+    scheduled_end_at: Optional[str] = None
     is_recurring: bool = False
     recurring_frequency: Optional[str] = None
     estimated_minutes: Optional[int] = None
@@ -117,6 +119,8 @@ class TaskUpdate(BaseModel):
     energy_level: Optional[str] = None
     category_id: Optional[str] = None
     deadline: Optional[str] = None
+    scheduled_start_at: Optional[str] = None
+    scheduled_end_at: Optional[str] = None
     is_completed: Optional[bool] = None
     completed_at: Optional[str] = None
     is_recurring: Optional[bool] = None
@@ -476,6 +480,8 @@ def defer_task(task_id: str, user_id: str = Depends(get_current_user_id)):
         sb.table("tasks")
         .update({
             "deadline": tomorrow.isoformat(),
+            "scheduled_start_at": None,
+            "scheduled_end_at": None,
             "defer_count": new_count,
             "overdue_start_date": None,
         })

@@ -13,6 +13,8 @@ export interface Task {
   createdAt: number;
   updatedAt: number;
   deadline: number | null;
+  scheduledStartAt?: number | null;
+  scheduledEndAt?: number | null;
   completedAt: number | null;
   priority: Priority;
   energyLevel: EnergyLevel; // Required: 'high' | 'medium' | 'low'
@@ -90,6 +92,7 @@ export type RootStackParamList = {
   Login: undefined;
   Register: undefined;
   Home: undefined;
+  Calendar: undefined;
   Archive: undefined;
   TaskDetail: { taskId: string };
   ProcessInbox: undefined;
