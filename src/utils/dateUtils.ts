@@ -16,6 +16,16 @@ export function endOfDay(date: Date = new Date()): Date {
   return d;
 }
 
+export function isTimestampOnDay(
+  timestamp: number | null | undefined,
+  dayStartTimestamp: number,
+): boolean {
+  if (!timestamp || !isFinite(timestamp)) return false;
+  const dayStart = startOfDay(new Date(dayStartTimestamp)).getTime();
+  const dayEnd = endOfDay(new Date(dayStartTimestamp)).getTime();
+  return timestamp >= dayStart && timestamp <= dayEnd;
+}
+
 export function addDays(date: Date, days: number): Date {
   const d = new Date(date);
   d.setDate(d.getDate() + days);

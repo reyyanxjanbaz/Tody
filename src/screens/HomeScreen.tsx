@@ -48,7 +48,8 @@ import { Spacing, Typography, BorderRadius, FontFamily, type ThemeColors } from 
 import { useTheme } from '../context/ThemeContext';
 import { Task, RootStackParamList, Category, SortOption, Priority } from '../types';
 import { haptic } from '../utils/haptics';
-import { startOfDay, endOfDay } from '../utils/dateUtils';
+import { startOfDay } from '../utils/dateUtils';
+import { isTaskRelevantToDate } from '../utils/calendarDayboard';
 
 // ── FlashList item discriminated union ────────────────────────────────────────
 
@@ -205,16 +206,11 @@ export function HomeScreen({ navigation }: Props) {
 
         // Filter by selected calendar date
         const dayStart = selectedDate;
-        const dayEnd = endOfDay(new Date(selectedDate)).getTime();
         const todayStart = startOfDay().getTime();
         const isSelectedToday = dayStart === todayStart;
 
         if (!isSelectedToday) {
-            filtered = filtered.filter(t => {
-                if (t.deadline && t.deadline >= dayStart && t.deadline <= dayEnd) return true;
-                if (!t.deadline && t.createdAt >= dayStart && t.createdAt <= dayEnd) return true;
-                return false;
-            });
+            filtered = filtered.filter(t => isTaskRelevantToDate(t, dayStart));
         }
 
         return filtered;

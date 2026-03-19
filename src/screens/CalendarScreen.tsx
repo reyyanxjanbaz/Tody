@@ -10,14 +10,14 @@ import {
   View,
 } from 'react-native';
 import Animated, { FadeIn, FadeInDown } from 'react-native-reanimated';
+import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import Icon from 'react-native-vector-icons/Ionicons';
 import { useTasks } from '../context/TaskContext';
 import { useTheme } from '../context/ThemeContext';
-import { AnimatedPressable } from '../components/ui';
 import { TaskItem } from '../components/TaskItem';
+import { AnimatedPressable } from '../components/ui';
 import {
   BorderRadius,
   FontFamily,
@@ -27,8 +27,8 @@ import {
 } from '../utils/colors';
 import { getUserPreferences } from '../utils/storage';
 import {
+  buildTimelineRows,
   formatCalendarTime,
-  formatDaySubtitle,
   formatDayTitle,
   getDayboardData,
   getInitialPreferences,
@@ -36,7 +36,9 @@ import {
   getTaskDurationMinutes,
   getWeekDays,
   isEndOfDayTimestamp,
-  type DayboardTimelineItem,
+  resolveSchedulePlacement,
+  type TimelineGap,
+  type TimelineRow,
 } from '../utils/calendarDayboard';
 import { startOfDay } from '../utils/dateUtils';
 import { isTaskLocked } from '../utils/dependencyChains';
@@ -48,56 +50,51 @@ type Props = {
   navigation: NativeStackNavigationProp<RootStackParamList, 'Calendar'>;
 };
 
-type TimelineGap = {
-  startAt: number;
-  endAt: number;
-};
-
-type TimelineRow =
-  | { type: 'gap'; gap: TimelineGap }
-  | { type: 'item'; item: DayboardTimelineItem };
+type QueueMode = 'due' | 'flexible';
 
 const WEEKDAY_SHORT_SUN = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
 const WEEKDAY_SHORT_MON = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
-const DAY_WINDOW_START_HOUR = 7;
-const DAY_WINDOW_END_HOUR = 22;
-const MIN_GAP_MINUTES = 20;
+const TIMELINE_PX_PER_MIN = 0.85;
+const TIMELINE_MIN_ITEM_HEIGHT = 84;
+const TIMELINE_MAX_ITEM_HEIGHT = 220;
+const TIMELINE_MIN_GAP_HEIGHT = 42;
 
-function buildTimelineRows(items: DayboardTimelineItem[], selectedDate: number): TimelineRow[] {
-  const windowStart = startOfDay(new Date(selectedDate)).getTime() + DAY_WINDOW_START_HOUR * 60 * 60 * 1000;
-  const windowEnd = startOfDay(new Date(selectedDate)).getTime() + DAY_WINDOW_END_HOUR * 60 * 60 * 1000;
-  const clampedItems = items
-    .map(item => ({
-      ...item,
-      startAt: Math.max(windowStart, item.startAt),
-      endAt: Math.min(windowEnd, Math.max(item.endAt, item.startAt + 15 * 60 * 1000)),
-    }))
-    .filter(item => item.endAt > windowStart && item.startAt < windowEnd)
-    .sort((a, b) => a.startAt - b.startAt);
+function getDisplayTitle(timestamp: number): string {
+  return new Date(timestamp).toLocaleDateString('en-US', {
+    weekday: 'long',
+    month: 'long',
+    day: 'numeric',
+  });
+}
 
-  const rows: TimelineRow[] = [];
-  let cursor = windowStart;
+function getDayChipLabel(timestamp: number): string {
+  return new Date(timestamp).toLocaleDateString('en-US', { weekday: 'short' });
+}
 
-  for (const item of clampedItems) {
-    if (item.startAt - cursor >= MIN_GAP_MINUTES * 60 * 1000) {
-      rows.push({
-        type: 'gap',
-        gap: { startAt: cursor, endAt: item.startAt },
-      });
-    }
+function getMonthTitle(year: number, month: number): string {
+  return new Date(year, month, 1).toLocaleDateString('en-US', {
+    month: 'long',
+    year: 'numeric',
+  });
+}
 
-    rows.push({ type: 'item', item });
-    cursor = Math.max(cursor, item.endAt);
+function getTimelineRowHeight(row: TimelineRow): number {
+  const minutes = row.type === 'gap'
+    ? Math.max(15, Math.round((row.gap.endAt - row.gap.startAt) / 60000))
+    : Math.max(15, Math.round((row.item.endAt - row.item.startAt) / 60000));
+
+  if (row.type === 'gap') {
+    return Math.max(TIMELINE_MIN_GAP_HEIGHT, minutes * 0.5);
   }
 
-  if (windowEnd - cursor >= MIN_GAP_MINUTES * 60 * 1000 || rows.length === 0) {
-    rows.push({
-      type: 'gap',
-      gap: { startAt: cursor, endAt: windowEnd },
-    });
-  }
+  return Math.max(
+    TIMELINE_MIN_ITEM_HEIGHT,
+    Math.min(TIMELINE_MAX_ITEM_HEIGHT, minutes * TIMELINE_PX_PER_MIN),
+  );
+}
 
-  return rows;
+function formatTimeRange(startAt: number, endAt: number, timeFormat: UserPreferences['timeFormat']): string {
+  return `${formatCalendarTime(startAt, timeFormat)} - ${formatCalendarTime(endAt, timeFormat)}`;
 }
 
 export function CalendarScreen({ navigation }: Props) {
@@ -120,6 +117,7 @@ export function CalendarScreen({ navigation }: Props) {
   const [prefs, setPrefs] = useState<UserPreferences>(getInitialPreferences(null));
   const [selectedDate, setSelectedDate] = useState(() => startOfDay().getTime());
   const [selectedCategory, setSelectedCategory] = useState(activeCategory);
+  const [queueMode, setQueueMode] = useState<QueueMode>('flexible');
   const [monthJumpVisible, setMonthJumpVisible] = useState(false);
   const [actionTask, setActionTask] = useState<Task | null>(null);
   const [selectedGap, setSelectedGap] = useState<TimelineGap | null>(null);
@@ -127,8 +125,8 @@ export function CalendarScreen({ navigation }: Props) {
   const [showSchedulePicker, setShowSchedulePicker] = useState(false);
   const [schedulePickerDate, setSchedulePickerDate] = useState(new Date());
   const [monthCursor, setMonthCursor] = useState(() => {
-    const initial = new Date();
-    return { year: initial.getFullYear(), month: initial.getMonth() };
+    const now = new Date();
+    return { year: now.getFullYear(), month: now.getMonth() };
   });
 
   useEffect(() => {
@@ -148,6 +146,16 @@ export function CalendarScreen({ navigation }: Props) {
     [categories],
   );
 
+  useEffect(() => {
+    const hasSelectedCategory = sortedCategories.some(category => category.id === selectedCategory);
+    if (hasSelectedCategory) return;
+
+    const fallbackCategory = sortedCategories.some(category => category.id === activeCategory)
+      ? activeCategory
+      : 'overview';
+    setSelectedCategory(fallbackCategory);
+  }, [activeCategory, selectedCategory, sortedCategories]);
+
   const lockMap = useMemo(() => {
     const map = new Map<string, boolean>();
     for (const task of tasks) {
@@ -161,29 +169,41 @@ export function CalendarScreen({ navigation }: Props) {
     [tasks, selectedDate, selectedCategory],
   );
 
+  useEffect(() => {
+    setQueueMode(dayboard.dueToday.length > 0 ? 'due' : 'flexible');
+  }, [dayboard.dueToday.length, selectedDate, selectedCategory]);
+
   const weekDays = useMemo(
     () => getWeekDays(selectedDate, prefs.weekStartsOn),
-    [selectedDate, prefs.weekStartsOn],
+    [prefs.weekStartsOn, selectedDate],
   );
 
   const monthGrid = useMemo(
     () => getMonthGrid(monthCursor.year, monthCursor.month, prefs.weekStartsOn),
-    [monthCursor.year, monthCursor.month, prefs.weekStartsOn],
+    [monthCursor.month, monthCursor.year, prefs.weekStartsOn],
   );
 
-  const timelineRows = useMemo(
+  const { rows: timelineRows, window: timelineWindow } = useMemo(
     () => buildTimelineRows(dayboard.committed, selectedDate),
     [dayboard.committed, selectedDate],
   );
 
   const firstGap = useMemo(() => {
-    const gapRow = timelineRows.find(row => row.type === 'gap');
-    return gapRow?.type === 'gap' ? gapRow.gap : null;
+    const row = timelineRows.find(item => item.type === 'gap');
+    return row?.type === 'gap' ? row.gap : null;
   }, [timelineRows]);
 
   const weekdayHeaders = prefs.weekStartsOn === 'monday' ? WEEKDAY_SHORT_MON : WEEKDAY_SHORT_SUN;
-  const selectedTitle = `${formatDayTitle(selectedDate)}, ${formatDaySubtitle(selectedDate)}`;
+  const selectedTitle = getDisplayTitle(selectedDate);
   const isSelectedToday = selectedDate === startOfDay().getTime();
+  const queueItems = queueMode === 'due' ? dayboard.dueToday : dayboard.flexible;
+  const queueEmptyTitle = queueMode === 'due'
+    ? 'No date-bound tasks are waiting here.'
+    : 'Everything flexible is already placed or cleared.';
+  const queueEmptySubtitle = queueMode === 'due'
+    ? 'You can keep this day roomy or pull something forward.'
+    : 'Keep the schedule breathable, or add a new task from Home.';
+  const timelineRangeLabel = `${formatCalendarTime(timelineWindow.startAt, prefs.timeFormat)} - ${formatCalendarTime(timelineWindow.endAt, prefs.timeFormat)}`;
 
   const handleBack = useCallback(() => {
     navigation.goBack();
@@ -194,46 +214,68 @@ export function CalendarScreen({ navigation }: Props) {
   }, [navigation]);
 
   const handleComplete = useCallback((taskId: string) => {
-    const target = tasks.find(task => task.id === taskId);
-    if (target && (lockMap.get(taskId) ?? false)) {
+    if (lockMap.get(taskId) ?? false) {
       Alert.alert('Locked', 'Complete all subtasks first.');
       return;
     }
+
     completeTask(taskId);
-  }, [completeTask, lockMap, tasks]);
+  }, [completeTask, lockMap]);
 
-  const handleStart = useCallback((taskId: string) => {
-    startTask(taskId);
-  }, [startTask]);
-
-  const openSchedulePickerForTask = useCallback((task: Task) => {
-    setActionTask(null);
-    setSelectedGap(null);
-    const baseDate = task.scheduledStartAt
-      ? new Date(task.scheduledStartAt)
-      : new Date(Math.max(selectedDate, Date.now()));
-    setScheduleTask(task);
-    setSchedulePickerDate(baseDate);
-    setShowSchedulePicker(true);
-  }, [selectedDate]);
-
-  const applySchedule = useCallback((task: Task, startAt: number) => {
-    const durationMs = getTaskDurationMinutes(task) * 60 * 1000;
+  const commitScheduledPlacement = useCallback((task: Task, startAt: number) => {
+    const placement = resolveSchedulePlacement(task, startAt);
     updateTask(task.id, {
-      scheduledStartAt: startAt,
-      scheduledEndAt: startAt + durationMs,
+      scheduledStartAt: placement.startAt,
+      scheduledEndAt: placement.endAt,
     });
     setScheduleTask(null);
     setShowSchedulePicker(false);
     setSelectedGap(null);
+    setActionTask(null);
     haptic('success');
   }, [updateTask]);
+
+  const openSchedulePickerForTask = useCallback((task: Task, suggestedStartAt?: number) => {
+    const baseTimestamp = task.scheduledStartAt ?? suggestedStartAt ?? Math.max(selectedDate, Date.now());
+    setActionTask(null);
+    setSelectedGap(null);
+    setScheduleTask(task);
+    setSchedulePickerDate(new Date(baseTimestamp));
+    setShowSchedulePicker(true);
+  }, [selectedDate]);
+
+  const scheduleIntoGap = useCallback((task: Task, gap: TimelineGap) => {
+    const placement = resolveSchedulePlacement(task, gap.startAt, gap);
+
+    if (!placement.fitsGap) {
+      Alert.alert(
+        'Pocket too small',
+        `This task needs about ${placement.durationMinutes} min, but the open pocket only has ${placement.availableGapMinutes} min.`,
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Pick another time',
+            onPress: () => openSchedulePickerForTask(task, gap.startAt),
+          },
+        ],
+      );
+      return;
+    }
+
+    updateTask(task.id, {
+      scheduledStartAt: placement.startAt,
+      scheduledEndAt: placement.endAt,
+    });
+    setSelectedGap(null);
+    setActionTask(null);
+    haptic('success');
+  }, [openSchedulePickerForTask, updateTask]);
 
   const handleScheduleChange = useCallback((event: DateTimePickerEvent, nextDate?: Date) => {
     if (Platform.OS === 'android') {
       setShowSchedulePicker(false);
       if (event.type === 'set' && nextDate && scheduleTask) {
-        applySchedule(scheduleTask, nextDate.getTime());
+        commitScheduledPlacement(scheduleTask, nextDate.getTime());
       }
       return;
     }
@@ -241,33 +283,29 @@ export function CalendarScreen({ navigation }: Props) {
     if (nextDate) {
       setSchedulePickerDate(nextDate);
     }
-  }, [applySchedule, scheduleTask]);
+  }, [commitScheduledPlacement, scheduleTask]);
 
   const handleLongPressTask = useCallback((task: Task) => {
     setSelectedGap(null);
     setActionTask(task);
   }, []);
 
-  const handleGapPress = useCallback((gap: TimelineGap) => {
-    haptic('selection');
-    setActionTask(null);
-    setSelectedGap(gap);
-  }, []);
-
   const handlePlaceSuggestion = useCallback((task: Task) => {
     if (firstGap) {
-      applySchedule(task, firstGap.startAt);
+      scheduleIntoGap(task, firstGap);
       return;
     }
 
     openSchedulePickerForTask(task);
-  }, [applySchedule, firstGap, openSchedulePickerForTask]);
+  }, [firstGap, openSchedulePickerForTask, scheduleIntoGap]);
 
   const handleAction = useCallback((action: 'now' | 'pick' | 'tomorrow' | 'unschedule' | 'archive' | 'done') => {
     if (!actionTask) return;
 
     if (action === 'now') {
       startTask(actionTask.id);
+      setActionTask(null);
+      return;
     }
 
     if (action === 'pick') {
@@ -299,12 +337,7 @@ export function CalendarScreen({ navigation }: Props) {
     setMonthJumpVisible(false);
   }, []);
 
-  const handleGapTaskPick = useCallback((task: Task) => {
-    if (!selectedGap) return;
-    applySchedule(task, selectedGap.startAt);
-  }, [applySchedule, selectedGap]);
-
-  const renderTaskRow = useCallback((task: Task) => (
+  const renderTaskRow = (task: Task) => (
     <View key={task.id} style={styles.taskRow}>
       <TaskItem
         task={task}
@@ -312,108 +345,96 @@ export function CalendarScreen({ navigation }: Props) {
         onComplete={handleComplete}
         onDefer={deferTask}
         onRevive={reviveTask}
-        onStart={handleStart}
+        onStart={startTask}
         onCompleteTimed={completeTimedTask}
         onLongPress={handleLongPressTask}
         isLocked={lockMap.get(task.id) ?? false}
       />
     </View>
-  ), [
-    completeTimedTask,
-    deferTask,
-    handleComplete,
-    handleLongPressTask,
-    handleStart,
-    lockMap,
-    openTaskDetail,
-    reviveTask,
-  ]);
+  );
 
-  const renderTimelineRow = useCallback((row: TimelineRow, index: number) => {
+  const renderTimelineRow = (row: TimelineRow, index: number) => {
+    const rowHeight = getTimelineRowHeight(row);
+
     if (row.type === 'gap') {
       const gapMinutes = Math.max(15, Math.round((row.gap.endAt - row.gap.startAt) / 60000));
+
       return (
-        <AnimatedPressable
-          key={`gap-${row.gap.startAt}-${index}`}
-          onPress={() => handleGapPress(row.gap)}
-          hapticStyle="selection"
-          style={styles.gapRow}
-        >
-          <View style={styles.gapTime}>
-            <Text style={styles.gapTimeLabel}>{formatCalendarTime(row.gap.startAt, prefs.timeFormat)}</Text>
-            <Text style={styles.gapTimeMeta}>{gapMinutes} min free</Text>
+        <View key={`gap-${row.gap.startAt}-${index}`} style={[styles.timelineRow, { minHeight: rowHeight }]}>
+          <View style={styles.timelineAxis}>
+            <Text style={styles.timelineAxisLabel}>{formatCalendarTime(row.gap.startAt, prefs.timeFormat)}</Text>
+            <View style={styles.timelineAxisRail} />
           </View>
-          <View style={styles.gapCard}>
-            <Text style={styles.gapTitle}>Open pocket</Text>
-            <Text style={styles.gapSubtitle}>Tap to place a flexible task here.</Text>
-          </View>
-        </AnimatedPressable>
+
+          <AnimatedPressable
+            onPress={() => {
+              setActionTask(null);
+              setSelectedGap(row.gap);
+              haptic('selection');
+            }}
+            hapticStyle="selection"
+            style={[styles.timelineGapCard, { minHeight: rowHeight - 8 }]}
+          >
+            <Text style={styles.timelineGapTitle}>Open pocket</Text>
+            <Text style={styles.timelineGapMeta}>{gapMinutes} min available</Text>
+            <Text style={styles.timelineGapHint}>Tap to place something flexible here.</Text>
+          </AnimatedPressable>
+        </View>
       );
     }
 
     const taskCategory = sortedCategories.find(category => category.id === (row.item.task.category ?? 'personal'));
-    const isDeadlineMarker = row.item.kind === 'deadline';
+    const isDeadline = row.item.kind === 'deadline';
+    const rangeLabel = formatTimeRange(row.item.startAt, row.item.endAt, prefs.timeFormat);
 
     return (
-      <AnimatedPressable
-        key={`item-${row.item.task.id}-${row.item.startAt}`}
-        onPress={() => openTaskDetail(row.item.task)}
-        onLongPress={() => handleLongPressTask(row.item.task)}
-        style={styles.timelineRow}
-      >
-        <View style={styles.timelineTime}>
-          <Text style={styles.timelineTimeLabel}>{formatCalendarTime(row.item.startAt, prefs.timeFormat)}</Text>
-          <Text style={styles.timelineTimeMeta}>
-            {Math.max(15, Math.round((row.item.endAt - row.item.startAt) / 60000))} min
-          </Text>
+      <View key={`item-${row.item.task.id}-${row.item.startAt}`} style={[styles.timelineRow, { minHeight: rowHeight }]}>
+        <View style={styles.timelineAxis}>
+          <Text style={styles.timelineAxisLabel}>{formatCalendarTime(row.item.startAt, prefs.timeFormat)}</Text>
+          <Text style={styles.timelineAxisSecondary}>{formatCalendarTime(row.item.endAt, prefs.timeFormat)}</Text>
+          <View style={styles.timelineAxisRail} />
+          <View style={styles.timelineAxisDot} />
         </View>
-        <View style={[
-          styles.timelineCard,
-          { borderLeftColor: taskCategory?.color ?? colors.text },
-        ]}>
-          <View style={styles.timelineCardTop}>
-            <Text style={styles.timelineTaskTitle} numberOfLines={2}>
-              {row.item.task.title}
-            </Text>
-            {isDeadlineMarker && (
-              <View style={styles.timelineBadge}>
-                <Text style={styles.timelineBadgeText}>Deadline</Text>
+
+        <AnimatedPressable
+          onPress={() => openTaskDetail(row.item.task)}
+          onLongPress={() => handleLongPressTask(row.item.task)}
+          style={[
+            styles.timelineBlock,
+            isDeadline ? styles.timelineDeadlineBlock : styles.timelineScheduledBlock,
+            { minHeight: rowHeight - 8, borderLeftColor: taskCategory?.color ?? colors.text },
+          ]}
+        >
+          <View style={styles.timelineBlockTop}>
+            <View style={styles.timelineKindWrap}>
+              <Text style={styles.timelineKindText}>{isDeadline ? 'Deadline' : 'Committed'}</Text>
+              <Text style={styles.timelineRangeText}>{rangeLabel}</Text>
+            </View>
+            {taskCategory && taskCategory.id !== 'overview' && (
+              <View style={styles.timelineCategoryWrap}>
+                <View style={[styles.timelineCategoryDot, { backgroundColor: taskCategory.color }]} />
+                <Text style={styles.timelineCategoryText}>{taskCategory.name}</Text>
               </View>
             )}
           </View>
-          <Text style={styles.timelineTaskMeta}>
-            {taskCategory?.name ?? 'Personal'}
-            {row.item.task.estimatedMinutes ? ` · est. ${row.item.task.estimatedMinutes}m` : ''}
-            {row.item.task.deadline && !isDeadlineMarker ? ` · due ${formatCalendarTime(row.item.task.deadline, prefs.timeFormat)}` : ''}
-          </Text>
-        </View>
-      </AnimatedPressable>
+
+          <Text style={styles.timelineTaskTitle} numberOfLines={2}>{row.item.task.title}</Text>
+
+          <View style={styles.timelineBlockFooter}>
+            <Text style={styles.timelineTaskMeta}>
+              {Math.max(15, Math.round((row.item.endAt - row.item.startAt) / 60000))} min
+              {row.item.task.estimatedMinutes ? ` · est. ${row.item.task.estimatedMinutes}m` : ''}
+            </Text>
+            {isDeadline && (
+              <Text style={styles.timelineTaskMeta}>
+                due {formatCalendarTime(row.item.task.deadline!, prefs.timeFormat)}
+              </Text>
+            )}
+          </View>
+        </AnimatedPressable>
+      </View>
     );
-  }, [
-    colors.text,
-    handleGapPress,
-    handleLongPressTask,
-    openTaskDetail,
-    prefs.timeFormat,
-    sortedCategories,
-    styles.gapCard,
-    styles.gapRow,
-    styles.gapSubtitle,
-    styles.gapTime,
-    styles.gapTimeLabel,
-    styles.gapTimeMeta,
-    styles.gapTitle,
-    styles.timelineBadge,
-    styles.timelineBadgeText,
-    styles.timelineCard,
-    styles.timelineCardTop,
-    styles.timelineRow,
-    styles.timelineTaskMeta,
-    styles.timelineTaskTitle,
-    styles.timelineTime,
-    styles.timelineTimeLabel,
-    styles.timelineTimeMeta,
-  ]);
+  };
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
@@ -435,17 +456,33 @@ export function CalendarScreen({ navigation }: Props) {
         showsVerticalScrollIndicator={false}
         contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 36 }]}
       >
-        <Animated.View entering={FadeInDown.duration(260)} style={styles.heroCard}>
-          <AnimatedPressable
-            onPress={() => {
-              setMonthJumpVisible(true);
-              haptic('selection');
-            }}
-            style={styles.dateTitleWrap}
-          >
-            <Text style={styles.dateTitle}>{selectedTitle}</Text>
-            <Icon name="chevron-down" size={16} color={colors.textSecondary} />
-          </AnimatedPressable>
+        <Animated.View entering={FadeInDown.duration(240)} style={styles.controlPanel}>
+          <View style={styles.controlHeader}>
+            <AnimatedPressable
+              onPress={() => {
+                setMonthJumpVisible(true);
+                haptic('selection');
+              }}
+              style={styles.dateButton}
+            >
+              <View>
+                <Text style={styles.dateLabel}>Dayboard</Text>
+                <Text style={styles.dateTitle}>{selectedTitle}</Text>
+              </View>
+              <Icon name="chevron-down" size={18} color={colors.textSecondary} />
+            </AnimatedPressable>
+
+            <View style={styles.metricsWrap}>
+              <View style={styles.metricPill}>
+                <Text style={styles.metricValue}>{dayboard.committed.length}</Text>
+                <Text style={styles.metricLabel}>Committed</Text>
+              </View>
+              <View style={styles.metricPill}>
+                <Text style={styles.metricValue}>{dayboard.flexibleMinutes}</Text>
+                <Text style={styles.metricLabel}>Free min</Text>
+              </View>
+            </View>
+          </View>
 
           <ScrollView
             horizontal
@@ -464,7 +501,7 @@ export function CalendarScreen({ navigation }: Props) {
                   style={[styles.weekPill, isActive && styles.weekPillActive]}
                 >
                   <Text style={[styles.weekPillDay, isActive && styles.weekPillDayActive]}>
-                    {formatDaySubtitle(ts).slice(0, 3)}
+                    {getDayChipLabel(ts)}
                   </Text>
                   <Text style={[styles.weekPillDate, isActive && styles.weekPillDateActive]}>
                     {new Date(ts).getDate()}
@@ -498,129 +535,146 @@ export function CalendarScreen({ navigation }: Props) {
               );
             })}
           </ScrollView>
-
-          <View style={styles.checkpointCard}>
-            <View style={styles.checkpointHeader}>
-              <Text style={styles.checkpointTitle}>
-                {isSelectedToday ? 'Morning Checkpoint' : 'Dayboard Snapshot'}
-              </Text>
-              <Text style={styles.checkpointMeta}>
-                {dayboard.committedMinutes} committed · {dayboard.flexibleMinutes} flexible
-              </Text>
-            </View>
-            <Text style={styles.checkpointStatus}>{dayboard.statusText}</Text>
-            {dayboard.topSuggestions.length > 0 ? (
-              <View style={styles.suggestionList}>
-                {dayboard.topSuggestions.map((task, index) => (
-                  <View key={task.id} style={styles.suggestionRow}>
-                    <View style={styles.suggestionCopy}>
-                      <Text style={styles.suggestionIndex}>0{index + 1}</Text>
-                      <View style={styles.suggestionTextWrap}>
-                        <Text style={styles.suggestionTitle} numberOfLines={1}>{task.title}</Text>
-                        <Text style={styles.suggestionMeta}>
-                          {getTaskDurationMinutes(task)} min
-                          {task.deadline ? ` · due ${isEndOfDayTimestamp(task.deadline) ? formatDayTitle(task.deadline) : formatCalendarTime(task.deadline, prefs.timeFormat)}` : ''}
-                        </Text>
-                      </View>
-                    </View>
-                    <AnimatedPressable
-                      onPress={() => handlePlaceSuggestion(task)}
-                      hapticStyle="light"
-                      style={styles.placeButton}
-                    >
-                      <Text style={styles.placeButtonText}>Place</Text>
-                    </AnimatedPressable>
-                  </View>
-                ))}
-              </View>
-            ) : (
-              <Text style={styles.checkpointEmpty}>
-                Nothing urgent to place. Keep the day spacious.
-              </Text>
-            )}
-          </View>
         </Animated.View>
 
-        <Animated.View entering={FadeIn.delay(100).duration(220)}>
-          <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Committed</Text>
-            <Text style={styles.sectionCount}>{dayboard.committed.length}</Text>
+        <Animated.View entering={FadeIn.delay(60).duration(220)} style={styles.checkpointPanel}>
+          <View style={styles.panelHeader}>
+            <View>
+              <Text style={styles.panelEyebrow}>{isSelectedToday ? 'Today at a glance' : 'Day snapshot'}</Text>
+              <Text style={styles.panelTitle}>Calm, committed, and still adjustable.</Text>
+            </View>
+            <Text style={styles.panelMeta}>{dayboard.committedMinutes} committed · {dayboard.flexibleMinutes} flexible</Text>
           </View>
-          <View style={styles.timelineSection}>
+
+          <Text style={styles.panelStatus}>{dayboard.statusText}</Text>
+
+          {dayboard.topSuggestions.length > 0 ? (
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.suggestionStrip}
+            >
+              {dayboard.topSuggestions.map(task => (
+                <AnimatedPressable
+                  key={task.id}
+                  onPress={() => handlePlaceSuggestion(task)}
+                  style={styles.suggestionCard}
+                >
+                  <Text style={styles.suggestionTitle} numberOfLines={2}>{task.title}</Text>
+                  <Text style={styles.suggestionMeta}>
+                    {getTaskDurationMinutes(task)} min
+                    {task.deadline
+                      ? ` · ${isEndOfDayTimestamp(task.deadline) ? formatDayTitle(task.deadline) : formatCalendarTime(task.deadline, prefs.timeFormat)}`
+                      : ''}
+                  </Text>
+                  <View style={styles.suggestionAction}>
+                    <Text style={styles.suggestionActionText}>Place into day</Text>
+                    <Icon name="arrow-forward" size={14} color={colors.text} />
+                  </View>
+                </AnimatedPressable>
+              ))}
+            </ScrollView>
+          ) : (
+            <View style={styles.inlineEmptyCard}>
+              <Text style={styles.inlineEmptyTitle}>Nothing urgent to place.</Text>
+              <Text style={styles.inlineEmptySubtitle}>Keep the day spacious and let focus breathe.</Text>
+            </View>
+          )}
+        </Animated.View>
+
+        <Animated.View entering={FadeIn.delay(120).duration(220)} style={styles.timelinePanel}>
+          <View style={styles.panelHeader}>
+            <View>
+              <Text style={styles.panelEyebrow}>Committed</Text>
+              <Text style={styles.panelTitle}>The day in time, not just in order.</Text>
+            </View>
+            <Text style={styles.panelMeta}>{timelineRangeLabel}</Text>
+          </View>
+
+          <View style={styles.timelineCanvas}>
             {timelineRows.map(renderTimelineRow)}
           </View>
         </Animated.View>
 
-        {dayboard.dueToday.length > 0 && (
-          <Animated.View entering={FadeIn.delay(140).duration(220)}>
-            <View style={styles.sectionHeader}>
-              <Text style={styles.sectionTitle}>
-                {isSelectedToday ? 'Due Today' : 'Due This Day'}
-              </Text>
-              <Text style={styles.sectionCount}>{dayboard.dueToday.length}</Text>
+        <Animated.View entering={FadeIn.delay(180).duration(220)} style={styles.queuePanel}>
+          <View style={styles.panelHeader}>
+            <View>
+              <Text style={styles.panelEyebrow}>Queue</Text>
+              <Text style={styles.panelTitle}>Due and flexible work, one calmer surface.</Text>
             </View>
-            <View style={styles.listSection}>
-              {dayboard.dueToday.map(renderTaskRow)}
-            </View>
-          </Animated.View>
-        )}
-
-        <Animated.View entering={FadeIn.delay(180).duration(220)}>
-          <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Flexible</Text>
-            <Text style={styles.sectionCount}>{dayboard.flexible.length}</Text>
-          </View>
-          <View style={styles.listSection}>
-            {dayboard.flexible.length > 0 ? (
-              dayboard.flexible.map(renderTaskRow)
-            ) : (
-              <View style={styles.emptyCard}>
-                <Text style={styles.emptyTitle}>This day already has shape.</Text>
-                <Text style={styles.emptySubtitle}>
-                  No loose tasks are asking for attention right now.
+            <View style={styles.queueToggle}>
+              <AnimatedPressable
+                onPress={() => setQueueMode('due')}
+                style={[styles.queueToggleButton, queueMode === 'due' && styles.queueToggleButtonActive]}
+              >
+                <Text style={[styles.queueToggleText, queueMode === 'due' && styles.queueToggleTextActive]}>
+                  Due {dayboard.dueToday.length}
                 </Text>
+              </AnimatedPressable>
+              <AnimatedPressable
+                onPress={() => setQueueMode('flexible')}
+                style={[styles.queueToggleButton, queueMode === 'flexible' && styles.queueToggleButtonActive]}
+              >
+                <Text style={[styles.queueToggleText, queueMode === 'flexible' && styles.queueToggleTextActive]}>
+                  Flexible {dayboard.flexible.length}
+                </Text>
+              </AnimatedPressable>
+            </View>
+          </View>
+
+          <View style={styles.queueBody}>
+            {queueItems.length > 0 ? queueItems.map(renderTaskRow) : (
+              <View style={styles.inlineEmptyCard}>
+                <Text style={styles.inlineEmptyTitle}>{queueEmptyTitle}</Text>
+                <Text style={styles.inlineEmptySubtitle}>{queueEmptySubtitle}</Text>
               </View>
             )}
           </View>
         </Animated.View>
 
-        {dayboard.renegotiation.length > 0 && (
-          <Animated.View entering={FadeIn.delay(220).duration(220)}>
-            <View style={styles.sectionHeader}>
-              <Text style={styles.sectionTitle}>Needs Renegotiation</Text>
-              <Text style={styles.sectionCount}>{dayboard.renegotiation.length}</Text>
+        <Animated.View entering={FadeIn.delay(240).duration(220)} style={styles.recoveryPanel}>
+          <View style={styles.panelHeader}>
+            <View>
+              <Text style={styles.panelEyebrow}>Recovery</Text>
+              <Text style={styles.panelTitle}>Planning debt stays negotiable.</Text>
             </View>
-            <View style={styles.listSection}>
+            <Text style={styles.panelMeta}>{dayboard.renegotiation.length} items</Text>
+          </View>
+
+          {dayboard.renegotiation.length > 0 ? (
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.recoveryStrip}
+            >
               {dayboard.renegotiation.map(task => (
-                <View key={task.id} style={styles.renegotiationCard}>
-                  <View style={styles.renegotiationCopy}>
-                    <Text style={styles.renegotiationTitle}>{task.title}</Text>
-                    <Text style={styles.renegotiationMeta}>
-                      Due {formatOverdueGently(task)}. A small reset is enough.
-                    </Text>
-                  </View>
-                  <View style={styles.renegotiationActions}>
+                <View key={task.id} style={styles.recoveryCard}>
+                  <Text style={styles.recoveryTitle} numberOfLines={2}>{task.title}</Text>
+                  <Text style={styles.recoveryMeta}>Due {formatOverdueGently(task)}. A gentle reset is enough.</Text>
+                  <View style={styles.recoveryActions}>
                     <AnimatedPressable
-                      onPress={() => {
-                        deferTask(task.id);
-                        haptic('light');
-                      }}
-                      style={styles.secondaryInlineButton}
+                      onPress={() => deferTask(task.id)}
+                      style={styles.recoveryButton}
                     >
-                      <Text style={styles.secondaryInlineButtonText}>Tomorrow</Text>
+                      <Text style={styles.recoveryButtonText}>Tomorrow</Text>
                     </AnimatedPressable>
                     <AnimatedPressable
                       onPress={() => archiveTask(task.id)}
-                      style={styles.secondaryInlineButton}
+                      style={styles.recoveryButton}
                     >
-                      <Text style={styles.secondaryInlineButtonText}>Archive</Text>
+                      <Text style={styles.recoveryButtonText}>Archive</Text>
                     </AnimatedPressable>
                   </View>
                 </View>
               ))}
+            </ScrollView>
+          ) : (
+            <View style={styles.inlineEmptyCard}>
+              <Text style={styles.inlineEmptyTitle}>Nothing needs renegotiation.</Text>
+              <Text style={styles.inlineEmptySubtitle}>The backlog is not shouting at you today.</Text>
             </View>
-          </Animated.View>
-        )}
+          )}
+        </Animated.View>
       </ScrollView>
 
       <Modal
@@ -630,7 +684,8 @@ export function CalendarScreen({ navigation }: Props) {
         onRequestClose={() => setMonthJumpVisible(false)}
       >
         <Pressable style={styles.modalOverlay} onPress={() => setMonthJumpVisible(false)}>
-          <Pressable style={styles.monthModal} onPress={() => {}}>
+          <Pressable style={[styles.sheet, styles.monthSheet]} onPress={() => {}}>
+            <View style={styles.sheetHandle} />
             <View style={styles.monthHeader}>
               <AnimatedPressable
                 onPress={() => {
@@ -640,12 +695,7 @@ export function CalendarScreen({ navigation }: Props) {
               >
                 <Icon name="chevron-back" size={18} color={colors.text} />
               </AnimatedPressable>
-              <Text style={styles.monthTitle}>
-                {new Date(monthCursor.year, monthCursor.month, 1).toLocaleString('en-US', {
-                  month: 'long',
-                  year: 'numeric',
-                })}
-              </Text>
+              <Text style={styles.monthTitle}>{getMonthTitle(monthCursor.year, monthCursor.month)}</Text>
               <AnimatedPressable
                 onPress={() => {
                   const nextMonth = new Date(monthCursor.year, monthCursor.month + 1, 1);
@@ -698,33 +748,55 @@ export function CalendarScreen({ navigation }: Props) {
       >
         <Pressable style={styles.modalOverlay} onPress={() => setActionTask(null)}>
           <Pressable style={styles.sheet} onPress={() => {}}>
+            <View style={styles.sheetHandle} />
             <Text style={styles.sheetTitle}>{actionTask?.title}</Text>
-            <Text style={styles.sheetSubtitle}>Move gently. Nothing here forks task state.</Text>
+            <Text style={styles.sheetSubtitle}>Reframe the task, reschedule it, or clear it without leaving the board.</Text>
+
+            <Text style={styles.sheetGroupLabel}>Reframe now</Text>
             {[
               { key: 'now', label: 'Do now' },
-              { key: 'pick', label: 'Pick time' },
-              { key: 'tomorrow', label: 'Tomorrow' },
-              { key: 'unschedule', label: 'Unschedule' },
-              { key: 'archive', label: 'Archive' },
               { key: 'done', label: 'Mark done' },
             ].map(option => {
-              const disabled = option.key === 'unschedule' && !actionTask?.scheduledStartAt;
-              const isNowDisabled = option.key === 'now' && !!actionTask?.startedAt;
-              const isDisabled = disabled || isNowDisabled;
-
+              const disabled = option.key === 'now' && !!actionTask?.startedAt;
               return (
                 <AnimatedPressable
                   key={option.key}
-                  disabled={isDisabled}
-                  onPress={() => handleAction(option.key as 'now' | 'pick' | 'tomorrow' | 'unschedule' | 'archive' | 'done')}
+                  disabled={disabled}
+                  onPress={() => handleAction(option.key as 'now' | 'done')}
                   style={styles.sheetAction}
                 >
-                  <Text style={[styles.sheetActionText, isDisabled && styles.sheetActionTextDisabled]}>
+                  <Text style={[styles.sheetActionText, disabled && styles.sheetActionTextDisabled]}>
                     {option.label}
                   </Text>
                 </AnimatedPressable>
               );
             })}
+
+            <Text style={styles.sheetGroupLabel}>Reschedule</Text>
+            {[
+              { key: 'pick', label: 'Pick time' },
+              { key: 'tomorrow', label: 'Tomorrow' },
+              { key: 'unschedule', label: 'Unschedule', disabled: !actionTask?.scheduledStartAt },
+            ].map(option => (
+              <AnimatedPressable
+                key={option.key}
+                disabled={!!option.disabled}
+                onPress={() => handleAction(option.key as 'pick' | 'tomorrow' | 'unschedule')}
+                style={styles.sheetAction}
+              >
+                <Text style={[styles.sheetActionText, option.disabled && styles.sheetActionTextDisabled]}>
+                  {option.label}
+                </Text>
+              </AnimatedPressable>
+            ))}
+
+            <Text style={styles.sheetGroupLabel}>Exit</Text>
+            <AnimatedPressable
+              onPress={() => handleAction('archive')}
+              style={styles.sheetAction}
+            >
+              <Text style={styles.sheetActionText}>Archive</Text>
+            </AnimatedPressable>
           </Pressable>
         </Pressable>
       </Modal>
@@ -737,17 +809,22 @@ export function CalendarScreen({ navigation }: Props) {
       >
         <Pressable style={styles.modalOverlay} onPress={() => setSelectedGap(null)}>
           <Pressable style={styles.sheet} onPress={() => {}}>
-            <Text style={styles.sheetTitle}>Place a task</Text>
+            <View style={styles.sheetHandle} />
+            <Text style={styles.sheetTitle}>Place into pocket</Text>
             <Text style={styles.sheetSubtitle}>
               {selectedGap
-                ? `${formatCalendarTime(selectedGap.startAt, prefs.timeFormat)} to ${formatCalendarTime(selectedGap.endAt, prefs.timeFormat)}`
+                ? `${formatCalendarTime(selectedGap.startAt, prefs.timeFormat)} - ${formatCalendarTime(selectedGap.endAt, prefs.timeFormat)}`
                 : ''}
             </Text>
+
             {dayboard.flexible.slice(0, 5).length > 0 ? (
               dayboard.flexible.slice(0, 5).map(task => (
                 <AnimatedPressable
                   key={task.id}
-                  onPress={() => handleGapTaskPick(task)}
+                  onPress={() => {
+                    if (!selectedGap) return;
+                    scheduleIntoGap(task, selectedGap);
+                  }}
                   style={styles.sheetAction}
                 >
                   <View style={styles.sheetTaskRow}>
@@ -790,10 +867,9 @@ export function CalendarScreen({ navigation }: Props) {
           }}
         >
           <Pressable style={styles.sheet} onPress={() => {}}>
+            <View style={styles.sheetHandle} />
             <Text style={styles.sheetTitle}>Pick time</Text>
-            <Text style={styles.sheetSubtitle}>
-              {scheduleTask?.title}
-            </Text>
+            <Text style={styles.sheetSubtitle}>{scheduleTask?.title}</Text>
             <DateTimePicker
               value={schedulePickerDate}
               mode="datetime"
@@ -805,7 +881,7 @@ export function CalendarScreen({ navigation }: Props) {
             <AnimatedPressable
               onPress={() => {
                 if (scheduleTask) {
-                  applySchedule(scheduleTask, schedulePickerDate.getTime());
+                  commitScheduledPlacement(scheduleTask, schedulePickerDate.getTime());
                 }
               }}
               style={styles.confirmButton}
@@ -826,7 +902,7 @@ const createStyles = (c: ThemeColors, isDark: boolean) => StyleSheet.create({
   },
   content: {
     paddingHorizontal: Spacing.lg,
-    gap: Spacing.xxl,
+    gap: Spacing.xl,
   },
   header: {
     flexDirection: 'row',
@@ -858,26 +934,65 @@ const createStyles = (c: ThemeColors, isDark: boolean) => StyleSheet.create({
     fontWeight: '700',
     fontFamily: FontFamilyBold,
   },
-  heroCard: {
+  controlPanel: {
     borderRadius: 24,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: c.border,
     padding: Spacing.lg,
     backgroundColor: c.surface,
-    gap: Spacing.lg,
+    gap: Spacing.md,
   },
-  dateTitleWrap: {
+  controlHeader: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    gap: Spacing.md,
+  },
+  dateButton: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
     gap: Spacing.sm,
   },
+  dateLabel: {
+    color: c.textTertiary,
+    fontSize: 12,
+    letterSpacing: 0.8,
+    textTransform: 'uppercase',
+    fontFamily: FontFamilyBold,
+  },
   dateTitle: {
-    flexShrink: 1,
     color: c.text,
     fontSize: 24,
     fontWeight: '700',
     letterSpacing: -0.6,
     fontFamily: FontFamilyBold,
+  },
+  metricsWrap: {
+    flexDirection: 'row',
+    gap: Spacing.sm,
+  },
+  metricPill: {
+    minWidth: 70,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
+    borderRadius: BorderRadius.card,
+    backgroundColor: c.background,
+    alignItems: 'center',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: c.border,
+  },
+  metricValue: {
+    color: c.text,
+    fontSize: 17,
+    fontWeight: '700',
+    fontFamily: FontFamilyBold,
+  },
+  metricLabel: {
+    color: c.textSecondary,
+    fontSize: 11,
+    fontFamily: FontFamily,
   },
   weekStrip: {
     gap: Spacing.sm,
@@ -930,7 +1045,7 @@ const createStyles = (c: ThemeColors, isDark: boolean) => StyleSheet.create({
     alignItems: 'center',
     gap: 6,
     borderRadius: BorderRadius.pill,
-    borderWidth: StyleSheet.hairlineWidth,
+    borderWidth: 1,
     borderColor: c.border,
     paddingHorizontal: Spacing.md,
     paddingVertical: 8,
@@ -954,264 +1069,307 @@ const createStyles = (c: ThemeColors, isDark: boolean) => StyleSheet.create({
     height: 6,
     borderRadius: 3,
   },
-  checkpointCard: {
-    borderRadius: BorderRadius.card,
+  checkpointPanel: {
+    borderRadius: 24,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: c.border,
     backgroundColor: c.background,
     padding: Spacing.lg,
     gap: Spacing.md,
   },
-  checkpointHeader: {
+  panelHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
+    alignItems: 'flex-start',
     gap: Spacing.md,
   },
-  checkpointTitle: {
-    color: c.text,
-    fontSize: 17,
-    fontWeight: '700',
+  panelEyebrow: {
+    color: c.textTertiary,
+    fontSize: 12,
+    letterSpacing: 0.8,
+    textTransform: 'uppercase',
     fontFamily: FontFamilyBold,
   },
-  checkpointMeta: {
+  panelTitle: {
+    color: c.text,
+    fontSize: 18,
+    fontWeight: '700',
+    letterSpacing: -0.3,
+    fontFamily: FontFamilyBold,
+  },
+  panelMeta: {
     color: c.textSecondary,
     fontSize: 13,
-    fontWeight: '600',
     fontFamily: FontFamily,
   },
-  checkpointStatus: {
+  panelStatus: {
     color: c.textSecondary,
     fontSize: 15,
     lineHeight: 22,
     fontFamily: FontFamily,
   },
-  checkpointEmpty: {
-    color: c.textTertiary,
-    fontSize: 14,
-    fontFamily: FontFamily,
-  },
-  suggestionList: {
+  suggestionStrip: {
     gap: Spacing.sm,
+    paddingRight: Spacing.sm,
   },
-  suggestionRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: Spacing.md,
-  },
-  suggestionCopy: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
+  suggestionCard: {
+    width: 232,
+    borderRadius: BorderRadius.card,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: c.border,
+    padding: Spacing.md,
+    backgroundColor: c.surface,
     gap: Spacing.sm,
-  },
-  suggestionIndex: {
-    width: 26,
-    color: c.textTertiary,
-    fontSize: 12,
-    letterSpacing: 0.8,
-    fontWeight: '700',
-    fontFamily: FontFamilyBold,
-  },
-  suggestionTextWrap: {
-    flex: 1,
   },
   suggestionTitle: {
     color: c.text,
     fontSize: 15,
-    fontWeight: '600',
-    fontFamily: FontFamily,
+    fontWeight: '700',
+    fontFamily: FontFamilyBold,
   },
   suggestionMeta: {
     color: c.textSecondary,
     fontSize: 13,
+    lineHeight: 18,
     fontFamily: FontFamily,
   },
-  placeButton: {
-    paddingHorizontal: Spacing.md,
-    paddingVertical: 8,
-    borderRadius: BorderRadius.pill,
-    backgroundColor: c.text,
+  suggestionAction: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: 'auto',
   },
-  placeButtonText: {
-    color: c.background,
+  suggestionActionText: {
+    color: c.text,
     fontSize: 13,
     fontWeight: '700',
     fontFamily: FontFamilyBold,
   },
-  sectionHeader: {
-    flexDirection: 'row',
-    alignItems: 'baseline',
-    gap: Spacing.sm,
-    paddingHorizontal: 2,
+  timelinePanel: {
+    borderRadius: 24,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: c.border,
+    backgroundColor: c.surface,
+    padding: Spacing.lg,
+    gap: Spacing.md,
   },
-  sectionTitle: {
-    color: c.text,
-    fontSize: 22,
-    fontWeight: '700',
-    letterSpacing: -0.4,
-    fontFamily: FontFamilyBold,
-  },
-  sectionCount: {
-    color: c.textTertiary,
-    fontSize: 16,
-    fontWeight: '600',
-    fontFamily: FontFamily,
-  },
-  timelineSection: {
+  timelineCanvas: {
     gap: Spacing.sm,
   },
   timelineRow: {
     flexDirection: 'row',
-    gap: Spacing.md,
     alignItems: 'stretch',
+    gap: Spacing.md,
   },
-  timelineTime: {
+  timelineAxis: {
     width: 72,
-    paddingTop: Spacing.md,
+    position: 'relative',
+    alignItems: 'flex-start',
+    paddingTop: 2,
   },
-  timelineTimeLabel: {
+  timelineAxisLabel: {
     color: c.text,
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: '700',
     fontFamily: FontFamilyBold,
   },
-  timelineTimeMeta: {
+  timelineAxisSecondary: {
     color: c.textTertiary,
-    fontSize: 12,
+    fontSize: 11,
+    marginTop: 2,
     fontFamily: FontFamily,
   },
-  timelineCard: {
+  timelineAxisRail: {
+    position: 'absolute',
+    top: 18,
+    bottom: 0,
+    left: 36,
+    width: 1,
+    backgroundColor: c.border,
+  },
+  timelineAxisDot: {
+    position: 'absolute',
+    top: 18,
+    left: 33,
+    width: 7,
+    height: 7,
+    borderRadius: 3.5,
+    backgroundColor: c.text,
+  },
+  timelineBlock: {
     flex: 1,
-    borderRadius: BorderRadius.card,
-    backgroundColor: c.surface,
+    borderRadius: 20,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: c.border,
     borderLeftWidth: 2,
     padding: Spacing.md,
-    gap: Spacing.xs,
-  },
-  timelineCardTop: {
-    flexDirection: 'row',
-    alignItems: 'center',
     justifyContent: 'space-between',
     gap: Spacing.sm,
   },
-  timelineTaskTitle: {
-    flex: 1,
+  timelineScheduledBlock: {
+    backgroundColor: c.background,
+  },
+  timelineDeadlineBlock: {
+    backgroundColor: isDark ? c.gray100 : c.white,
+  },
+  timelineBlockTop: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    gap: Spacing.md,
+  },
+  timelineKindWrap: {
+    gap: 4,
+  },
+  timelineKindText: {
+    color: c.textSecondary,
+    fontSize: 11,
+    letterSpacing: 0.8,
+    textTransform: 'uppercase',
+    fontFamily: FontFamilyBold,
+  },
+  timelineRangeText: {
     color: c.text,
-    fontSize: 16,
+    fontSize: 13,
     fontWeight: '600',
     fontFamily: FontFamily,
   },
-  timelineTaskMeta: {
+  timelineCategoryWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+  },
+  timelineCategoryDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+  },
+  timelineCategoryText: {
     color: c.textSecondary,
-    fontSize: 13,
+    fontSize: 12,
     fontFamily: FontFamily,
   },
-  timelineBadge: {
-    borderRadius: BorderRadius.pill,
-    paddingHorizontal: Spacing.sm,
-    paddingVertical: 3,
-    backgroundColor: c.gray100,
-  },
-  timelineBadgeText: {
-    color: c.textSecondary,
-    fontSize: 11,
+  timelineTaskTitle: {
+    color: c.text,
+    fontSize: 17,
+    lineHeight: 22,
     fontWeight: '700',
     fontFamily: FontFamilyBold,
   },
-  gapRow: {
+  timelineBlockFooter: {
     flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
     gap: Spacing.md,
-    alignItems: 'stretch',
   },
-  gapTime: {
-    width: 72,
-    justifyContent: 'center',
-  },
-  gapTimeLabel: {
-    color: c.textTertiary,
+  timelineTaskMeta: {
+    color: c.textSecondary,
     fontSize: 12,
-    fontWeight: '600',
     fontFamily: FontFamily,
   },
-  gapTimeMeta: {
-    color: c.textTertiary,
-    fontSize: 11,
-    fontFamily: FontFamily,
-  },
-  gapCard: {
+  timelineGapCard: {
     flex: 1,
     borderRadius: BorderRadius.card,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: c.border,
     borderStyle: 'dashed',
     padding: Spacing.md,
+    justifyContent: 'center',
     backgroundColor: c.surfaceGlass,
+    gap: 4,
   },
-  gapTitle: {
+  timelineGapTitle: {
     color: c.text,
     fontSize: 14,
-    fontWeight: '600',
-    fontFamily: FontFamily,
+    fontWeight: '700',
+    fontFamily: FontFamilyBold,
   },
-  gapSubtitle: {
+  timelineGapMeta: {
     color: c.textSecondary,
-    fontSize: 13,
+    fontSize: 12,
     fontFamily: FontFamily,
   },
-  listSection: {
-    gap: 2,
-  },
-  taskRow: {
-    marginHorizontal: -Spacing.xxl,
-  },
-  emptyCard: {
-    borderRadius: BorderRadius.card,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: c.border,
-    padding: Spacing.lg,
-    backgroundColor: c.surface,
-    gap: Spacing.xs,
-  },
-  emptyTitle: {
-    color: c.text,
-    fontSize: 16,
-    fontWeight: '600',
+  timelineGapHint: {
+    color: c.textTertiary,
+    fontSize: 12,
     fontFamily: FontFamily,
   },
-  emptySubtitle: {
-    color: c.textSecondary,
-    fontSize: 14,
-    fontFamily: FontFamily,
-  },
-  renegotiationCard: {
-    borderRadius: BorderRadius.card,
+  queuePanel: {
+    borderRadius: 24,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: c.border,
     backgroundColor: c.surface,
     padding: Spacing.lg,
     gap: Spacing.md,
   },
-  renegotiationCopy: {
+  queueToggle: {
+    flexDirection: 'row',
+    gap: Spacing.xs,
+    padding: 4,
+    borderRadius: BorderRadius.pill,
+    backgroundColor: c.background,
+  },
+  queueToggleButton: {
+    paddingHorizontal: Spacing.md,
+    paddingVertical: 8,
+    borderRadius: BorderRadius.pill,
+  },
+  queueToggleButtonActive: {
+    backgroundColor: c.text,
+  },
+  queueToggleText: {
+    color: c.textSecondary,
+    fontSize: 13,
+    fontWeight: '700',
+    fontFamily: FontFamilyBold,
+  },
+  queueToggleTextActive: {
+    color: c.background,
+  },
+  queueBody: {
     gap: 4,
   },
-  renegotiationTitle: {
+  taskRow: {
+    marginHorizontal: -Spacing.md,
+  },
+  recoveryPanel: {
+    borderRadius: 24,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: c.border,
+    backgroundColor: c.background,
+    padding: Spacing.lg,
+    gap: Spacing.md,
+  },
+  recoveryStrip: {
+    gap: Spacing.sm,
+    paddingRight: Spacing.sm,
+  },
+  recoveryCard: {
+    width: 260,
+    borderRadius: BorderRadius.card,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: c.border,
+    padding: Spacing.md,
+    backgroundColor: c.surface,
+    gap: Spacing.md,
+  },
+  recoveryTitle: {
     color: c.text,
-    fontSize: 16,
-    fontWeight: '600',
-    fontFamily: FontFamily,
+    fontSize: 15,
+    fontWeight: '700',
+    fontFamily: FontFamilyBold,
   },
-  renegotiationMeta: {
+  recoveryMeta: {
     color: c.textSecondary,
-    fontSize: 14,
-    lineHeight: 20,
+    fontSize: 13,
+    lineHeight: 19,
     fontFamily: FontFamily,
   },
-  renegotiationActions: {
+  recoveryActions: {
     flexDirection: 'row',
     gap: Spacing.sm,
   },
-  secondaryInlineButton: {
+  recoveryButton: {
     paddingHorizontal: Spacing.md,
     paddingVertical: 8,
     borderRadius: BorderRadius.pill,
@@ -1219,83 +1377,56 @@ const createStyles = (c: ThemeColors, isDark: boolean) => StyleSheet.create({
     borderColor: c.border,
     backgroundColor: c.background,
   },
-  secondaryInlineButtonText: {
+  recoveryButtonText: {
     color: c.text,
     fontSize: 13,
     fontWeight: '700',
     fontFamily: FontFamilyBold,
   },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.45)',
-    justifyContent: 'center',
-    padding: Spacing.xl,
-  },
-  monthModal: {
-    borderRadius: 24,
-    backgroundColor: c.background,
+  inlineEmptyCard: {
+    borderRadius: BorderRadius.card,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: c.border,
+    backgroundColor: c.surface,
     padding: Spacing.lg,
-    gap: Spacing.md,
+    gap: 4,
   },
-  monthHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  monthTitle: {
+  inlineEmptyTitle: {
     color: c.text,
-    fontSize: 18,
+    fontSize: 15,
     fontWeight: '700',
     fontFamily: FontFamilyBold,
   },
-  monthWeekHeader: {
-    flexDirection: 'row',
+  inlineEmptySubtitle: {
+    color: c.textSecondary,
+    fontSize: 13,
+    lineHeight: 19,
+    fontFamily: FontFamily,
   },
-  monthWeekLabel: {
+  modalOverlay: {
     flex: 1,
-    textAlign: 'center',
-    color: c.textTertiary,
-    fontSize: 12,
-    fontWeight: '600',
-    fontFamily: FontFamily,
-  },
-  monthGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-  },
-  monthCell: {
-    width: '14.285%',
-    aspectRatio: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  monthCellActive: {
-    backgroundColor: c.text,
-    borderRadius: BorderRadius.card,
-  },
-  monthCellText: {
-    color: c.text,
-    fontSize: 15,
-    fontWeight: '600',
-    fontFamily: FontFamily,
-  },
-  monthCellTextActive: {
-    color: c.background,
-  },
-  monthTodayDot: {
-    width: 4,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: c.text,
-    marginTop: 4,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+    justifyContent: 'flex-end',
   },
   sheet: {
-    marginTop: 'auto',
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
     backgroundColor: c.background,
-    padding: Spacing.lg,
+    paddingHorizontal: Spacing.lg,
+    paddingTop: Spacing.sm,
+    paddingBottom: Spacing.xl,
     gap: Spacing.sm,
+  },
+  monthSheet: {
+    maxHeight: '70%',
+  },
+  sheetHandle: {
+    alignSelf: 'center',
+    width: 42,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: c.gray400,
+    marginBottom: Spacing.sm,
   },
   sheetTitle: {
     color: c.text,
@@ -1308,6 +1439,14 @@ const createStyles = (c: ThemeColors, isDark: boolean) => StyleSheet.create({
     fontSize: 14,
     lineHeight: 20,
     fontFamily: FontFamily,
+  },
+  sheetGroupLabel: {
+    color: c.textTertiary,
+    fontSize: 11,
+    letterSpacing: 0.8,
+    textTransform: 'uppercase',
+    marginTop: Spacing.sm,
+    fontFamily: FontFamilyBold,
   },
   sheetAction: {
     borderRadius: BorderRadius.card,
@@ -1348,5 +1487,58 @@ const createStyles = (c: ThemeColors, isDark: boolean) => StyleSheet.create({
     fontSize: 15,
     fontWeight: '700',
     fontFamily: FontFamilyBold,
+  },
+  monthHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: Spacing.sm,
+  },
+  monthTitle: {
+    color: c.text,
+    fontSize: 18,
+    fontWeight: '700',
+    fontFamily: FontFamilyBold,
+  },
+  monthWeekHeader: {
+    flexDirection: 'row',
+  },
+  monthWeekLabel: {
+    flex: 1,
+    textAlign: 'center',
+    color: c.textTertiary,
+    fontSize: 12,
+    fontWeight: '600',
+    fontFamily: FontFamily,
+  },
+  monthGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+  },
+  monthCell: {
+    width: '14.285%',
+    height: 44,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  monthCellActive: {
+    backgroundColor: c.text,
+    borderRadius: BorderRadius.card,
+  },
+  monthCellText: {
+    color: c.text,
+    fontSize: 15,
+    fontWeight: '600',
+    fontFamily: FontFamily,
+  },
+  monthCellTextActive: {
+    color: c.background,
+  },
+  monthTodayDot: {
+    width: 4,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: c.text,
+    marginTop: 4,
   },
 });

@@ -1,5 +1,5 @@
 import { DEFAULT_PREFERENCES, Task, UserPreferences } from '../types';
-import { addDays, daysFromNow, endOfDay, startOfDay } from './dateUtils';
+import { addDays, daysFromNow, endOfDay, isTimestampOnDay, startOfDay } from './dateUtils';
 
 export type WeekStart = UserPreferences['weekStartsOn'];
 export type TimeFormat = UserPreferences['timeFormat'];
@@ -9,6 +9,30 @@ export interface DayboardTimelineItem {
   startAt: number;
   endAt: number;
   kind: 'scheduled' | 'deadline';
+}
+
+export interface TimelineGap {
+  startAt: number;
+  endAt: number;
+}
+
+export type TimelineRow =
+  | { type: 'gap'; gap: TimelineGap }
+  | { type: 'item'; item: DayboardTimelineItem };
+
+export interface TimelineWindow {
+  startAt: number;
+  endAt: number;
+  startHour: number;
+  endHour: number;
+}
+
+export interface SchedulePlacementResult {
+  startAt: number;
+  endAt: number;
+  durationMinutes: number;
+  fitsGap: boolean;
+  availableGapMinutes: number | null;
 }
 
 export interface DayboardData {
@@ -55,6 +79,33 @@ export function getTaskDurationMinutes(task: Task): number {
   }
 
   return task.estimatedMinutes ?? DEFAULT_SCHEDULE_MINUTES;
+}
+
+export function isTaskRelevantToDate(task: Task, dayStart: number): boolean {
+  if (isTimestampOnDay(task.scheduledStartAt, dayStart)) return true;
+  if (isTimestampOnDay(task.deadline, dayStart)) return true;
+  if (!task.deadline && !task.scheduledStartAt && isTimestampOnDay(task.createdAt, dayStart)) return true;
+  return false;
+}
+
+export function resolveSchedulePlacement(
+  task: Task,
+  startAt: number,
+  gap?: TimelineGap | null,
+): SchedulePlacementResult {
+  const durationMinutes = getTaskDurationMinutes(task);
+  const endAt = startAt + durationMinutes * 60000;
+  const availableGapMinutes = gap
+    ? Math.max(0, Math.floor((gap.endAt - gap.startAt) / 60000))
+    : null;
+
+  return {
+    startAt,
+    endAt,
+    durationMinutes,
+    fitsGap: availableGapMinutes == null ? true : durationMinutes <= availableGapMinutes,
+    availableGapMinutes,
+  };
 }
 
 export function formatCalendarTime(timestamp: number, timeFormat: TimeFormat): string {
@@ -116,6 +167,74 @@ export function getMonthGrid(
   }
 
   return cells;
+}
+
+export function getTimelineWindow(
+  items: DayboardTimelineItem[],
+  selectedDate: number,
+): TimelineWindow {
+  const dayStart = startOfDay(new Date(selectedDate)).getTime();
+
+  if (items.length === 0) {
+    return {
+      startAt: dayStart + 7 * 60 * 60 * 1000,
+      endAt: dayStart + 22 * 60 * 60 * 1000,
+      startHour: 7,
+      endHour: 22,
+    };
+  }
+
+  const earliestHour = Math.min(...items.map(item => new Date(item.startAt).getHours()));
+  const latestHour = Math.max(...items.map(item => new Date(item.endAt).getHours()));
+  const startHour = Math.max(0, Math.min(earliestHour - 1, 7));
+  const endHour = Math.min(23, Math.max(latestHour + 1, 22));
+
+  return {
+    startAt: dayStart + startHour * 60 * 60 * 1000,
+    endAt: dayStart + (endHour + 1) * 60 * 60 * 1000,
+    startHour,
+    endHour: endHour + 1,
+  };
+}
+
+export function buildTimelineRows(
+  items: DayboardTimelineItem[],
+  selectedDate: number,
+  minimumGapMinutes = 20,
+): { rows: TimelineRow[]; window: TimelineWindow } {
+  const window = getTimelineWindow(items, selectedDate);
+  const clampedItems = items
+    .map(item => ({
+      ...item,
+      startAt: Math.max(window.startAt, item.startAt),
+      endAt: Math.min(window.endAt, Math.max(item.endAt, item.startAt + 15 * 60 * 1000)),
+    }))
+    .filter(item => item.endAt > window.startAt && item.startAt < window.endAt)
+    .sort((a, b) => a.startAt - b.startAt);
+
+  const rows: TimelineRow[] = [];
+  let cursor = window.startAt;
+
+  for (const item of clampedItems) {
+    if (item.startAt - cursor >= minimumGapMinutes * 60 * 1000) {
+      rows.push({
+        type: 'gap',
+        gap: { startAt: cursor, endAt: item.startAt },
+      });
+    }
+
+    rows.push({ type: 'item', item });
+    cursor = Math.max(cursor, item.endAt);
+  }
+
+  if (window.endAt - cursor >= minimumGapMinutes * 60 * 1000 || rows.length === 0) {
+    rows.push({
+      type: 'gap',
+      gap: { startAt: cursor, endAt: window.endAt },
+    });
+  }
+
+  return { rows, window };
 }
 
 function computeFlexibleScore(task: Task): number {

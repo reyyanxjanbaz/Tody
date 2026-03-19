@@ -1,4 +1,10 @@
-import { getDayboardData, getWeekDays } from '../src/utils/calendarDayboard';
+import {
+  buildTimelineRows,
+  getDayboardData,
+  getWeekDays,
+  isTaskRelevantToDate,
+  resolveSchedulePlacement,
+} from '../src/utils/calendarDayboard';
 import { Task } from '../src/types';
 
 function makeTask(overrides: Partial<Task>): Task {
@@ -114,5 +120,59 @@ describe('calendarDayboard', () => {
 
     expect(sundayWeek[0].getDay()).toBe(0);
     expect(mondayWeek[0].getDay()).toBe(1);
+  });
+
+  it('treats scheduled-only tasks as relevant to the scheduled date', () => {
+    const selectedDate = new Date(2026, 2, 21, 0, 0, 0, 0).getTime();
+    const task = makeTask({
+      scheduledStartAt: new Date(2026, 2, 21, 14, 0, 0, 0).getTime(),
+      scheduledEndAt: new Date(2026, 2, 21, 15, 0, 0, 0).getTime(),
+      deadline: null,
+    });
+
+    expect(isTaskRelevantToDate(task, selectedDate)).toBe(true);
+  });
+
+  it('rejects schedule placement when a task overflows the selected gap', () => {
+    const task = makeTask({
+      estimatedMinutes: 90,
+    });
+
+    const placement = resolveSchedulePlacement(
+      task,
+      new Date(2026, 2, 20, 10, 0, 0, 0).getTime(),
+      {
+        startAt: new Date(2026, 2, 20, 10, 0, 0, 0).getTime(),
+        endAt: new Date(2026, 2, 20, 10, 30, 0, 0).getTime(),
+      },
+    );
+
+    expect(placement.fitsGap).toBe(false);
+    expect(placement.availableGapMinutes).toBe(30);
+  });
+
+  it('expands the timeline window to include early and late commitments', () => {
+    const selectedDate = new Date(2026, 2, 20, 0, 0, 0, 0).getTime();
+    const committed = [
+      {
+        task: makeTask({ id: 'early' }),
+        startAt: new Date(2026, 2, 20, 6, 30, 0, 0).getTime(),
+        endAt: new Date(2026, 2, 20, 7, 15, 0, 0).getTime(),
+        kind: 'scheduled' as const,
+      },
+      {
+        task: makeTask({ id: 'late' }),
+        startAt: new Date(2026, 2, 20, 22, 30, 0, 0).getTime(),
+        endAt: new Date(2026, 2, 20, 23, 0, 0, 0).getTime(),
+        kind: 'scheduled' as const,
+      },
+    ];
+
+    const { rows, window } = buildTimelineRows(committed, selectedDate);
+
+    expect(window.startHour).toBeLessThanOrEqual(6);
+    expect(window.endHour).toBeGreaterThanOrEqual(23);
+    expect(rows.some(row => row.type === 'item' && row.item.task.id === 'early')).toBe(true);
+    expect(rows.some(row => row.type === 'item' && row.item.task.id === 'late')).toBe(true);
   });
 });

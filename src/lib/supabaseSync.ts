@@ -73,6 +73,18 @@ function isResponseNetworkError(error: { message: string; [k: string]: any } | n
   );
 }
 
+function isScheduleFieldSchemaError(message: string | undefined): boolean {
+  if (!message) return false;
+  return /scheduled_start_at|scheduled_end_at/i.test(message);
+}
+
+function stripScheduleFields<T extends Record<string, any>>(row: T): T {
+  const sanitized = { ...row };
+  delete sanitized.scheduled_start_at;
+  delete sanitized.scheduled_end_at;
+  return sanitized;
+}
+
 /**
  * Execute `fn` up to MAX_RETRIES times with exponential back-off.
  *
@@ -461,6 +473,7 @@ export async function pushTasks(
   if (tasks.length === 0) return;
 
   const rows = tasks.map(t => taskToDbRow(t, userId, catMap));
+  const containsScheduledFields = tasks.some(t => t.scheduledStartAt || t.scheduledEndAt);
 
   // Supabase / backend both have a 200-row limit per batch; chunk accordingly.
   const CHUNK = 200;
@@ -476,10 +489,41 @@ export async function pushTasks(
           supabase.from('tasks').upsert(chunk as any, { onConflict: 'id' }),
         );
         if (error) {
-          logError(`pushTasks fallback chunk ${i}-${i + chunk.length} failed:`, error.message);
+          if (containsScheduledFields && isScheduleFieldSchemaError(error.message)) {
+            const sanitizedChunk = chunk.map(row => stripScheduleFields(row as Record<string, any>));
+            const { error: sanitizedErr } = await withRetry(`pushTasks:fallback:sanitized[${i}]`, () =>
+              supabase.from('tasks').upsert(sanitizedChunk as any, { onConflict: 'id' }),
+            );
+            if (sanitizedErr) {
+              logError(`pushTasks sanitized fallback chunk ${i}-${i + chunk.length} failed:`, sanitizedErr.message);
+            } else {
+              logWarn(`pushTasks chunk ${i}-${i + chunk.length}: schedule fields not persisted because live schema is behind the client`);
+            }
+          } else {
+            logError(`pushTasks fallback chunk ${i}-${i + chunk.length} failed:`, error.message);
+          }
         }
       } else if (apiError) {
-        logError(`pushTasks API chunk ${i}-${i + chunk.length} failed:`, apiError.message);
+        if (containsScheduledFields && isScheduleFieldSchemaError(apiError.message)) {
+          const sanitizedChunk = chunk.map(row => stripScheduleFields(row as Record<string, any>));
+          const { error: retryError, isBackendDown: retryDown } = await api.post('/tasks/batch', sanitizedChunk);
+          if (retryDown) {
+            const { error: fallbackErr } = await withRetry(`pushTasks:sanitized:fallback[${i}]`, () =>
+              supabase.from('tasks').upsert(sanitizedChunk as any, { onConflict: 'id' }),
+            );
+            if (fallbackErr) {
+              logError(`pushTasks sanitized API+fallback chunk ${i}-${i + chunk.length} failed:`, fallbackErr.message);
+            } else {
+              logWarn(`pushTasks chunk ${i}-${i + chunk.length}: schedule fields not persisted because live schema is behind the client`);
+            }
+          } else if (retryError) {
+            logError(`pushTasks sanitized API chunk ${i}-${i + chunk.length} failed:`, retryError.message);
+          } else {
+            logWarn(`pushTasks chunk ${i}-${i + chunk.length}: schedule fields not persisted because live schema is behind the client`);
+          }
+        } else {
+          logError(`pushTasks API chunk ${i}-${i + chunk.length} failed:`, apiError.message);
+        }
       }
     } catch (e: any) {
       logError(`pushTasks chunk ${i}-${i + chunk.length} failed after retries:`, e?.message ?? e);
@@ -508,7 +552,16 @@ export async function upsertTask(
           supabase.from('tasks').upsert(parentRow as any, { onConflict: 'id' }),
         );
         if (parentErr && !isResponseNetworkError(parentErr)) {
-          logWarn('upsertTask parent pre-sync failed:', parentErr.message);
+          if (isScheduleFieldSchemaError(parentErr.message)) {
+            const { error: sanitizedParentErr } = await withRetry('upsertTask:parent:sanitized', () =>
+              supabase.from('tasks').upsert(stripScheduleFields(parentRow as Record<string, any>) as any, { onConflict: 'id' }),
+            );
+            if (sanitizedParentErr) {
+              logWarn('upsertTask parent sanitized pre-sync failed:', sanitizedParentErr.message);
+            }
+          } else {
+            logWarn('upsertTask parent pre-sync failed:', parentErr.message);
+          }
         }
       }
     }
@@ -520,6 +573,16 @@ export async function upsertTask(
     if (error) {
       if (isResponseNetworkError(error)) {
         logWarn('upsertTask: transient network error (will retry on next sync):', error.message);
+      } else if (isScheduleFieldSchemaError(error.message)) {
+        const sanitizedRow = stripScheduleFields(row as Record<string, any>);
+        const { error: sanitizedErr } = await withRetry('upsertTask:sanitized', () =>
+          supabase.from('tasks').upsert(sanitizedRow as any, { onConflict: 'id' }),
+        );
+        if (sanitizedErr) {
+          logError('upsertTask sanitized fallback failed:', sanitizedErr.message);
+        } else {
+          logWarn('upsertTask: live schema is behind the client, schedule fields were saved locally only');
+        }
       } else {
         logError('upsertTask failed:', error.message);
       }
