@@ -7,6 +7,7 @@ import {
   ScrollView,
   StyleSheet,
   Text,
+  useWindowDimensions,
   View,
 } from 'react-native';
 import Animated, { FadeIn, FadeInDown } from 'react-native-reanimated';
@@ -54,10 +55,10 @@ type QueueMode = 'due' | 'flexible';
 
 const WEEKDAY_SHORT_SUN = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
 const WEEKDAY_SHORT_MON = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
-const TIMELINE_PX_PER_MIN = 0.85;
-const TIMELINE_MIN_ITEM_HEIGHT = 84;
-const TIMELINE_MAX_ITEM_HEIGHT = 220;
-const TIMELINE_MIN_GAP_HEIGHT = 42;
+const TIMELINE_PX_PER_MIN = 0.72;
+const TIMELINE_MIN_ITEM_HEIGHT = 72;
+const TIMELINE_MAX_ITEM_HEIGHT = 168;
+const TIMELINE_MIN_GAP_HEIGHT = 34;
 
 function getDisplayTitle(timestamp: number): string {
   return new Date(timestamp).toLocaleDateString('en-US', {
@@ -99,7 +100,8 @@ function formatTimeRange(startAt: number, endAt: number, timeFormat: UserPrefere
 
 export function CalendarScreen({ navigation }: Props) {
   const { colors, isDark } = useTheme();
-  const styles = React.useMemo(() => createStyles(colors, isDark), [colors, isDark]);
+  const { width: screenWidth } = useWindowDimensions();
+  const styles = React.useMemo(() => createStyles(colors, isDark, screenWidth), [colors, isDark, screenWidth]);
   const insets = useSafeAreaInsets();
   const {
     tasks,
@@ -456,21 +458,28 @@ export function CalendarScreen({ navigation }: Props) {
         showsVerticalScrollIndicator={false}
         contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 36 }]}
       >
-        <Animated.View entering={FadeInDown.duration(240)} style={styles.controlPanel}>
-          <View style={styles.controlHeader}>
-            <AnimatedPressable
+	        <Animated.View entering={FadeInDown.duration(240)} style={styles.controlPanel}>
+	          <View style={styles.controlHeader}>
+	            <AnimatedPressable
               onPress={() => {
                 setMonthJumpVisible(true);
                 haptic('selection');
               }}
-              style={styles.dateButton}
-            >
-              <View>
-                <Text style={styles.dateLabel}>Dayboard</Text>
-                <Text style={styles.dateTitle}>{selectedTitle}</Text>
-              </View>
-              <Icon name="chevron-down" size={18} color={colors.textSecondary} />
-            </AnimatedPressable>
+	              style={styles.dateButton}
+	            >
+	              <View style={styles.dateCopy}>
+	                <Text style={styles.dateLabel}>Dayboard</Text>
+	                <Text
+	                  style={styles.dateTitle}
+	                  numberOfLines={1}
+	                  adjustsFontSizeToFit
+	                  minimumFontScale={0.85}
+	                >
+	                  {selectedTitle}
+	                </Text>
+	              </View>
+	              <Icon name="chevron-down" size={18} color={colors.textSecondary} />
+	            </AnimatedPressable>
 
             <View style={styles.metricsWrap}>
               <View style={styles.metricPill}>
@@ -538,13 +547,13 @@ export function CalendarScreen({ navigation }: Props) {
         </Animated.View>
 
         <Animated.View entering={FadeIn.delay(60).duration(220)} style={styles.checkpointPanel}>
-          <View style={styles.panelHeader}>
-            <View>
-              <Text style={styles.panelEyebrow}>{isSelectedToday ? 'Today at a glance' : 'Day snapshot'}</Text>
-              <Text style={styles.panelTitle}>Calm, committed, and still adjustable.</Text>
-            </View>
-            <Text style={styles.panelMeta}>{dayboard.committedMinutes} committed · {dayboard.flexibleMinutes} flexible</Text>
-          </View>
+	          <View style={styles.panelHeader}>
+	            <View style={styles.panelCopy}>
+	              <Text style={styles.panelEyebrow}>{isSelectedToday ? 'Today at a glance' : 'Day snapshot'}</Text>
+	              <Text style={styles.panelTitle}>Calm, committed, and still adjustable.</Text>
+	            </View>
+	            <Text style={styles.panelMeta}>{dayboard.committedMinutes} committed · {dayboard.flexibleMinutes} flexible</Text>
+	          </View>
 
           <Text style={styles.panelStatus}>{dayboard.statusText}</Text>
 
@@ -583,26 +592,26 @@ export function CalendarScreen({ navigation }: Props) {
         </Animated.View>
 
         <Animated.View entering={FadeIn.delay(120).duration(220)} style={styles.timelinePanel}>
-          <View style={styles.panelHeader}>
-            <View>
-              <Text style={styles.panelEyebrow}>Committed</Text>
-              <Text style={styles.panelTitle}>The day in time, not just in order.</Text>
-            </View>
-            <Text style={styles.panelMeta}>{timelineRangeLabel}</Text>
-          </View>
+	          <View style={styles.panelHeader}>
+	            <View style={styles.panelCopy}>
+	              <Text style={styles.panelEyebrow}>Committed</Text>
+	              <Text style={styles.panelTitle}>The day in time, not just in order.</Text>
+	            </View>
+	            <Text style={styles.panelMeta}>{timelineRangeLabel}</Text>
+	          </View>
 
           <View style={styles.timelineCanvas}>
             {timelineRows.map(renderTimelineRow)}
           </View>
         </Animated.View>
 
-        <Animated.View entering={FadeIn.delay(180).duration(220)} style={styles.queuePanel}>
-          <View style={styles.panelHeader}>
-            <View>
-              <Text style={styles.panelEyebrow}>Queue</Text>
-              <Text style={styles.panelTitle}>Due and flexible work, one calmer surface.</Text>
-            </View>
-            <View style={styles.queueToggle}>
+	        <Animated.View entering={FadeIn.delay(180).duration(220)} style={styles.queuePanel}>
+	          <View style={[styles.panelHeader, styles.queueHeader]}>
+	            <View style={styles.panelCopy}>
+	              <Text style={styles.panelEyebrow}>Queue</Text>
+	              <Text style={styles.panelTitle}>Due and flexible work, one calmer surface.</Text>
+	            </View>
+	            <View style={styles.queueToggle}>
               <AnimatedPressable
                 onPress={() => setQueueMode('due')}
                 style={[styles.queueToggleButton, queueMode === 'due' && styles.queueToggleButtonActive]}
@@ -633,13 +642,13 @@ export function CalendarScreen({ navigation }: Props) {
         </Animated.View>
 
         <Animated.View entering={FadeIn.delay(240).duration(220)} style={styles.recoveryPanel}>
-          <View style={styles.panelHeader}>
-            <View>
-              <Text style={styles.panelEyebrow}>Recovery</Text>
-              <Text style={styles.panelTitle}>Planning debt stays negotiable.</Text>
-            </View>
-            <Text style={styles.panelMeta}>{dayboard.renegotiation.length} items</Text>
-          </View>
+	          <View style={styles.panelHeader}>
+	            <View style={styles.panelCopy}>
+	              <Text style={styles.panelEyebrow}>Recovery</Text>
+	              <Text style={styles.panelTitle}>Planning debt stays negotiable.</Text>
+	            </View>
+	            <Text style={styles.panelMeta}>{dayboard.renegotiation.length} items</Text>
+	          </View>
 
           {dayboard.renegotiation.length > 0 ? (
             <ScrollView
@@ -683,62 +692,68 @@ export function CalendarScreen({ navigation }: Props) {
         animationType="fade"
         onRequestClose={() => setMonthJumpVisible(false)}
       >
-        <Pressable style={styles.modalOverlay} onPress={() => setMonthJumpVisible(false)}>
-          <Pressable style={[styles.sheet, styles.monthSheet]} onPress={() => {}}>
-            <View style={styles.sheetHandle} />
-            <View style={styles.monthHeader}>
-              <AnimatedPressable
-                onPress={() => {
-                  const prevMonth = new Date(monthCursor.year, monthCursor.month - 1, 1);
-                  setMonthCursor({ year: prevMonth.getFullYear(), month: prevMonth.getMonth() });
-                }}
-              >
-                <Icon name="chevron-back" size={18} color={colors.text} />
-              </AnimatedPressable>
-              <Text style={styles.monthTitle}>{getMonthTitle(monthCursor.year, monthCursor.month)}</Text>
-              <AnimatedPressable
-                onPress={() => {
-                  const nextMonth = new Date(monthCursor.year, monthCursor.month + 1, 1);
-                  setMonthCursor({ year: nextMonth.getFullYear(), month: nextMonth.getMonth() });
-                }}
-              >
-                <Icon name="chevron-forward" size={18} color={colors.text} />
-              </AnimatedPressable>
-            </View>
+	        <Pressable style={styles.modalOverlay} onPress={() => setMonthJumpVisible(false)}>
+	          <Pressable style={[styles.sheet, styles.monthSheet]} onPress={() => {}}>
+	            <ScrollView
+	              bounces={false}
+	              showsVerticalScrollIndicator={false}
+	              contentContainerStyle={styles.sheetScrollContent}
+	            >
+	              <View style={styles.sheetHandle} />
+	              <View style={styles.monthHeader}>
+	                <AnimatedPressable
+	                  onPress={() => {
+	                    const prevMonth = new Date(monthCursor.year, monthCursor.month - 1, 1);
+	                    setMonthCursor({ year: prevMonth.getFullYear(), month: prevMonth.getMonth() });
+	                  }}
+	                >
+	                  <Icon name="chevron-back" size={18} color={colors.text} />
+	                </AnimatedPressable>
+	                <Text style={styles.monthTitle}>{getMonthTitle(monthCursor.year, monthCursor.month)}</Text>
+	                <AnimatedPressable
+	                  onPress={() => {
+	                    const nextMonth = new Date(monthCursor.year, monthCursor.month + 1, 1);
+	                    setMonthCursor({ year: nextMonth.getFullYear(), month: nextMonth.getMonth() });
+	                  }}
+	                >
+	                  <Icon name="chevron-forward" size={18} color={colors.text} />
+	                </AnimatedPressable>
+	              </View>
 
-            <View style={styles.monthWeekHeader}>
-              {weekdayHeaders.map(label => (
-                <Text key={label} style={styles.monthWeekLabel}>{label}</Text>
-              ))}
-            </View>
+	              <View style={styles.monthWeekHeader}>
+	                {weekdayHeaders.map(label => (
+	                  <Text key={label} style={styles.monthWeekLabel}>{label}</Text>
+	                ))}
+	              </View>
 
-            <View style={styles.monthGrid}>
-              {monthGrid.map((date, index) => {
-                if (!date) {
-                  return <View key={`blank-${index}`} style={styles.monthCell} />;
-                }
+	              <View style={styles.monthGrid}>
+	                {monthGrid.map((date, index) => {
+	                  if (!date) {
+	                    return <View key={`blank-${index}`} style={styles.monthCell} />;
+	                  }
 
-                const ts = startOfDay(date).getTime();
-                const isActive = ts === selectedDate;
-                const isToday = ts === startOfDay().getTime();
+	                  const ts = startOfDay(date).getTime();
+	                  const isActive = ts === selectedDate;
+	                  const isToday = ts === startOfDay().getTime();
 
-                return (
-                  <AnimatedPressable
-                    key={ts}
-                    onPress={() => jumpDate(ts)}
-                    style={[styles.monthCell, isActive && styles.monthCellActive]}
-                  >
-                    <Text style={[styles.monthCellText, isActive && styles.monthCellTextActive]}>
-                      {date.getDate()}
-                    </Text>
-                    {isToday && !isActive && <View style={styles.monthTodayDot} />}
-                  </AnimatedPressable>
-                );
-              })}
-            </View>
-          </Pressable>
-        </Pressable>
-      </Modal>
+	                  return (
+	                    <AnimatedPressable
+	                      key={ts}
+	                      onPress={() => jumpDate(ts)}
+	                      style={[styles.monthCell, isActive && styles.monthCellActive]}
+	                    >
+	                      <Text style={[styles.monthCellText, isActive && styles.monthCellTextActive]}>
+	                        {date.getDate()}
+	                      </Text>
+	                      {isToday && !isActive && <View style={styles.monthTodayDot} />}
+	                    </AnimatedPressable>
+	                  );
+	                })}
+	              </View>
+	            </ScrollView>
+	          </Pressable>
+	        </Pressable>
+	      </Modal>
 
       <Modal
         visible={actionTask != null}
@@ -746,60 +761,66 @@ export function CalendarScreen({ navigation }: Props) {
         animationType="fade"
         onRequestClose={() => setActionTask(null)}
       >
-        <Pressable style={styles.modalOverlay} onPress={() => setActionTask(null)}>
-          <Pressable style={styles.sheet} onPress={() => {}}>
-            <View style={styles.sheetHandle} />
-            <Text style={styles.sheetTitle}>{actionTask?.title}</Text>
-            <Text style={styles.sheetSubtitle}>Reframe the task, reschedule it, or clear it without leaving the board.</Text>
+	        <Pressable style={styles.modalOverlay} onPress={() => setActionTask(null)}>
+	          <Pressable style={styles.sheet} onPress={() => {}}>
+	            <ScrollView
+	              bounces={false}
+	              showsVerticalScrollIndicator={false}
+	              contentContainerStyle={styles.sheetScrollContent}
+	            >
+	              <View style={styles.sheetHandle} />
+	              <Text style={styles.sheetTitle} numberOfLines={2}>{actionTask?.title}</Text>
+	              <Text style={styles.sheetSubtitle}>Reframe the task, reschedule it, or clear it without leaving the board.</Text>
 
-            <Text style={styles.sheetGroupLabel}>Reframe now</Text>
-            {[
-              { key: 'now', label: 'Do now' },
-              { key: 'done', label: 'Mark done' },
-            ].map(option => {
-              const disabled = option.key === 'now' && !!actionTask?.startedAt;
-              return (
-                <AnimatedPressable
-                  key={option.key}
-                  disabled={disabled}
-                  onPress={() => handleAction(option.key as 'now' | 'done')}
-                  style={styles.sheetAction}
-                >
-                  <Text style={[styles.sheetActionText, disabled && styles.sheetActionTextDisabled]}>
-                    {option.label}
-                  </Text>
-                </AnimatedPressable>
-              );
-            })}
+	              <Text style={styles.sheetGroupLabel}>Reframe now</Text>
+	              {[
+	                { key: 'now', label: 'Do now' },
+	                { key: 'done', label: 'Mark done' },
+	              ].map(option => {
+	                const disabled = option.key === 'now' && !!actionTask?.startedAt;
+	                return (
+	                  <AnimatedPressable
+	                    key={option.key}
+	                    disabled={disabled}
+	                    onPress={() => handleAction(option.key as 'now' | 'done')}
+	                    style={styles.sheetAction}
+	                  >
+	                    <Text style={[styles.sheetActionText, disabled && styles.sheetActionTextDisabled]}>
+	                      {option.label}
+	                    </Text>
+	                  </AnimatedPressable>
+	                );
+	              })}
 
-            <Text style={styles.sheetGroupLabel}>Reschedule</Text>
-            {[
-              { key: 'pick', label: 'Pick time' },
-              { key: 'tomorrow', label: 'Tomorrow' },
-              { key: 'unschedule', label: 'Unschedule', disabled: !actionTask?.scheduledStartAt },
-            ].map(option => (
-              <AnimatedPressable
-                key={option.key}
-                disabled={!!option.disabled}
-                onPress={() => handleAction(option.key as 'pick' | 'tomorrow' | 'unschedule')}
-                style={styles.sheetAction}
-              >
-                <Text style={[styles.sheetActionText, option.disabled && styles.sheetActionTextDisabled]}>
-                  {option.label}
-                </Text>
-              </AnimatedPressable>
-            ))}
+	              <Text style={styles.sheetGroupLabel}>Reschedule</Text>
+	              {[
+	                { key: 'pick', label: 'Pick time' },
+	                { key: 'tomorrow', label: 'Tomorrow' },
+	                { key: 'unschedule', label: 'Unschedule', disabled: !actionTask?.scheduledStartAt },
+	              ].map(option => (
+	                <AnimatedPressable
+	                  key={option.key}
+	                  disabled={!!option.disabled}
+	                  onPress={() => handleAction(option.key as 'pick' | 'tomorrow' | 'unschedule')}
+	                  style={styles.sheetAction}
+	                >
+	                  <Text style={[styles.sheetActionText, option.disabled && styles.sheetActionTextDisabled]}>
+	                    {option.label}
+	                  </Text>
+	                </AnimatedPressable>
+	              ))}
 
-            <Text style={styles.sheetGroupLabel}>Exit</Text>
-            <AnimatedPressable
-              onPress={() => handleAction('archive')}
-              style={styles.sheetAction}
-            >
-              <Text style={styles.sheetActionText}>Archive</Text>
-            </AnimatedPressable>
-          </Pressable>
-        </Pressable>
-      </Modal>
+	              <Text style={styles.sheetGroupLabel}>Exit</Text>
+	              <AnimatedPressable
+	                onPress={() => handleAction('archive')}
+	                style={styles.sheetAction}
+	              >
+	                <Text style={styles.sheetActionText}>Archive</Text>
+	              </AnimatedPressable>
+	            </ScrollView>
+	          </Pressable>
+	        </Pressable>
+	      </Modal>
 
       <Modal
         visible={selectedGap != null}
@@ -807,38 +828,44 @@ export function CalendarScreen({ navigation }: Props) {
         animationType="fade"
         onRequestClose={() => setSelectedGap(null)}
       >
-        <Pressable style={styles.modalOverlay} onPress={() => setSelectedGap(null)}>
-          <Pressable style={styles.sheet} onPress={() => {}}>
-            <View style={styles.sheetHandle} />
-            <Text style={styles.sheetTitle}>Place into pocket</Text>
-            <Text style={styles.sheetSubtitle}>
-              {selectedGap
-                ? `${formatCalendarTime(selectedGap.startAt, prefs.timeFormat)} - ${formatCalendarTime(selectedGap.endAt, prefs.timeFormat)}`
-                : ''}
-            </Text>
+	        <Pressable style={styles.modalOverlay} onPress={() => setSelectedGap(null)}>
+	          <Pressable style={styles.sheet} onPress={() => {}}>
+	            <ScrollView
+	              bounces={false}
+	              showsVerticalScrollIndicator={false}
+	              contentContainerStyle={styles.sheetScrollContent}
+	            >
+	              <View style={styles.sheetHandle} />
+	              <Text style={styles.sheetTitle}>Place into pocket</Text>
+	              <Text style={styles.sheetSubtitle}>
+	                {selectedGap
+	                  ? `${formatCalendarTime(selectedGap.startAt, prefs.timeFormat)} - ${formatCalendarTime(selectedGap.endAt, prefs.timeFormat)}`
+	                  : ''}
+	              </Text>
 
-            {dayboard.flexible.slice(0, 5).length > 0 ? (
-              dayboard.flexible.slice(0, 5).map(task => (
-                <AnimatedPressable
-                  key={task.id}
-                  onPress={() => {
-                    if (!selectedGap) return;
-                    scheduleIntoGap(task, selectedGap);
-                  }}
-                  style={styles.sheetAction}
-                >
-                  <View style={styles.sheetTaskRow}>
-                    <Text style={styles.sheetActionText}>{task.title}</Text>
-                    <Text style={styles.sheetTaskMeta}>{getTaskDurationMinutes(task)}m</Text>
-                  </View>
-                </AnimatedPressable>
-              ))
-            ) : (
-              <Text style={styles.sheetSubtitle}>No flexible tasks are waiting to be placed.</Text>
-            )}
-          </Pressable>
-        </Pressable>
-      </Modal>
+	              {dayboard.flexible.slice(0, 5).length > 0 ? (
+	                dayboard.flexible.slice(0, 5).map(task => (
+	                  <AnimatedPressable
+	                    key={task.id}
+	                    onPress={() => {
+	                      if (!selectedGap) return;
+	                      scheduleIntoGap(task, selectedGap);
+	                    }}
+	                    style={styles.sheetAction}
+	                  >
+	                    <View style={styles.sheetTaskRow}>
+	                      <Text style={styles.sheetTaskTitle} numberOfLines={2}>{task.title}</Text>
+	                      <Text style={styles.sheetTaskMeta}>{getTaskDurationMinutes(task)}m</Text>
+	                    </View>
+	                  </AnimatedPressable>
+	                ))
+	              ) : (
+	                <Text style={styles.sheetSubtitle}>No flexible tasks are waiting to be placed.</Text>
+	              )}
+	            </ScrollView>
+	          </Pressable>
+	        </Pressable>
+	      </Modal>
 
       {showSchedulePicker && scheduleTask && Platform.OS === 'android' && (
         <DateTimePicker
@@ -859,57 +886,73 @@ export function CalendarScreen({ navigation }: Props) {
           setScheduleTask(null);
         }}
       >
-        <Pressable
-          style={styles.modalOverlay}
-          onPress={() => {
-            setShowSchedulePicker(false);
-            setScheduleTask(null);
-          }}
-        >
-          <Pressable style={styles.sheet} onPress={() => {}}>
-            <View style={styles.sheetHandle} />
-            <Text style={styles.sheetTitle}>Pick time</Text>
-            <Text style={styles.sheetSubtitle}>{scheduleTask?.title}</Text>
-            <DateTimePicker
-              value={schedulePickerDate}
-              mode="datetime"
-              display="spinner"
-              minimumDate={new Date(selectedDate)}
-              onChange={handleScheduleChange}
-              textColor={colors.text}
-            />
-            <AnimatedPressable
-              onPress={() => {
-                if (scheduleTask) {
-                  commitScheduledPlacement(scheduleTask, schedulePickerDate.getTime());
-                }
-              }}
-              style={styles.confirmButton}
-            >
-              <Text style={styles.confirmButtonText}>Set block</Text>
-            </AnimatedPressable>
-          </Pressable>
-        </Pressable>
-      </Modal>
+	        <Pressable
+	          style={styles.modalOverlay}
+	          onPress={() => {
+	            setShowSchedulePicker(false);
+	            setScheduleTask(null);
+	          }}
+	        >
+	          <Pressable style={styles.sheet} onPress={() => {}}>
+	            <ScrollView
+	              bounces={false}
+	              showsVerticalScrollIndicator={false}
+	              contentContainerStyle={styles.sheetScrollContent}
+	            >
+	              <View style={styles.sheetHandle} />
+	              <Text style={styles.sheetTitle}>Pick time</Text>
+	              <Text style={styles.sheetSubtitle} numberOfLines={2}>{scheduleTask?.title}</Text>
+	              <DateTimePicker
+	                value={schedulePickerDate}
+	                mode="datetime"
+	                display="spinner"
+	                minimumDate={new Date(selectedDate)}
+	                onChange={handleScheduleChange}
+	                textColor={colors.text}
+	              />
+	              <AnimatedPressable
+	                onPress={() => {
+	                  if (scheduleTask) {
+	                    commitScheduledPlacement(scheduleTask, schedulePickerDate.getTime());
+	                  }
+	                }}
+	                style={styles.confirmButton}
+	              >
+	                <Text style={styles.confirmButtonText}>Set block</Text>
+	              </AnimatedPressable>
+	            </ScrollView>
+	          </Pressable>
+	        </Pressable>
+	      </Modal>
     </View>
   );
 }
 
-const createStyles = (c: ThemeColors, isDark: boolean) => StyleSheet.create({
+const createStyles = (c: ThemeColors, isDark: boolean, screenWidth: number) => {
+  const isCompact = screenWidth < 390;
+  const isNarrow = screenWidth < 360;
+  const horizontalPadding = isNarrow ? Spacing.md : Spacing.lg;
+  const panelPadding = isNarrow ? Spacing.md : Spacing.lg;
+  const panelRadius = isCompact ? 20 : 24;
+  const suggestionCardWidth = Math.min(208, Math.max(172, screenWidth - horizontalPadding * 2 - panelPadding * 3));
+  const recoveryCardWidth = Math.min(220, Math.max(184, screenWidth - horizontalPadding * 2 - panelPadding * 2));
+
+  return StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: c.background,
   },
   content: {
-    paddingHorizontal: Spacing.lg,
-    gap: Spacing.xl,
+    paddingHorizontal: horizontalPadding,
+    gap: isCompact ? Spacing.lg : Spacing.xl,
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: Spacing.lg,
-    paddingBottom: Spacing.md,
+    gap: Spacing.sm,
+    paddingHorizontal: horizontalPadding,
+    paddingBottom: isCompact ? Spacing.sm : Spacing.md,
   },
   backText: {
     color: c.textSecondary,
@@ -918,13 +961,14 @@ const createStyles = (c: ThemeColors, isDark: boolean) => StyleSheet.create({
   },
   headerTitle: {
     color: c.text,
-    fontSize: 18,
+    fontSize: isCompact ? 17 : 18,
     fontWeight: '700',
     fontFamily: FontFamilyBold,
+    flexShrink: 1,
   },
   todayPill: {
-    paddingHorizontal: Spacing.md,
-    paddingVertical: 6,
+    paddingHorizontal: isCompact ? Spacing.sm + 2 : Spacing.md,
+    paddingVertical: isCompact ? 5 : 6,
     borderRadius: BorderRadius.pill,
     backgroundColor: c.text,
   },
@@ -935,25 +979,30 @@ const createStyles = (c: ThemeColors, isDark: boolean) => StyleSheet.create({
     fontFamily: FontFamilyBold,
   },
   controlPanel: {
-    borderRadius: 24,
+    borderRadius: panelRadius,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: c.border,
-    padding: Spacing.lg,
+    padding: panelPadding,
     backgroundColor: c.surface,
-    gap: Spacing.md,
+    gap: isCompact ? Spacing.sm + 2 : Spacing.md,
   },
   controlHeader: {
-    flexDirection: 'row',
+    flexDirection: isCompact ? 'column' : 'row',
     alignItems: 'flex-start',
     justifyContent: 'space-between',
-    gap: Spacing.md,
+    gap: isCompact ? Spacing.sm : Spacing.md,
   },
   dateButton: {
     flex: 1,
+    minWidth: 0,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     gap: Spacing.sm,
+  },
+  dateCopy: {
+    flex: 1,
+    minWidth: 0,
   },
   dateLabel: {
     color: c.textTertiary,
@@ -964,19 +1013,21 @@ const createStyles = (c: ThemeColors, isDark: boolean) => StyleSheet.create({
   },
   dateTitle: {
     color: c.text,
-    fontSize: 24,
+    fontSize: isCompact ? 21 : 24,
     fontWeight: '700',
     letterSpacing: -0.6,
     fontFamily: FontFamilyBold,
   },
   metricsWrap: {
     flexDirection: 'row',
+    width: isCompact ? '100%' : undefined,
     gap: Spacing.sm,
   },
   metricPill: {
-    minWidth: 70,
-    paddingHorizontal: Spacing.md,
-    paddingVertical: Spacing.sm,
+    flex: isCompact ? 1 : undefined,
+    minWidth: isCompact ? 0 : 70,
+    paddingHorizontal: isCompact ? Spacing.sm + 2 : Spacing.md,
+    paddingVertical: isCompact ? 7 : Spacing.sm,
     borderRadius: BorderRadius.card,
     backgroundColor: c.background,
     alignItems: 'center',
@@ -985,7 +1036,7 @@ const createStyles = (c: ThemeColors, isDark: boolean) => StyleSheet.create({
   },
   metricValue: {
     color: c.text,
-    fontSize: 17,
+    fontSize: isCompact ? 16 : 17,
     fontWeight: '700',
     fontFamily: FontFamilyBold,
   },
@@ -999,8 +1050,8 @@ const createStyles = (c: ThemeColors, isDark: boolean) => StyleSheet.create({
     paddingRight: Spacing.sm,
   },
   weekPill: {
-    width: 56,
-    paddingVertical: Spacing.sm,
+    width: isCompact ? 50 : 56,
+    paddingVertical: isCompact ? 6 : Spacing.sm,
     borderRadius: BorderRadius.card,
     alignItems: 'center',
     backgroundColor: c.background,
@@ -1022,7 +1073,7 @@ const createStyles = (c: ThemeColors, isDark: boolean) => StyleSheet.create({
   },
   weekPillDate: {
     color: c.text,
-    fontSize: 20,
+    fontSize: isCompact ? 18 : 20,
     fontWeight: '700',
     fontFamily: FontFamilyBold,
   },
@@ -1047,8 +1098,8 @@ const createStyles = (c: ThemeColors, isDark: boolean) => StyleSheet.create({
     borderRadius: BorderRadius.pill,
     borderWidth: 1,
     borderColor: c.border,
-    paddingHorizontal: Spacing.md,
-    paddingVertical: 8,
+    paddingHorizontal: isCompact ? Spacing.sm + 2 : Spacing.md,
+    paddingVertical: isCompact ? 7 : 8,
     backgroundColor: c.background,
   },
   categoryChipActive: {
@@ -1057,7 +1108,7 @@ const createStyles = (c: ThemeColors, isDark: boolean) => StyleSheet.create({
   },
   categoryChipText: {
     color: c.textSecondary,
-    fontSize: 14,
+    fontSize: isCompact ? 13 : 14,
     fontWeight: '600',
     fontFamily: FontFamily,
   },
@@ -1070,18 +1121,23 @@ const createStyles = (c: ThemeColors, isDark: boolean) => StyleSheet.create({
     borderRadius: 3,
   },
   checkpointPanel: {
-    borderRadius: 24,
+    borderRadius: panelRadius,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: c.border,
     backgroundColor: c.background,
-    padding: Spacing.lg,
-    gap: Spacing.md,
+    padding: panelPadding,
+    gap: isCompact ? Spacing.sm + 2 : Spacing.md,
   },
   panelHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
-    gap: Spacing.md,
+    flexWrap: 'wrap',
+    gap: isCompact ? Spacing.sm : Spacing.md,
+  },
+  panelCopy: {
+    flex: 1,
+    minWidth: Math.min(220, screenWidth - horizontalPadding * 2 - panelPadding * 2),
   },
   panelEyebrow: {
     color: c.textTertiary,
@@ -1092,7 +1148,7 @@ const createStyles = (c: ThemeColors, isDark: boolean) => StyleSheet.create({
   },
   panelTitle: {
     color: c.text,
-    fontSize: 18,
+    fontSize: isCompact ? 17 : 18,
     fontWeight: '700',
     letterSpacing: -0.3,
     fontFamily: FontFamilyBold,
@@ -1101,11 +1157,13 @@ const createStyles = (c: ThemeColors, isDark: boolean) => StyleSheet.create({
     color: c.textSecondary,
     fontSize: 13,
     fontFamily: FontFamily,
+    flexShrink: 1,
+    maxWidth: '100%',
   },
   panelStatus: {
     color: c.textSecondary,
-    fontSize: 15,
-    lineHeight: 22,
+    fontSize: isCompact ? 14 : 15,
+    lineHeight: isCompact ? 20 : 22,
     fontFamily: FontFamily,
   },
   suggestionStrip: {
@@ -1113,17 +1171,17 @@ const createStyles = (c: ThemeColors, isDark: boolean) => StyleSheet.create({
     paddingRight: Spacing.sm,
   },
   suggestionCard: {
-    width: 232,
+    width: suggestionCardWidth,
     borderRadius: BorderRadius.card,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: c.border,
-    padding: Spacing.md,
+    padding: isCompact ? Spacing.sm + 2 : Spacing.md,
     backgroundColor: c.surface,
-    gap: Spacing.sm,
+    gap: isCompact ? 6 : Spacing.sm,
   },
   suggestionTitle: {
     color: c.text,
-    fontSize: 15,
+    fontSize: isCompact ? 14 : 15,
     fontWeight: '700',
     fontFamily: FontFamilyBold,
   },
@@ -1146,36 +1204,36 @@ const createStyles = (c: ThemeColors, isDark: boolean) => StyleSheet.create({
     fontFamily: FontFamilyBold,
   },
   timelinePanel: {
-    borderRadius: 24,
+    borderRadius: panelRadius,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: c.border,
     backgroundColor: c.surface,
-    padding: Spacing.lg,
-    gap: Spacing.md,
+    padding: panelPadding,
+    gap: isCompact ? Spacing.sm + 2 : Spacing.md,
   },
   timelineCanvas: {
-    gap: Spacing.sm,
+    gap: isCompact ? 6 : Spacing.sm,
   },
   timelineRow: {
     flexDirection: 'row',
     alignItems: 'stretch',
-    gap: Spacing.md,
+    gap: isCompact ? Spacing.sm : Spacing.md,
   },
   timelineAxis: {
-    width: 72,
+    width: isCompact ? 56 : 64,
     position: 'relative',
     alignItems: 'flex-start',
     paddingTop: 2,
   },
   timelineAxisLabel: {
     color: c.text,
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '700',
     fontFamily: FontFamilyBold,
   },
   timelineAxisSecondary: {
     color: c.textTertiary,
-    fontSize: 11,
+    fontSize: 10,
     marginTop: 2,
     fontFamily: FontFamily,
   },
@@ -1183,28 +1241,29 @@ const createStyles = (c: ThemeColors, isDark: boolean) => StyleSheet.create({
     position: 'absolute',
     top: 18,
     bottom: 0,
-    left: 36,
+    left: isCompact ? 28 : 32,
     width: 1,
     backgroundColor: c.border,
   },
   timelineAxisDot: {
     position: 'absolute',
     top: 18,
-    left: 33,
-    width: 7,
-    height: 7,
-    borderRadius: 3.5,
+    left: isCompact ? 25 : 29,
+    width: 6,
+    height: 6,
+    borderRadius: 3,
     backgroundColor: c.text,
   },
   timelineBlock: {
     flex: 1,
-    borderRadius: 20,
+    minWidth: 0,
+    borderRadius: isCompact ? 16 : 20,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: c.border,
     borderLeftWidth: 2,
-    padding: Spacing.md,
+    padding: isCompact ? Spacing.sm + 2 : Spacing.md,
     justifyContent: 'space-between',
-    gap: Spacing.sm,
+    gap: isCompact ? 6 : Spacing.sm,
   },
   timelineScheduledBlock: {
     backgroundColor: c.background,
@@ -1216,9 +1275,12 @@ const createStyles = (c: ThemeColors, isDark: boolean) => StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
-    gap: Spacing.md,
+    flexWrap: 'wrap',
+    gap: isCompact ? Spacing.sm : Spacing.md,
   },
   timelineKindWrap: {
+    flex: 1,
+    minWidth: 0,
     gap: 4,
   },
   timelineKindText: {
@@ -1230,7 +1292,7 @@ const createStyles = (c: ThemeColors, isDark: boolean) => StyleSheet.create({
   },
   timelineRangeText: {
     color: c.text,
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: '600',
     fontFamily: FontFamily,
   },
@@ -1251,20 +1313,21 @@ const createStyles = (c: ThemeColors, isDark: boolean) => StyleSheet.create({
   },
   timelineTaskTitle: {
     color: c.text,
-    fontSize: 17,
-    lineHeight: 22,
+    fontSize: isCompact ? 15 : 16,
+    lineHeight: isCompact ? 19 : 21,
     fontWeight: '700',
     fontFamily: FontFamilyBold,
   },
   timelineBlockFooter: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
-    gap: Spacing.md,
+    alignItems: 'flex-start',
+    flexWrap: 'wrap',
+    gap: isCompact ? 6 : Spacing.md,
   },
   timelineTaskMeta: {
     color: c.textSecondary,
-    fontSize: 12,
+    fontSize: 11,
     fontFamily: FontFamily,
   },
   timelineGapCard: {
@@ -1273,14 +1336,14 @@ const createStyles = (c: ThemeColors, isDark: boolean) => StyleSheet.create({
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: c.border,
     borderStyle: 'dashed',
-    padding: Spacing.md,
+    padding: isCompact ? Spacing.sm + 2 : Spacing.md,
     justifyContent: 'center',
     backgroundColor: c.surfaceGlass,
     gap: 4,
   },
   timelineGapTitle: {
     color: c.text,
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '700',
     fontFamily: FontFamilyBold,
   },
@@ -1291,16 +1354,19 @@ const createStyles = (c: ThemeColors, isDark: boolean) => StyleSheet.create({
   },
   timelineGapHint: {
     color: c.textTertiary,
-    fontSize: 12,
+    fontSize: 11,
     fontFamily: FontFamily,
   },
   queuePanel: {
-    borderRadius: 24,
+    borderRadius: panelRadius,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: c.border,
     backgroundColor: c.surface,
-    padding: Spacing.lg,
-    gap: Spacing.md,
+    padding: panelPadding,
+    gap: isCompact ? Spacing.sm + 2 : Spacing.md,
+  },
+  queueHeader: {
+    alignItems: 'stretch',
   },
   queueToggle: {
     flexDirection: 'row',
@@ -1308,10 +1374,13 @@ const createStyles = (c: ThemeColors, isDark: boolean) => StyleSheet.create({
     padding: 4,
     borderRadius: BorderRadius.pill,
     backgroundColor: c.background,
+    width: '100%',
   },
   queueToggleButton: {
-    paddingHorizontal: Spacing.md,
-    paddingVertical: 8,
+    flex: 1,
+    alignItems: 'center',
+    paddingHorizontal: Spacing.sm + 2,
+    paddingVertical: isCompact ? 7 : 8,
     borderRadius: BorderRadius.pill,
   },
   queueToggleButtonActive: {
@@ -1330,28 +1399,28 @@ const createStyles = (c: ThemeColors, isDark: boolean) => StyleSheet.create({
     gap: 4,
   },
   taskRow: {
-    marginHorizontal: -Spacing.md,
+    marginHorizontal: isCompact ? -Spacing.sm : -6,
   },
   recoveryPanel: {
-    borderRadius: 24,
+    borderRadius: panelRadius,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: c.border,
     backgroundColor: c.background,
-    padding: Spacing.lg,
-    gap: Spacing.md,
+    padding: panelPadding,
+    gap: isCompact ? Spacing.sm + 2 : Spacing.md,
   },
   recoveryStrip: {
     gap: Spacing.sm,
     paddingRight: Spacing.sm,
   },
   recoveryCard: {
-    width: 260,
+    width: recoveryCardWidth,
     borderRadius: BorderRadius.card,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: c.border,
-    padding: Spacing.md,
+    padding: isCompact ? Spacing.sm + 2 : Spacing.md,
     backgroundColor: c.surface,
-    gap: Spacing.md,
+    gap: isCompact ? Spacing.sm : Spacing.md,
   },
   recoveryTitle: {
     color: c.text,
@@ -1370,6 +1439,8 @@ const createStyles = (c: ThemeColors, isDark: boolean) => StyleSheet.create({
     gap: Spacing.sm,
   },
   recoveryButton: {
+    flex: 1,
+    alignItems: 'center',
     paddingHorizontal: Spacing.md,
     paddingVertical: 8,
     borderRadius: BorderRadius.pill,
@@ -1388,7 +1459,7 @@ const createStyles = (c: ThemeColors, isDark: boolean) => StyleSheet.create({
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: c.border,
     backgroundColor: c.surface,
-    padding: Spacing.lg,
+    padding: isCompact ? panelPadding : Spacing.lg,
     gap: 4,
   },
   inlineEmptyTitle: {
@@ -1412,13 +1483,17 @@ const createStyles = (c: ThemeColors, isDark: boolean) => StyleSheet.create({
     borderTopLeftRadius: 28,
     borderTopRightRadius: 28,
     backgroundColor: c.background,
-    paddingHorizontal: Spacing.lg,
+    maxHeight: '86%',
+    paddingHorizontal: horizontalPadding,
     paddingTop: Spacing.sm,
     paddingBottom: Spacing.xl,
-    gap: Spacing.sm,
   },
   monthSheet: {
-    maxHeight: '70%',
+    maxHeight: '74%',
+  },
+  sheetScrollContent: {
+    gap: Spacing.sm,
+    paddingBottom: Spacing.sm,
   },
   sheetHandle: {
     alignSelf: 'center',
@@ -1452,13 +1527,13 @@ const createStyles = (c: ThemeColors, isDark: boolean) => StyleSheet.create({
     borderRadius: BorderRadius.card,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: c.border,
-    paddingHorizontal: Spacing.md,
-    paddingVertical: Spacing.md,
+    paddingHorizontal: isCompact ? Spacing.sm + 2 : Spacing.md,
+    paddingVertical: isCompact ? Spacing.sm + 2 : Spacing.md,
     backgroundColor: c.surface,
   },
   sheetActionText: {
     color: c.text,
-    fontSize: 15,
+    fontSize: 14,
     fontWeight: '600',
     fontFamily: FontFamily,
   },
@@ -1470,6 +1545,14 @@ const createStyles = (c: ThemeColors, isDark: boolean) => StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     gap: Spacing.sm,
+  },
+  sheetTaskTitle: {
+    flex: 1,
+    minWidth: 0,
+    color: c.text,
+    fontSize: 14,
+    fontWeight: '600',
+    fontFamily: FontFamily,
   },
   sheetTaskMeta: {
     color: c.textSecondary,
@@ -1517,7 +1600,7 @@ const createStyles = (c: ThemeColors, isDark: boolean) => StyleSheet.create({
   },
   monthCell: {
     width: '14.285%',
-    height: 44,
+    height: isCompact ? 40 : 44,
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -1527,7 +1610,7 @@ const createStyles = (c: ThemeColors, isDark: boolean) => StyleSheet.create({
   },
   monthCellText: {
     color: c.text,
-    fontSize: 15,
+    fontSize: isCompact ? 14 : 15,
     fontWeight: '600',
     fontFamily: FontFamily,
   },
@@ -1541,4 +1624,5 @@ const createStyles = (c: ThemeColors, isDark: boolean) => StyleSheet.create({
     backgroundColor: c.text,
     marginTop: 4,
   },
-});
+  });
+};
