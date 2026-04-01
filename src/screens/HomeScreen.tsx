@@ -134,22 +134,20 @@ export function HomeScreen({ navigation }: Props) {
     const [keyboardHeight, setKeyboardHeight] = useState(0);
 
     useEffect(() => {
-        // On Android with adjustResize, the OS already shrinks the window
-        // so we must NOT add manual keyboard offset (causes double-shift).
-        if (Platform.OS === 'android') return;
-
         const handleKeyboardShow = (event: KeyboardEvent) => {
             const kbHeight = event.endCoordinates?.height ?? 0;
-            // Shift task input higher by adding a buffer above the keyboard so options aren't obscured
-            setKeyboardHeight(kbHeight + 32);
+            const safeBottomInset = Platform.OS === 'android' ? insets.bottom : 0;
+            const visualGap = Platform.OS === 'android' ? 16 : 32;
+            // Keep the task input above the keyboard on both platforms.
+            setKeyboardHeight(Math.max(0, kbHeight - safeBottomInset) + visualGap);
         };
 
         const handleKeyboardHide = () => {
             setKeyboardHeight(0);
         };
 
-        const showEvent = 'keyboardWillShow';
-        const hideEvent = 'keyboardWillHide';
+        const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
+        const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
 
         const showSub = Keyboard.addListener(showEvent, handleKeyboardShow);
         const hideSub = Keyboard.addListener(hideEvent, handleKeyboardHide);
