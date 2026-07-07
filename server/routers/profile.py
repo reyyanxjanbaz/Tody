@@ -177,8 +177,11 @@ def get_reality_score(user_id: str = Depends(get_current_user_id)):
     rows = result.data or []
 
     if not rows:
+        # Default 0 (not 100) when there's no data — matches the client
+        # calculateUserStats default so the Profile card and Reality Score
+        # screen never disagree for a brand-new user.
         return {
-            "reality_score": 100,
+            "reality_score": 0,
             "underestimation_rate": 0,
             "total_estimated_minutes": 0,
             "total_actual_minutes": 0,
@@ -188,12 +191,15 @@ def get_reality_score(user_id: str = Depends(get_current_user_id)):
     total_estimated = sum(r["estimated_minutes"] for r in rows)
     total_actual = sum(r["actual_minutes"] for r in rows)
 
-    # reality_score: how close actual is to estimated (100 = perfect)
+    # reality_score: how close estimates were to reality (100 = perfect).
+    # Canonical formula shared with the client (statsCalculation.ts):
+    #   100 - |estimated - actual| / ESTIMATED * 100, clamped >= 0, default 0.
+    #   Note |ratio - 1| == |actual - estimated| / estimated, so this matches.
     if total_estimated > 0:
         ratio = total_actual / total_estimated
         reality_score = max(0, round(100 - abs(ratio - 1) * 100))
     else:
-        reality_score = 100
+        reality_score = 0
 
     # underestimation_rate > 0 means user took longer than estimated
     if total_estimated > 0:

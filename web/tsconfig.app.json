@@ -1,0 +1,38 @@
+{
+  "compilerOptions": {
+    "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.app.tsbuildinfo",
+    "target": "es2023",
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
+    "module": "esnext",
+    "types": ["vite/client", "vite-plugin-pwa/client", "vite-plugin-pwa/react"],
+    "allowArbitraryExtensions": true,
+    "skipLibCheck": true,
+
+    /* Bundler mode */
+    "moduleResolution": "bundler",
+    "allowImportingTsExtensions": true,
+    "moduleDetection": "force",
+    "noEmit": true,
+    "jsx": "react-jsx",
+
+    /* Path aliases — mirror vite.config resolve.alias so tsc resolves the
+       web shims that stand in for native-only modules. */
+    "paths": {
+      "@/*": ["./src/*"],
+      "@core/*": ["./src/core/*"],
+      "@react-native-async-storage/async-storage": ["./src/shims/asyncStorage.ts"],
+      "react-native-haptic-feedback": ["./src/shims/haptics.ts"],
+      "react-native-url-polyfill/auto": ["./src/shims/empty.ts"]
+    },
+
+    /* Linting — relaxed so the verbatim-ported RN logic layer type-checks
+       without edits. Freshly authored UI still benefits from strict null/any. */
+    "strict": true,
+    "verbatimModuleSyntax": false,
+    "noUnusedLocals": false,
+    "noUnusedParameters": false,
+    "erasableSyntaxOnly": false,
+    "noFallthroughCasesInSwitch": true
+  },
+  "include": ["src"]
+}

@@ -214,6 +214,7 @@ def list_tasks(
         .select("*")
         .eq("user_id", user_id)
         .eq("is_archived", archived)
+        .is_("deleted_at", "null")  # exclude soft-deleted (tombstoned) rows
         .order("created_at", desc=True)
         .limit(limit)
         .offset(offset)
@@ -346,18 +347,21 @@ def update_task(
 @router.delete("/{task_id}", status_code=204)
 def delete_task(task_id: str, user_id: str = Depends(get_current_user_id)):
     sb = get_supabase()
-    # First delete children (cascade one level — Supabase SET NULL won't cascade deletes)
-    sb.table("tasks").delete().eq("parent_id", task_id).eq("user_id", user_id).execute()
+    now = datetime.utcnow().isoformat()
+    # Soft-delete (tombstone) so the deletion propagates to other devices via
+    # the /sync feed instead of the row silently vanishing. Cascade one level to
+    # children. `updated_at` is bumped so incremental sync picks it up.
+    sb.table("tasks").update({"deleted_at": now, "updated_at": now}).eq("parent_id", task_id).eq("user_id", user_id).execute()
     result = (
         sb.table("tasks")
-        .delete()
+        .update({"deleted_at": now, "updated_at": now})
         .eq("id", task_id)
         .eq("user_id", user_id)
         .execute()
     )
     if not result.data:
         raise HTTPException(status_code=404, detail="Task not found")
-    logger.info("Deleted task %s for user %s", task_id, user_id[:8])
+    logger.info("Soft-deleted task %s for user %s", task_id, user_id[:8])
     return None
 
 
@@ -366,12 +370,13 @@ def batch_delete_tasks(
     task_ids: List[str] = Query(...),
     user_id: str = Depends(get_current_user_id),
 ):
-    """Delete multiple tasks by ID."""
+    """Soft-delete multiple tasks by ID."""
     if len(task_ids) > 200:
         raise HTTPException(status_code=400, detail="Max 200 task IDs per batch delete")
     sb = get_supabase()
-    sb.table("tasks").delete().in_("id", task_ids).eq("user_id", user_id).execute()
-    logger.info("Batch deleted %d tasks for user %s", len(task_ids), user_id[:8])
+    now = datetime.utcnow().isoformat()
+    sb.table("tasks").update({"deleted_at": now, "updated_at": now}).in_("id", task_ids).eq("user_id", user_id).execute()
+    logger.info("Batch soft-deleted %d tasks for user %s", len(task_ids), user_id[:8])
     return None
 
 
@@ -456,11 +461,18 @@ def archive_task(task_id: str, user_id: str = Depends(get_current_user_id)):
     return result.data[0]
 
 
+class DeferBody(BaseModel):
+    # The client computes the snooze target in LOCAL time and sends it here.
+    # Falls back to server-side tomorrow-EOD (UTC) only for legacy callers that
+    # send no body — new clients always supply `deadline`.
+    deadline: Optional[str] = None  # ISO-8601
+
+
 @router.post("/{task_id}/defer")
-def defer_task(task_id: str, user_id: str = Depends(get_current_user_id)):
-    """Convenience: defer a task to tomorrow, increment defer_count."""
+def defer_task(task_id: str, body: Optional[DeferBody] = None, user_id: str = Depends(get_current_user_id)):
+    """Convenience: defer a task, increment defer_count. Uses the client-supplied
+    deadline (local-time correct) when present."""
     sb = get_supabase()
-    # Fetch current defer_count
     existing = (
         sb.table("tasks")
         .select("defer_count")
@@ -472,18 +484,22 @@ def defer_task(task_id: str, user_id: str = Depends(get_current_user_id)):
     if not existing.data:
         raise HTTPException(status_code=404, detail="Task not found")
 
-    from datetime import timedelta
-    tomorrow = datetime.utcnow().replace(hour=23, minute=59, second=59) + timedelta(days=1)
+    if body and body.deadline:
+        deadline_iso = body.deadline
+    else:
+        from datetime import timedelta
+        deadline_iso = (datetime.utcnow().replace(hour=23, minute=59, second=59) + timedelta(days=1)).isoformat()
     new_count = (existing.data.get("defer_count") or 0) + 1
 
     result = (
         sb.table("tasks")
         .update({
-            "deadline": tomorrow.isoformat(),
+            "deadline": deadline_iso,
             "scheduled_start_at": None,
             "scheduled_end_at": None,
             "defer_count": new_count,
             "overdue_start_date": None,
+            "updated_at": datetime.utcnow().isoformat(),
         })
         .eq("id", task_id)
         .eq("user_id", user_id)

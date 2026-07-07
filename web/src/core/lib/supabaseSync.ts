@@ -1,0 +1,748 @@
+/**
+ * Supabase Sync Service
+ *
+ * Bridges the gap between local AsyncStorage state and the Supabase database.
+ * This is the module that was MISSING — without it, the app stored everything
+ * locally and the database tables stayed empty.
+ *
+ * Architecture:
+ *   • Uses the Supabase JS client directly (with the user's session JWT),
+ *     so RLS policies are enforced automatically.
+ *   • Provides push/pull helpers for tasks, categories, and inbox.
+ *   • Handles the data-model mismatch between frontend (camelCase, epoch-ms
+ *     timestamps, string category IDs) and database (snake_case, ISO
+ *     timestamps, UUID category foreign keys).
+ */
+
+import { supabase } from './supabase';
+import { Task, Category, InboxTask } from '../types';
+import { api } from './api';
+
+// ── Logging helper ──────────────────────────────────────────────────────────
+
+const LOG_PREFIX = '[SupabaseSync]';
+function log(...args: any[]) {
+  if (__DEV__) {
+    console.log(LOG_PREFIX, ...args);
+  }
+}
+function logError(...args: any[]) {
+  console.error(LOG_PREFIX, ...args);
+}
+function logWarn(...args: any[]) {
+  if (__DEV__) {
+    console.warn(LOG_PREFIX, ...args);
+  }
+}
+
+/** Check whether a string is a valid UUID v4 */
+function isValidUUID(str: string): boolean {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str);
+}
+
+// ── Retry helper ────────────────────────────────────────────────────────────
+
+const MAX_RETRIES = 3;
+const INITIAL_DELAY_MS = 500;
+
+/** Return true when the error looks like a transient network problem. */
+function isNetworkError(err: unknown): boolean {
+  if (err instanceof TypeError && /network request failed/i.test(err.message)) {
+    return true;
+  }
+  if (typeof err === 'object' && err !== null && 'message' in err) {
+    const msg = (err as { message: string }).message;
+    return /network request failed|fetch failed|aborted|timeout|ECONNRESET|TypeError/i.test(msg);
+  }
+  if (typeof err === 'string') {
+    return /network request failed|fetch failed|aborted|timeout/i.test(err);
+  }
+  return false;
+}
+
+/**
+ * Check whether a Supabase response error looks like a transient network problem.
+ * The Supabase JS v2 client catches fetch errors internally and returns them
+ * in the { error } field instead of throwing, so withRetry's catch block
+ * never fires for network failures. This helper detects those.
+ */
+function isResponseNetworkError(error: { message: string; [k: string]: any } | null): boolean {
+  if (!error) return false;
+  return /network request failed|fetch failed|aborted|timeout|TypeError|ECONNRESET|Failed to fetch|Load failed/i.test(
+    error.message,
+  );
+}
+
+function isScheduleFieldSchemaError(message: string | undefined): boolean {
+  if (!message) return false;
+  return /scheduled_start_at|scheduled_end_at/i.test(message);
+}
+
+function stripScheduleFields<T extends Record<string, any>>(row: T): T {
+  const sanitized = { ...row };
+  delete sanitized.scheduled_start_at;
+  delete sanitized.scheduled_end_at;
+  return sanitized;
+}
+
+/**
+ * Execute `fn` up to MAX_RETRIES times with exponential back-off.
+ *
+ * Handles TWO kinds of transient failure:
+ *   1. The promise rejects (rare with the Supabase client)
+ *   2. The promise resolves but the response contains a network-like error
+ *      (common — the Supabase JS client catches fetch errors internally)
+ */
+async function withRetry<T extends { error?: any }>(
+  label: string,
+  fn: () => PromiseLike<T>,
+): Promise<T> {
+  let attempt = 0;
+  while (true) {
+    try {
+      const result = await Promise.resolve(fn());
+
+      // Check for network errors returned inside the Supabase response
+      if (result?.error && isResponseNetworkError(result.error)) {
+        attempt++;
+        if (attempt < MAX_RETRIES) {
+          const delay = INITIAL_DELAY_MS * Math.pow(2, attempt - 1);
+          log(`${label}: response network error, retrying in ${delay}ms (attempt ${attempt}/${MAX_RETRIES})`);
+          await new Promise<void>(resolve => setTimeout(resolve, delay));
+          continue;
+        }
+      }
+
+      return result;
+    } catch (err) {
+      attempt++;
+      if (isNetworkError(err) && attempt < MAX_RETRIES) {
+        const delay = INITIAL_DELAY_MS * Math.pow(2, attempt - 1);
+        log(`${label}: thrown network error, retrying in ${delay}ms (attempt ${attempt}/${MAX_RETRIES})`);
+        await new Promise<void>(resolve => setTimeout(resolve, delay));
+      } else {
+        throw err;
+      }
+    }
+  }
+}
+
+// ── Timestamp helpers ───────────────────────────────────────────────────────
+
+/** epoch ms → ISO string  (null-safe) */
+function toISO(epoch: number | null | undefined): string | null {
+  if (epoch == null) return null;
+  return new Date(epoch).toISOString();
+}
+
+/** ISO string → epoch ms  (null-safe) */
+function fromISO(iso: string | null | undefined): number | null {
+  if (!iso) return null;
+  const ts = new Date(iso).getTime();
+  return isNaN(ts) ? null : ts;
+}
+
+// ── Category mapping ────────────────────────────────────────────────────────
+// The frontend uses fixed string IDs ('work', 'personal', 'health', 'overview')
+// while the DB uses UUID primary keys with a name field.
+// We build a bidirectional map at sync time.
+
+export interface CategoryMap {
+  /** local string id → supabase uuid */
+  toUUID: Record<string, string>;
+  /** supabase uuid → local string id */
+  toLocal: Record<string, string>;
+}
+
+/**
+ * Build a mapping between local category IDs and Supabase UUIDs
+ * by matching on the category name (case-insensitive).
+ */
+export function buildCategoryMap(
+  localCategories: Category[],
+  dbCategories: DbCategory[],
+  priorMap?: CategoryMap,
+): CategoryMap {
+  const toUUID: Record<string, string> = {};
+  const toLocal: Record<string, string> = {};
+  const dbById = new Map(dbCategories.map(db => [db.id, db]));
+
+  for (const local of localCategories) {
+    // Prefer a previously-resolved id→uuid mapping when the DB row still
+    // exists. Name-matching alone silently dropped a category's tasks when the
+    // user renamed it (the new local name no longer matched the DB row), so a
+    // persisted id-based map is the stable anchor; name is only the bootstrap.
+    const priorUuid = priorMap?.toUUID[local.id];
+    const match = (priorUuid && dbById.has(priorUuid))
+      ? dbById.get(priorUuid)!
+      : dbCategories.find(db => db.name.toLowerCase() === local.name.toLowerCase());
+    if (match) {
+      toUUID[local.id] = match.id;
+      toLocal[match.id] = local.id;
+    }
+  }
+
+  return { toUUID, toLocal };
+}
+
+// ── DB row types ────────────────────────────────────────────────────────────
+
+interface DbTask {
+  id: string;
+  user_id: string;
+  category_id: string | null;
+  title: string;
+  description: string;
+  priority: string;
+  energy_level: string;
+  is_completed: boolean;
+  completed_at: string | null;
+  deadline: string | null;
+  scheduled_start_at: string | null;
+  scheduled_end_at: string | null;
+  is_recurring: boolean;
+  recurring_frequency: string | null;
+  defer_count: number;
+  created_hour: number;
+  overdue_start_date: string | null;
+  revived_at: string | null;
+  archived_at: string | null;
+  is_archived: boolean;
+  estimated_minutes: number | null;
+  actual_minutes: number | null;
+  started_at: string | null;
+  parent_id: string | null;
+  depth: number;
+  created_at: string;
+  updated_at: string;
+}
+
+interface DbCategory {
+  id: string;
+  user_id: string;
+  name: string;
+  icon: string;
+  color: string;
+  is_default: boolean;
+  sort_order: number;
+  created_at: string;
+  updated_at: string;
+}
+
+interface DbInboxTask {
+  id: string;
+  user_id: string;
+  raw_text: string;
+  captured_at: string;
+}
+
+// ── Transform: Local → DB ───────────────────────────────────────────────────
+
+export function taskToDbRow(task: Task, userId: string, catMap: CategoryMap): Partial<DbTask> {
+  const row: Record<string, any> = {
+    id: task.id,
+    user_id: userId,
+    title: task.title,
+    description: task.description || '',
+    priority: task.priority || 'none',
+    energy_level: task.energyLevel || 'medium',
+    is_completed: task.isCompleted ?? false,
+    completed_at: toISO(task.completedAt),
+    deadline: toISO(task.deadline),
+    scheduled_start_at: toISO(task.scheduledStartAt),
+    scheduled_end_at: toISO(task.scheduledEndAt),
+    is_recurring: task.isRecurring ?? false,
+    recurring_frequency: task.recurringFrequency || null,
+    defer_count: task.deferCount ?? 0,
+    created_hour: task.createdHour ?? new Date().getHours(),
+    overdue_start_date: toISO(task.overdueStartDate),
+    revived_at: toISO(task.revivedAt),
+    archived_at: toISO(task.archivedAt),
+    is_archived: task.isArchived ?? false,
+    estimated_minutes: task.estimatedMinutes || null,
+    actual_minutes: task.actualMinutes || null,
+    started_at: toISO(task.startedAt),
+    parent_id: task.parentId || null,
+    depth: task.depth ?? 0,
+    created_at: toISO(task.createdAt) || new Date().toISOString(),
+    updated_at: toISO(task.updatedAt) || new Date().toISOString(),
+  };
+
+  // Map local category string to UUID
+  if (task.category && catMap.toUUID[task.category]) {
+    row.category_id = catMap.toUUID[task.category];
+  } else {
+    row.category_id = null;
+  }
+
+  return row;
+}
+
+// ── Transform: DB → Local ───────────────────────────────────────────────────
+
+export function dbRowToTask(row: DbTask, catMap: CategoryMap): Task {
+  return {
+    id: row.id,
+    title: row.title,
+    description: row.description || '',
+    createdAt: fromISO(row.created_at) ?? Date.now(),
+    updatedAt: fromISO(row.updated_at) ?? Date.now(),
+    deadline: fromISO(row.deadline),
+    scheduledStartAt: fromISO(row.scheduled_start_at),
+    scheduledEndAt: fromISO(row.scheduled_end_at),
+    completedAt: fromISO(row.completed_at),
+    priority: (row.priority as Task['priority']) || 'none',
+    energyLevel: (row.energy_level as Task['energyLevel']) || 'medium',
+    isCompleted: row.is_completed ?? false,
+    isRecurring: row.is_recurring ?? false,
+    recurringFrequency: row.recurring_frequency as Task['recurringFrequency'] || null,
+    deferCount: row.defer_count ?? 0,
+    createdHour: row.created_hour ?? 0,
+    overdueStartDate: fromISO(row.overdue_start_date),
+    revivedAt: fromISO(row.revived_at),
+    archivedAt: fromISO(row.archived_at),
+    isArchived: row.is_archived ?? false,
+    estimatedMinutes: row.estimated_minutes,
+    actualMinutes: row.actual_minutes,
+    startedAt: fromISO(row.started_at),
+    parentId: row.parent_id || null,
+    childIds: [], // Will be rebuilt from parent_id relationships
+    depth: row.depth ?? 0,
+    category: row.category_id ? (catMap.toLocal[row.category_id] || undefined) : undefined,
+    userId: row.user_id,
+  };
+}
+
+function dbRowToCategory(row: DbCategory): Category {
+  return {
+    id: row.id,
+    name: row.name,
+    icon: row.icon,
+    color: row.color,
+    isDefault: row.is_default,
+    order: row.sort_order,
+  };
+}
+
+function dbRowToInboxTask(row: DbInboxTask): InboxTask {
+  return {
+    id: row.id,
+    rawText: row.raw_text,
+    capturedAt: fromISO(row.captured_at) ?? Date.now(),
+  };
+}
+
+// ── Rebuild childIds from parentId references ───────────────────────────────
+
+export function rebuildChildIds(tasks: Task[]): Task[] {
+  const childMap = new Map<string, string[]>();
+  for (const t of tasks) {
+    if (t.parentId) {
+      const existing = childMap.get(t.parentId) || [];
+      existing.push(t.id);
+      childMap.set(t.parentId, existing);
+    }
+  }
+  return tasks.map(t => ({
+    ...t,
+    childIds: childMap.get(t.id) || [],
+  }));
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// PUBLIC API — these are the functions contexts will call
+// ═══════════════════════════════════════════════════════════════════════════
+
+// ── Categories ──────────────────────────────────────────────────────────────
+
+/** Fetch all categories from Supabase for the current user. */
+export async function fetchCategories(): Promise<Category[]> {
+  try {
+    const { data, error } = await withRetry('fetchCategories', () =>
+      supabase.from('categories').select('*').order('sort_order'),
+    );
+    if (error) {
+      logError('fetchCategories failed:', error.message);
+      return [];
+    }
+    return (data || []).filter((r: any) => !r.deleted_at).map(dbRowToCategory);
+  } catch (e: any) {
+    logError('fetchCategories failed after retries:', e?.message ?? e);
+    return [];
+  }
+}
+
+/** Push a single category to Supabase (upsert). */
+export async function upsertCategory(cat: Category, userId: string): Promise<void> {
+  // Default categories use string IDs (e.g. 'overview', 'work') which are not
+  // valid UUIDs. They are already seeded by the DB trigger, so skip them.
+  if (!isValidUUID(cat.id)) {
+    log(`Skipping upsertCategory for non-UUID id: ${cat.id}`);
+    return;
+  }
+  const row = {
+    id: cat.id,
+    user_id: userId,
+    name: cat.name,
+    icon: cat.icon,
+    color: cat.color,
+    is_default: cat.isDefault,
+    sort_order: cat.order,
+  };
+  const { error } = await supabase
+    .from('categories')
+    .upsert(row, { onConflict: 'id' });
+
+  if (error) {
+    logError('upsertCategory failed:', error.message);
+  }
+}
+
+/** Push all local categories to Supabase. */
+export async function pushCategories(categories: Category[], userId: string): Promise<void> {
+  if (categories.length === 0) return;
+
+  // Filter out default categories with non-UUID IDs (e.g. 'overview', 'work').
+  // These are already seeded by the DB trigger on user signup.
+  const pushable = categories.filter(c => isValidUUID(c.id));
+  if (pushable.length === 0) {
+    log('No user-created categories to push (defaults seeded by DB)');
+    return;
+  }
+
+  const rows = pushable.map(c => ({
+    id: c.id,
+    user_id: userId,
+    name: c.name,
+    icon: c.icon,
+    color: c.color,
+    is_default: c.isDefault,
+    sort_order: c.order,
+  }));
+
+  try {
+    // ── Try Render backend first (POST /categories/batch) ─────────────────────
+    const { error: apiError, isBackendDown } = await api.post('/categories/batch', rows);
+    if (isBackendDown) {
+      // ── Fallback: direct Supabase upsert ──────────────────────────────────────
+      logWarn('pushCategories: backend down, falling back to direct Supabase');
+      const { error } = await withRetry('pushCategories:fallback', () =>
+        supabase.from('categories').upsert(rows, { onConflict: 'id' }),
+      );
+      if (error) {
+        logError('pushCategories fallback failed:', error.message);
+      } else {
+        log(`Pushed ${rows.length} categories via Supabase fallback`);
+      }
+    } else if (apiError) {
+      logError('pushCategories API error:', apiError.message);
+    } else {
+      log(`Pushed ${rows.length} categories via backend batch API`);
+    }
+  } catch (e: any) {
+    logError('pushCategories failed after retries:', e?.message ?? e);
+  }
+}
+
+// ── Tasks ───────────────────────────────────────────────────────────────────
+
+/** Fetch all tasks from Supabase. Returns them with childIds rebuilt. */
+export async function fetchTasks(catMap: CategoryMap): Promise<{ active: Task[]; archived: Task[] }> {
+  try {
+    const { data, error } = await withRetry('fetchTasks', () =>
+      supabase.from('tasks').select('*').order('created_at', { ascending: false }),
+    );
+    if (error) {
+      logError('fetchTasks failed:', error.message);
+      return { active: [], archived: [] };
+    }
+
+    // Exclude soft-deleted rows in-memory (schema-agnostic: `deleted_at` is
+    // undefined when the migration hasn't been applied → row is kept).
+    const all = (data || [])
+      .filter((row: any) => !row.deleted_at)
+      .map((row: DbTask) => dbRowToTask(row, catMap));
+    const withChildren = rebuildChildIds(all);
+
+    const active = withChildren.filter(t => !t.isArchived);
+    const archived = withChildren.filter(t => t.isArchived);
+
+    log(`Fetched ${active.length} active + ${archived.length} archived tasks`);
+    return { active, archived };
+  } catch (e: any) {
+    logError('fetchTasks failed after retries:', e?.message ?? e);
+    return { active: [], archived: [] };
+  }
+}
+
+/** Push all local tasks to Supabase (upsert). */
+export async function pushTasks(
+  tasks: Task[],
+  userId: string,
+  catMap: CategoryMap,
+): Promise<void> {
+  if (tasks.length === 0) return;
+
+  const rows = tasks.map(t => taskToDbRow(t, userId, catMap));
+  const containsScheduledFields = tasks.some(t => t.scheduledStartAt || t.scheduledEndAt);
+
+  // Supabase / backend both have a 200-row limit per batch; chunk accordingly.
+  const CHUNK = 200;
+  for (let i = 0; i < rows.length; i += CHUNK) {
+    const chunk = rows.slice(i, i + CHUNK);
+    try {
+      // ── Try Render backend first (POST /tasks/batch) ───────────────────────────
+      const { error: apiError, isBackendDown } = await api.post('/tasks/batch', chunk);
+      if (isBackendDown) {
+        // ── Fallback: direct Supabase upsert ────────────────────────────────────
+        logWarn(`pushTasks[${i}]: backend down, falling back to direct Supabase`);
+        const { error } = await withRetry(`pushTasks:fallback[${i}]`, () =>
+          supabase.from('tasks').upsert(chunk as any, { onConflict: 'id' }),
+        );
+        if (error) {
+          if (containsScheduledFields && isScheduleFieldSchemaError(error.message)) {
+            const sanitizedChunk = chunk.map(row => stripScheduleFields(row as Record<string, any>));
+            const { error: sanitizedErr } = await withRetry(`pushTasks:fallback:sanitized[${i}]`, () =>
+              supabase.from('tasks').upsert(sanitizedChunk as any, { onConflict: 'id' }),
+            );
+            if (sanitizedErr) {
+              logError(`pushTasks sanitized fallback chunk ${i}-${i + chunk.length} failed:`, sanitizedErr.message);
+            } else {
+              logWarn(`pushTasks chunk ${i}-${i + chunk.length}: schedule fields not persisted because live schema is behind the client`);
+            }
+          } else {
+            logError(`pushTasks fallback chunk ${i}-${i + chunk.length} failed:`, error.message);
+          }
+        }
+      } else if (apiError) {
+        if (containsScheduledFields && isScheduleFieldSchemaError(apiError.message)) {
+          const sanitizedChunk = chunk.map(row => stripScheduleFields(row as Record<string, any>));
+          const { error: retryError, isBackendDown: retryDown } = await api.post('/tasks/batch', sanitizedChunk);
+          if (retryDown) {
+            const { error: fallbackErr } = await withRetry(`pushTasks:sanitized:fallback[${i}]`, () =>
+              supabase.from('tasks').upsert(sanitizedChunk as any, { onConflict: 'id' }),
+            );
+            if (fallbackErr) {
+              logError(`pushTasks sanitized API+fallback chunk ${i}-${i + chunk.length} failed:`, fallbackErr.message);
+            } else {
+              logWarn(`pushTasks chunk ${i}-${i + chunk.length}: schedule fields not persisted because live schema is behind the client`);
+            }
+          } else if (retryError) {
+            logError(`pushTasks sanitized API chunk ${i}-${i + chunk.length} failed:`, retryError.message);
+          } else {
+            logWarn(`pushTasks chunk ${i}-${i + chunk.length}: schedule fields not persisted because live schema is behind the client`);
+          }
+        } else {
+          logError(`pushTasks API chunk ${i}-${i + chunk.length} failed:`, apiError.message);
+        }
+      }
+    } catch (e: any) {
+      logError(`pushTasks chunk ${i}-${i + chunk.length} failed after retries:`, e?.message ?? e);
+    }
+  }
+
+  log(`Pushed ${rows.length} tasks`);
+}
+
+/** Push a single task to Supabase (upsert). Retries on transient network errors.
+ *  For child tasks, ensures the parent row exists in the DB first. */
+export async function upsertTask(
+  task: Task,
+  userId: string,
+  catMap: CategoryMap,
+  allTasks?: Task[],
+): Promise<void> {
+  try {
+    // If this is a child task, ensure the parent exists in the DB first
+    // so the parent_id FK constraint isn't violated.
+    if (task.parentId && allTasks) {
+      const parent = allTasks.find(t => t.id === task.parentId);
+      if (parent) {
+        const parentRow = taskToDbRow(parent, userId, catMap);
+        const { error: parentErr } = await withRetry('upsertTask:parent', () =>
+          supabase.from('tasks').upsert(parentRow as any, { onConflict: 'id' }),
+        );
+        if (parentErr && !isResponseNetworkError(parentErr)) {
+          if (isScheduleFieldSchemaError(parentErr.message)) {
+            const { error: sanitizedParentErr } = await withRetry('upsertTask:parent:sanitized', () =>
+              supabase.from('tasks').upsert(stripScheduleFields(parentRow as Record<string, any>) as any, { onConflict: 'id' }),
+            );
+            if (sanitizedParentErr) {
+              logWarn('upsertTask parent sanitized pre-sync failed:', sanitizedParentErr.message);
+            }
+          } else {
+            logWarn('upsertTask parent pre-sync failed:', parentErr.message);
+          }
+        }
+      }
+    }
+
+    const row = taskToDbRow(task, userId, catMap);
+    const { error } = await withRetry('upsertTask', () =>
+      supabase.from('tasks').upsert(row as any, { onConflict: 'id' }),
+    );
+    if (error) {
+      if (isResponseNetworkError(error)) {
+        logWarn('upsertTask: transient network error (will retry on next sync):', error.message);
+      } else if (isScheduleFieldSchemaError(error.message)) {
+        const sanitizedRow = stripScheduleFields(row as Record<string, any>);
+        const { error: sanitizedErr } = await withRetry('upsertTask:sanitized', () =>
+          supabase.from('tasks').upsert(sanitizedRow as any, { onConflict: 'id' }),
+        );
+        if (sanitizedErr) {
+          logError('upsertTask sanitized fallback failed:', sanitizedErr.message);
+        } else {
+          logWarn('upsertTask: live schema is behind the client, schedule fields were saved locally only');
+        }
+      } else {
+        logError('upsertTask failed:', error.message);
+      }
+    }
+  } catch (e: any) {
+    if (isNetworkError(e)) {
+      logWarn('upsertTask: network unavailable (will retry on next sync):', e?.message ?? e);
+    } else {
+      logError('upsertTask failed:', e?.message ?? e);
+    }
+  }
+}
+
+function isMissingColumnError(message: string | undefined): boolean {
+  if (!message) return false;
+  return /deleted_at/i.test(message) && /column|does not exist|schema/i.test(message);
+}
+
+/** Delete a task from Supabase — soft-delete (tombstone) so the deletion
+ *  propagates to other devices; falls back to a hard delete if the live schema
+ *  predates the deleted_at column. */
+export async function deleteTaskFromDb(taskId: string): Promise<void> {
+  try {
+    const { error } = await withRetry('deleteTaskFromDb:soft', () =>
+      supabase.from('tasks').update({ deleted_at: new Date().toISOString() }).eq('id', taskId),
+    );
+    if (error) {
+      if (isMissingColumnError(error.message)) {
+        const { error: hardErr } = await withRetry('deleteTaskFromDb:hard', () =>
+          supabase.from('tasks').delete().eq('id', taskId),
+        );
+        if (hardErr) logError('deleteTaskFromDb hard fallback failed:', hardErr.message);
+      } else {
+        logError('deleteTaskFromDb failed:', error.message);
+      }
+    }
+  } catch (e: any) {
+    logError('deleteTaskFromDb failed after retries:', e?.message ?? e);
+  }
+}
+
+/** Delete multiple tasks from Supabase. */
+export async function deleteCategoryFromDb(categoryId: string): Promise<void> {
+  if (!isValidUUID(categoryId)) return;
+  try {
+    const { error } = await supabase.from('categories').delete().eq('id', categoryId);
+    if (error) logError('deleteCategoryFromDb failed:', error.message);
+  } catch (e: any) {
+    logError('deleteCategoryFromDb failed:', e?.message ?? e);
+  }
+}
+
+export async function deleteTasksFromDb(taskIds: string[]): Promise<void> {
+  if (taskIds.length === 0) return;
+  try {
+    const { error } = await withRetry('deleteTasksFromDb:soft', () =>
+      supabase.from('tasks').update({ deleted_at: new Date().toISOString() }).in('id', taskIds),
+    );
+    if (error) {
+      if (isMissingColumnError(error.message)) {
+        const { error: hardErr } = await withRetry('deleteTasksFromDb:hard', () =>
+          supabase.from('tasks').delete().in('id', taskIds),
+        );
+        if (hardErr) logError('deleteTasksFromDb hard fallback failed:', hardErr.message);
+      } else {
+        logError('deleteTasksFromDb failed:', error.message);
+      }
+    }
+  } catch (e: any) {
+    logError('deleteTasksFromDb failed after retries:', e?.message ?? e);
+  }
+}
+
+// ── Inbox ───────────────────────────────────────────────────────────────────
+
+/** Fetch all inbox tasks from Supabase. */
+export async function fetchInboxTasks(): Promise<InboxTask[]> {
+  try {
+    const { data, error } = await withRetry('fetchInboxTasks', () =>
+      supabase.from('inbox_tasks').select('*').order('captured_at', { ascending: false }),
+    );
+    if (error) {
+      logError('fetchInboxTasks failed:', error.message);
+      return [];
+    }
+    return (data || []).filter((r: any) => !r.deleted_at).map(dbRowToInboxTask);
+  } catch (e: any) {
+    logError('fetchInboxTasks failed after retries:', e?.message ?? e);
+    return [];
+  }
+}
+
+/** Push all local inbox tasks to Supabase (insert, skip duplicates). */
+export async function pushInboxTasks(tasks: InboxTask[], userId: string): Promise<void> {
+  if (tasks.length === 0) return;
+  const rows = tasks.map(t => ({
+    id: t.id,
+    user_id: userId,
+    raw_text: t.rawText,
+    captured_at: toISO(t.capturedAt) || new Date().toISOString(),
+  }));
+
+  // Use ignoreDuplicates so if a row with the same ID already exists
+  // (possibly from another account), it is skipped instead of triggering
+  // an UPDATE that would fail the RLS USING check.
+  try {
+    const { error } = await withRetry('pushInboxTasks', () =>
+      supabase.from('inbox_tasks').upsert(rows, { onConflict: 'id', ignoreDuplicates: true }),
+    );
+    if (error) {
+      logError('pushInboxTasks failed:', error.message);
+    } else {
+      log(`Pushed ${rows.length} inbox tasks`);
+    }
+  } catch (e: any) {
+    logError('pushInboxTasks failed after retries:', e?.message ?? e);
+  }
+}
+
+/** Upsert a single inbox task. Retries on transient network errors. */
+export async function upsertInboxTask(task: InboxTask, userId: string): Promise<void> {
+  const row = {
+    id: task.id,
+    user_id: userId,
+    raw_text: task.rawText,
+    captured_at: toISO(task.capturedAt) || new Date().toISOString(),
+  };
+  try {
+    const { error } = await withRetry('upsertInboxTask', () =>
+      supabase.from('inbox_tasks').upsert(row, { onConflict: 'id' }),
+    );
+    if (error) {
+      logError('upsertInboxTask failed:', error.message);
+    }
+  } catch (e: any) {
+    logError('upsertInboxTask failed after retries:', e?.message ?? e);
+  }
+}
+
+/** Delete an inbox task from Supabase. */
+export async function deleteInboxTaskFromDb(taskId: string): Promise<void> {
+  try {
+    const { error } = await withRetry('deleteInboxTaskFromDb', () =>
+      supabase.from('inbox_tasks').delete().eq('id', taskId),
+    );
+    if (error) {
+      logError('deleteInboxTaskFromDb failed:', error.message);
+    }
+  } catch (e: any) {
+    logError('deleteInboxTaskFromDb failed after retries:', e?.message ?? e);
+  }
+}

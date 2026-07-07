@@ -97,6 +97,7 @@ CREATE TABLE IF NOT EXISTS public.categories (
   sort_order  INT NOT NULL DEFAULT 0,
   created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+  deleted_at  TIMESTAMPTZ,  -- soft-delete tombstone (migration v3)
   UNIQUE (user_id, name)
 );
 
@@ -163,6 +164,7 @@ CREATE TABLE IF NOT EXISTS public.tasks (
 
   created_at          TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at          TIMESTAMPTZ NOT NULL DEFAULT now(),
+  deleted_at          TIMESTAMPTZ,  -- soft-delete tombstone (migration v3)
 
   CONSTRAINT depth_max CHECK (depth >= 0 AND depth <= 3),
   CONSTRAINT created_hour_range CHECK (created_hour >= 0 AND created_hour <= 23),
@@ -179,6 +181,7 @@ CREATE INDEX IF NOT EXISTS idx_tasks_completed     ON public.tasks(user_id, is_c
 CREATE INDEX IF NOT EXISTS idx_tasks_archived      ON public.tasks(user_id, is_archived) WHERE is_archived = true;
 CREATE INDEX IF NOT EXISTS idx_tasks_updated       ON public.tasks(user_id, updated_at);
 CREATE INDEX IF NOT EXISTS idx_tasks_recurring     ON public.tasks(user_id, is_recurring) WHERE is_recurring = true;
+CREATE INDEX IF NOT EXISTS idx_tasks_live          ON public.tasks(user_id) WHERE deleted_at IS NULL;
 
 -- Auto-set completed_at / archived_at and calculate actual_minutes on completion
 CREATE OR REPLACE FUNCTION public.handle_task_completion()
@@ -226,7 +229,8 @@ CREATE TABLE IF NOT EXISTS public.inbox_tasks (
   id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id      UUID NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
   raw_text     TEXT NOT NULL CHECK (char_length(raw_text) BETWEEN 1 AND 1000),
-  captured_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+  captured_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+  deleted_at   TIMESTAMPTZ  -- soft-delete tombstone (migration v3)
 );
 
 CREATE INDEX IF NOT EXISTS idx_inbox_user ON public.inbox_tasks(user_id);
@@ -521,4 +525,68 @@ DO $$ BEGIN
       FOR ALL
       USING  (auth.uid() = user_id)
       WITH CHECK (auth.uid() = user_id);
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+
+-- ════════════════════════════════════════════════════════════════════════════
+-- Habit tracker (Phase 5) — see supabase/migration_v4_habits.sql for the
+-- standalone migration. Folded here so a fresh `schema.sql` bootstraps it too.
+-- ════════════════════════════════════════════════════════════════════════════
+
+CREATE TABLE IF NOT EXISTS public.habits (
+  id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id         UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  name            TEXT NOT NULL,
+  icon            TEXT NOT NULL DEFAULT 'flame-outline',
+  color           TEXT NOT NULL DEFAULT '#F59E0B',
+  schedule_type   TEXT NOT NULL DEFAULT 'daily'
+                    CHECK (schedule_type IN ('daily', 'weekdays', 'x_per_week')),
+  schedule_days   INT[] NOT NULL DEFAULT '{}',
+  schedule_target INT  NOT NULL DEFAULT 1 CHECK (schedule_target BETWEEN 1 AND 7),
+  time_of_day     TEXT NOT NULL DEFAULT 'anytime'
+                    CHECK (time_of_day IN ('anytime', 'morning', 'afternoon', 'evening')),
+  energy_level    TEXT NOT NULL DEFAULT 'medium'
+                    CHECK (energy_level IN ('high', 'medium', 'low')),
+  tiny_version    TEXT NOT NULL DEFAULT '',
+  reminder_time   TEXT,
+  "order"         INT  NOT NULL DEFAULT 0,
+  created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+  archived_at     TIMESTAMPTZ,
+  deleted_at      TIMESTAMPTZ
+);
+
+CREATE INDEX IF NOT EXISTS idx_habits_user    ON public.habits(user_id);
+CREATE INDEX IF NOT EXISTS idx_habits_live     ON public.habits(user_id) WHERE deleted_at IS NULL;
+CREATE INDEX IF NOT EXISTS idx_habits_updated  ON public.habits(user_id, updated_at);
+
+CREATE TABLE IF NOT EXISTS public.habit_logs (
+  id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id      UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  habit_id     UUID NOT NULL REFERENCES public.habits(id) ON DELETE CASCADE,
+  date         TEXT NOT NULL,
+  status       TEXT NOT NULL DEFAULT 'done' CHECK (status IN ('done', 'skipped', 'frozen')),
+  completed_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (habit_id, date)
+);
+
+CREATE INDEX IF NOT EXISTS idx_habit_logs_user  ON public.habit_logs(user_id);
+CREATE INDEX IF NOT EXISTS idx_habit_logs_habit ON public.habit_logs(habit_id, date);
+
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS streak_freezes INT NOT NULL DEFAULT 0;
+
+DROP TRIGGER IF EXISTS trg_habits_updated ON public.habits;
+CREATE TRIGGER trg_habits_updated BEFORE UPDATE ON public.habits
+  FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
+
+ALTER TABLE public.habits     ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.habit_logs ENABLE ROW LEVEL SECURITY;
+
+DO $$ BEGIN
+  CREATE POLICY "Users manage own habits" ON public.habits
+    FOR ALL USING (auth.uid() = user_id) WITH CHECK (auth.uid() = user_id);
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+
+DO $$ BEGIN
+  CREATE POLICY "Users manage own habit logs" ON public.habit_logs
+    FOR ALL USING (auth.uid() = user_id) WITH CHECK (auth.uid() = user_id);
 EXCEPTION WHEN duplicate_object THEN NULL; END $$;

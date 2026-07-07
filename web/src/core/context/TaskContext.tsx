@@ -1,0 +1,1229 @@
+import React, {
+  createContext,
+  useContext,
+  useCallback,
+  useState,
+  useEffect,
+  useRef,
+} from 'react';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { beginLayoutAnimation } from '../../lib/layoutAnimation';
+import { Task, Category, DEFAULT_CATEGORIES } from '../types';
+import {
+  saveTasks, getTasks, saveArchivedTasks, getArchivedTasks,
+  saveCategories, getCategories, saveActiveCategory, getActiveCategory,
+} from '../utils/storage';
+import { generateId } from '../utils/id';
+import { useAuth } from './AuthContext';
+import { parseTaskInput } from '../utils/taskParser';
+import { initializeOverdueDates, isFullyDecayed } from '../utils/decay';
+import { calculateActualMinutes, isTooShort } from '../utils/timeTracking';
+import { updatePatternsOnCompletion } from '../utils/patternLearning';
+import { getAllDescendantIds } from '../utils/dependencyChains';
+import { computeSnoozeTarget, type SnoozeOption } from '../utils/snooze';
+import { getNextOccurrenceAfter } from '../utils/recurrence';
+import { loadTombstoneIds, recordTombstone, recordTombstones } from '../utils/tombstones';
+import {
+  fetchCategories as fetchDbCategories,
+  fetchTasks as fetchDbTasks,
+  pushTasks,
+  pushCategories,
+  upsertTask,
+  upsertCategory,
+  deleteTaskFromDb,
+  deleteTasksFromDb,
+  deleteCategoryFromDb,
+  buildCategoryMap,
+  CategoryMap,
+} from '../lib/supabaseSync';
+import { api } from '../lib/api';
+
+// UUID validator used for category reorder
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+// ── Context shape ────────────────────────────────────────────────────────────
+
+interface TaskContextType {
+  tasks: Task[];
+  archivedTasks: Task[];
+  isLoading: boolean;
+  // Category system
+  categories: Category[];
+  activeCategory: string;
+  setActiveCategory: (id: string) => void;
+  addCategory: (name: string, icon: string, color: string) => Category;
+  updateCategory: (id: string, updates: Partial<Category>) => void;
+  deleteCategory: (id: string) => void;
+  reorderCategories: (orderedIds: string[]) => void;
+  // Task operations
+  addTask: (input: string, overrides?: Partial<Task>) => Task;
+  addSubtask: (parentId: string, input: string, overrides?: Partial<Task>) => Task | null;
+  updateTask: (id: string, updates: Partial<Task>) => void;
+  completeTask: (id: string) => void;
+  uncompleteTask: (id: string) => void;
+  deferTask: (id: string, option?: SnoozeOption) => void;
+  archiveTask: (id: string) => void;
+  deleteTask: (id: string) => void;
+  deleteTaskWithCascade: (id: string) => void;
+  getTask: (id: string) => Task | undefined;
+  reviveTask: (id: string) => void;
+  archiveOverdueTasks: () => void;
+  getFullyDecayedTasks: () => Task[];
+  startTask: (id: string) => void;
+  completeTimedTask: (id: string, adjustedMinutes?: number) => void;
+  moveTaskToParent: (taskId: string, newParentId: string | null) => void;
+  restoreTasks: (snapshots: Task[]) => void;
+  /** Add a task to local state without syncing to the DB (for tasks already persisted by the backend). */
+  addTaskLocal: (task: Task) => void;
+}
+
+const TaskContext = createContext<TaskContextType | undefined>(undefined);
+
+// ── Merge helper — combines local and DB task lists ─────────────────────────
+
+function mergeTaskLists(local: Task[], remote: Task[]): Task[] {
+  const merged = new Map<string, Task>();
+  // Start with local tasks
+  for (const t of local) {
+    merged.set(t.id, t);
+  }
+  // Remote wins if its updatedAt is newer
+  for (const t of remote) {
+    const existing = merged.get(t.id);
+    if (!existing || t.updatedAt > existing.updatedAt) {
+      merged.set(t.id, t);
+    }
+  }
+  return Array.from(merged.values());
+}
+
+// ── Provider ─────────────────────────────────────────────────────────────────
+
+export function TaskProvider({ children }: { children: React.ReactNode }) {
+  const { user } = useAuth();
+  const [tasks, setTasks] = useState<Task[]>([]);
+  const [archivedTasks, setArchivedTasks] = useState<Task[]>([]);
+  const [categories, setCategories] = useState<Category[]>(DEFAULT_CATEGORIES);
+  const [activeCategory, setActiveCategory] = useState<string>('overview');
+  const [isLoading, setIsLoading] = useState(true);
+  const tasksRef = useRef(tasks);
+  tasksRef.current = tasks;
+  const catMapRef = useRef<CategoryMap>({ toUUID: {}, toLocal: {} });
+  const hasSyncedRef = useRef(false);
+  const lastSyncRef = useRef(0);
+
+  // Debounced persist
+  const persistTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Load from disk on mount, then sync with Supabase
+  useEffect(() => {
+    (async () => {
+      try {
+        const stored = await getTasks<Task>();
+        // Migrate: ensure dependency chain fields exist and energyLevel is present
+        const migrated = stored.map(t => ({
+          ...t,
+          childIds: t.childIds ?? [],
+          depth: t.depth ?? 0,
+          parentId: t.parentId ?? null,
+          scheduledStartAt: t.scheduledStartAt ?? null,
+          scheduledEndAt: t.scheduledEndAt ?? null,
+          energyLevel: t.energyLevel ?? 'medium',
+          category: t.category ?? 'personal',
+        }));
+        // Initialize overdueStartDate for tasks that became overdue
+        const initialized = initializeOverdueDates(migrated);
+        setTasks(initialized);
+
+        const storedArchived = await getArchivedTasks<Task>();
+        setArchivedTasks(storedArchived.map(t => ({
+          ...t,
+          scheduledStartAt: t.scheduledStartAt ?? null,
+          scheduledEndAt: t.scheduledEndAt ?? null,
+        })));
+
+        // Load categories
+        const storedCategories = await getCategories<Category>();
+        if (storedCategories.length > 0) {
+          setCategories(storedCategories);
+        }
+        const storedActiveCategory = await getActiveCategory();
+        if (storedActiveCategory) {
+          setActiveCategory(storedActiveCategory);
+        }
+      } catch {
+        // Start fresh if storage is corrupt
+      } finally {
+        setIsLoading(false);
+      }
+    })();
+  }, []);
+
+  // ── Reset state when user identity changes (logout → new login) ───────────
+  const prevUserIdRef = useRef<string | null | undefined>(undefined);
+
+  useEffect(() => {
+    const currentUserId = user?.id ?? null;
+    const prevUserId = prevUserIdRef.current;
+    prevUserIdRef.current = currentUserId;
+
+    // Skip the very first resolution – the mount effect handles initial load
+    if (prevUserId === undefined) return;
+    // No actual change
+    if (prevUserId === currentUserId) return;
+
+    // ── User identity changed ──
+    // Temporarily block sync effect until reload completes
+    hasSyncedRef.current = true;
+
+    // Cancel any pending storage writes from the previous user
+    if (persistTimeout.current) {
+      clearTimeout(persistTimeout.current);
+      persistTimeout.current = null;
+    }
+    if (archivePersistTimeout.current) {
+      clearTimeout(archivePersistTimeout.current);
+      archivePersistTimeout.current = null;
+    }
+
+    // Clear in-memory state
+    setTasks([]);
+    setArchivedTasks([]);
+    setCategories(DEFAULT_CATEGORIES);
+    setActiveCategory('overview');
+
+    if (!currentUserId) {
+      // Logged out – reset complete
+      hasSyncedRef.current = false;
+      setIsLoading(false);
+      return;
+    }
+
+    // A different user logged in – reload from (now-cleared) storage
+    setIsLoading(true);
+    (async () => {
+      try {
+        const stored = await getTasks<Task>();
+        const migrated = stored.map(t => ({
+          ...t,
+          childIds: t.childIds ?? [],
+          depth: t.depth ?? 0,
+          parentId: t.parentId ?? null,
+          scheduledStartAt: t.scheduledStartAt ?? null,
+          scheduledEndAt: t.scheduledEndAt ?? null,
+          energyLevel: t.energyLevel ?? 'medium',
+          category: t.category ?? 'personal',
+        }));
+        const initialized = initializeOverdueDates(migrated);
+        setTasks(initialized);
+
+        const storedArchived = await getArchivedTasks<Task>();
+        setArchivedTasks(storedArchived.map(t => ({
+          ...t,
+          scheduledStartAt: t.scheduledStartAt ?? null,
+          scheduledEndAt: t.scheduledEndAt ?? null,
+        })));
+
+        const storedCategories = await getCategories<Category>();
+        if (storedCategories.length > 0) {
+          setCategories(storedCategories);
+        }
+        const storedActiveCategory = await getActiveCategory();
+        if (storedActiveCategory) {
+          setActiveCategory(storedActiveCategory);
+        }
+      } catch {
+        // Already reset to empty above
+      } finally {
+        // Allow sync effect to run now that reload is complete
+        hasSyncedRef.current = false;
+        setIsLoading(false);
+      }
+    })();
+  }, [user?.id]);
+
+  // ── Supabase sync: push local data on login / pull on subsequent launches ─
+  useEffect(() => {
+    if (!user || isLoading || hasSyncedRef.current) return;
+    hasSyncedRef.current = true;
+
+    (async () => {
+      try {
+        // 0. Ids this device deleted but whose deletion may not have propagated
+        //    yet — never resurrect them by pulling or pushing.
+        const deletedIds = await loadTombstoneIds('tasks');
+
+        // 1. Push local user-created categories to Supabase
+        await pushCategories(categories, user.id);
+
+        // 2. Fetch DB categories
+        const dbCats = await fetchDbCategories();
+
+        // 3. Merge DB categories into local state
+        //    - Defaults keep their string IDs ('overview', 'work', etc.)
+        //    - User-created categories from DB are added with their UUID IDs
+        let mergedCategories = [...categories];
+        if (dbCats.length > 0) {
+          const localNameSet = new Set(
+            mergedCategories.map(c => c.name.toLowerCase()),
+          );
+
+          // Add user-created categories from DB that aren't locally present
+          for (const dbCat of dbCats) {
+            if (!localNameSet.has(dbCat.name.toLowerCase())) {
+              mergedCategories.push(dbCat);
+              localNameSet.add(dbCat.name.toLowerCase());
+            }
+          }
+
+          mergedCategories.sort((a, b) => a.order - b.order);
+          setCategories(mergedCategories);
+        }
+
+        // 4. Build category map (local string IDs <-> DB UUIDs). A persisted
+        //    prior map keeps a category bound to its UUID even after a rename,
+        //    which name-only matching would break (tasks would lose category).
+        const CAT_MAP_KEY = 'tody:catUuidMap';
+        let priorMap: CategoryMap | undefined;
+        try {
+          const raw = await AsyncStorage.getItem(CAT_MAP_KEY);
+          if (raw) priorMap = JSON.parse(raw);
+        } catch { /* ignore */ }
+        catMapRef.current = buildCategoryMap(mergedCategories, dbCats as any, priorMap);
+        AsyncStorage.setItem(CAT_MAP_KEY, JSON.stringify(catMapRef.current)).catch(() => {});
+
+        // 5. Fetch existing tasks from DB
+        const { active: dbActive, archived: dbArchived } = await fetchDbTasks(catMapRef.current);
+
+        // 6. Merge tasks (DB wins on conflicts by updatedAt), dropping anything
+        //    this device has tombstoned so a not-yet-propagated delete can't
+        //    reappear from the DB pull.
+        if (dbActive.length > 0 || dbArchived.length > 0) {
+          const keep = (list: Task[]) => list.filter(t => !deletedIds.has(t.id));
+          setTasks(prev => keep(mergeTaskLists(prev, dbActive)));
+          setArchivedTasks(prev => keep(mergeTaskLists(prev, dbArchived)));
+        }
+
+        // 7. Push any local-only tasks to Supabase — but never re-insert a
+        //    tombstoned id (the resurrection bug).
+        const allLocal = [...tasksRef.current, ...archivedTasks].filter(t => !deletedIds.has(t.id));
+        if (allLocal.length > 0) {
+          await pushTasks(allLocal, user.id, catMapRef.current);
+        }
+
+        lastSyncRef.current = Date.now();
+        // sync complete
+      } catch (e) {
+        // sync error silenced
+      }
+    })();
+  }, [user, isLoading]);
+
+  // ── Re-sync on window focus / tab visibility ──────────────────────────────
+  // The initial sync is one-shot (hasSyncedRef), so changes made on another
+  // device were invisible until an app restart. Pull remote changes when the
+  // user returns to the tab, throttled to at most once per minute.
+  useEffect(() => {
+    if (!user) return;
+    const REFRESH_THROTTLE_MS = 60_000;
+
+    const refresh = async () => {
+      if (document.visibilityState === 'hidden') return;
+      if (hasSyncedRef.current === false) return; // initial sync hasn't run yet
+      if (Date.now() - lastSyncRef.current < REFRESH_THROTTLE_MS) return;
+      lastSyncRef.current = Date.now();
+      try {
+        const deletedIds = await loadTombstoneIds('tasks');
+        const { active, archived } = await fetchDbTasks(catMapRef.current);
+        if (active.length > 0 || archived.length > 0) {
+          const keep = (list: Task[]) => list.filter(t => !deletedIds.has(t.id));
+          setTasks(prev => keep(mergeTaskLists(prev, active)));
+          setArchivedTasks(prev => keep(mergeTaskLists(prev, archived)));
+        }
+      } catch {
+        /* best effort — offline, etc. */
+      }
+    };
+
+    document.addEventListener('visibilitychange', refresh);
+    window.addEventListener('focus', refresh);
+    return () => {
+      document.removeEventListener('visibilitychange', refresh);
+      window.removeEventListener('focus', refresh);
+    };
+  }, [user]);
+
+  // Persist with 300ms debounce on every change
+  useEffect(() => {
+    if (isLoading) { return; }
+
+    if (persistTimeout.current) {
+      clearTimeout(persistTimeout.current);
+    }
+    persistTimeout.current = setTimeout(() => {
+      saveTasks(tasks);
+    }, 500);
+
+    return () => {
+      if (persistTimeout.current) {
+        clearTimeout(persistTimeout.current);
+      }
+    };
+  }, [tasks, isLoading]);
+
+  // Persist archived tasks
+  const archivePersistTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    if (isLoading) { return; }
+
+    if (archivePersistTimeout.current) {
+      clearTimeout(archivePersistTimeout.current);
+    }
+    archivePersistTimeout.current = setTimeout(() => {
+      saveArchivedTasks(archivedTasks);
+    }, 500);
+
+    return () => {
+      if (archivePersistTimeout.current) {
+        clearTimeout(archivePersistTimeout.current);
+      }
+    };
+  }, [archivedTasks, isLoading]);
+
+  // Persist category preferences
+  useEffect(() => {
+    if (!isLoading) {
+      saveCategories(categories);
+    }
+  }, [categories, isLoading]);
+
+  useEffect(() => {
+    if (!isLoading) {
+      saveActiveCategory(activeCategory);
+    }
+  }, [activeCategory, isLoading]);
+
+  // ── Backend payload builder ───────────────────────────────────────────────────────
+  // Maps an in-memory Task to the snake_case payload the FastAPI /tasks endpoint expects.
+  function buildTaskPayload(task: Task) {
+    const catMap = catMapRef.current;
+    return {
+      id:                   task.id,
+      title:                task.title,
+      description:          task.description || '',
+      priority:             task.priority,
+      energy_level:         task.energyLevel,
+      category_id:          task.category ? catMap.toUUID[task.category] ?? null : null,
+      deadline:             task.deadline         ? new Date(task.deadline).toISOString()         : null,
+      scheduled_start_at:   task.scheduledStartAt ? new Date(task.scheduledStartAt).toISOString() : null,
+      scheduled_end_at:     task.scheduledEndAt   ? new Date(task.scheduledEndAt).toISOString()   : null,
+      completed_at:         task.completedAt      ? new Date(task.completedAt).toISOString()      : null,
+      archived_at:          task.archivedAt       ? new Date(task.archivedAt).toISOString()       : null,
+      overdue_start_date:   task.overdueStartDate ? new Date(task.overdueStartDate).toISOString() : null,
+      revived_at:           task.revivedAt        ? new Date(task.revivedAt).toISOString()        : null,
+      started_at:           task.startedAt        ? new Date(task.startedAt).toISOString()        : null,
+      created_at:           task.createdAt        ? new Date(task.createdAt).toISOString()        : null,
+      updated_at:           task.updatedAt        ? new Date(task.updatedAt).toISOString()        : null,
+      estimated_minutes:    task.estimatedMinutes    ?? null,
+      actual_minutes:       task.actualMinutes       ?? null,
+      parent_id:            task.parentId            ?? null,
+      depth:                task.depth,
+      created_hour:         task.createdHour,
+      is_recurring:         task.isRecurring,
+      recurring_frequency:  task.recurringFrequency  ?? null,
+      is_completed:         task.isCompleted,
+      is_archived:          task.isArchived,
+      defer_count:          task.deferCount,
+    };
+  }
+
+  /**
+   * Phase 3.1 — recurring spawn. When a recurring task with a deadline is
+   * completed, produce the next instance (fresh id, advanced deadline, all
+   * per-run state reset). Returns null if the task doesn't recur, or if an
+   * active instance for the next occurrence already exists (the double-spawn
+   * guard for complete → uncomplete → complete, robust across reloads because
+   * it inspects the live list rather than a session-only flag).
+   */
+  function buildRecurringSpawn(task: Task, now: number, list: Task[]): Task | null {
+    if (!task.isRecurring || !task.recurringFrequency || task.deadline == null) return null;
+    const nextDeadline = getNextOccurrenceAfter(task.deadline, task.recurringFrequency, now);
+    const already = list.some(
+      t => !t.isCompleted && !t.isArchived && t.isRecurring &&
+           t.title === task.title && t.deadline === nextDeadline,
+    );
+    if (already) return null;
+    return {
+      ...task,
+      id: generateId(),
+      deadline: nextDeadline,
+      createdAt: now,
+      updatedAt: now,
+      createdHour: new Date(now).getHours(),
+      isCompleted: false,
+      completedAt: null,
+      startedAt: null,
+      actualMinutes: null,
+      revivedAt: null,
+      overdueStartDate: null,
+      archivedAt: null,
+      isArchived: false,
+      deferCount: 0,
+      parentId: null,
+      childIds: [],
+      depth: 0,
+    };
+  }
+
+  // Appends a recurring spawn to the just-completed list and persists it.
+  function withRecurringSpawn(completed: Task | undefined, updated: Task[], now: number): Task[] {
+    if (!completed) return updated;
+    const spawn = buildRecurringSpawn(completed, now, updated);
+    if (!spawn) return updated;
+    if (user) {
+      const uid = user.id;
+      const catMap = catMapRef.current;
+      api.post('/tasks', buildTaskPayload(spawn))
+        .then(({ error, isBackendDown }) => {
+          if (error || isBackendDown) upsertTask(spawn, uid, catMap).catch(() => {});
+        })
+        .catch(() => { upsertTask(spawn, uid, catMap).catch(() => {}); });
+    }
+    return [spawn, ...updated];
+  }
+
+  const addTask = useCallback((input: string, overrides?: Partial<Task>): Task => {
+    const parsed = parseTaskInput(input);
+    const now = Date.now();
+
+    const task: Task = {
+      id: generateId(),
+      title: parsed.title,
+      description: '',
+      createdAt: now,
+      updatedAt: now,
+      deadline: parsed.deadline,
+      scheduledStartAt: null,
+      scheduledEndAt: null,
+      completedAt: null,
+      priority: parsed.priority,
+      energyLevel: 'medium',
+      category: 'personal',
+      isCompleted: false,
+      isRecurring: false,
+      recurringFrequency: null,
+      deferCount: 0,
+      createdHour: new Date().getHours(),
+      overdueStartDate: null,
+      revivedAt: null,
+      archivedAt: null,
+      isArchived: false,
+      estimatedMinutes: null,
+      actualMinutes: null,
+      startedAt: null,
+      parentId: null,
+      childIds: [],
+      depth: 0,
+      userId: user?.id,
+      ...overrides,
+    };
+
+    beginLayoutAnimation();
+    setTasks(prev => [task, ...prev]);
+
+    // Route through API; fall back to direct Supabase if backend is down
+    if (user) {
+      const uid = user.id;
+      api.post('/tasks', buildTaskPayload(task))
+        .then(({ error, isBackendDown }) => {
+          if (error || isBackendDown) upsertTask(task, uid, catMapRef.current).catch(() => {});
+        })
+        .catch(() => { upsertTask(task, uid, catMapRef.current).catch(() => {}); });
+    }
+
+    return task;
+  }, [user]);
+
+  const addSubtask = useCallback((parentId: string, input: string, overrides?: Partial<Task>): Task | null => {
+    const parent = tasksRef.current.find(t => t.id === parentId);
+    if (!parent || parent.depth >= 3) return null;
+
+    const parsed = parseTaskInput(input);
+    const now = Date.now();
+
+    const subtask: Task = {
+      id: generateId(),
+      title: parsed.title,
+      description: '',
+      createdAt: now,
+      updatedAt: now,
+      deadline: parsed.deadline,
+      scheduledStartAt: null,
+      scheduledEndAt: null,
+      completedAt: null,
+      priority: parsed.priority,
+      energyLevel: parent.energyLevel ?? 'medium', // Inherit parent's energy level
+      category: parent.category || 'personal', // Inherit parent's category
+      isCompleted: false,
+      isRecurring: false,
+      recurringFrequency: null,
+      deferCount: 0,
+      createdHour: new Date().getHours(),
+      overdueStartDate: null,
+      revivedAt: null,
+      archivedAt: null,
+      isArchived: false,
+      estimatedMinutes: null,
+      actualMinutes: null,
+      startedAt: null,
+      parentId,
+      childIds: [],
+      depth: parent.depth + 1,
+      userId: user?.id,
+      ...overrides,
+    };
+
+    beginLayoutAnimation();
+    setTasks(prev => {
+      const updated = prev.map(t =>
+        t.id === parentId
+          ? { ...t, childIds: [...t.childIds, subtask.id], updatedAt: now }
+          : t,
+      );
+      // Insert subtask right after parent in the list
+      const parentIndex = updated.findIndex(t => t.id === parentId);
+      const insertIndex = parentIndex >= 0 ? parentIndex + 1 : 0;
+      updated.splice(insertIndex, 0, subtask);
+      return updated;
+    });
+
+    // Route through API; parent_id FK is in the payload so backend persists correctly.
+    // Fall back to direct Supabase upsert (parent first) if backend is down.
+    if (user) {
+      const uid = user.id;
+      api.post('/tasks', buildTaskPayload(subtask))
+        .then(({ error, isBackendDown }) => {
+          if (error || isBackendDown) {
+            const parentTask = tasksRef.current.find(t => t.id === parentId);
+            if (parentTask) {
+              upsertTask({ ...parentTask, childIds: [...parentTask.childIds, subtask.id], updatedAt: now }, uid, catMapRef.current)
+                .then(() => upsertTask(subtask, uid, catMapRef.current))
+                .catch(() => {});
+            } else {
+              upsertTask(subtask, uid, catMapRef.current, tasksRef.current).catch(() => {});
+            }
+          }
+        })
+        .catch(() => { upsertTask(subtask, uid, catMapRef.current, tasksRef.current).catch(() => {}); });
+    }
+
+    return subtask;
+  }, [user]);
+
+  const updateTask = useCallback((id: string, updates: Partial<Task>) => {
+    setTasks(prev =>
+      prev.map(t => {
+        if (t.id !== id) { return t; }
+        const merged = { ...t, ...updates, updatedAt: Date.now() };
+        // If deadline changed, recalculate overdue tracking
+        if (updates.deadline !== undefined && updates.deadline !== t.deadline) {
+          merged.overdueStartDate = null;
+        }
+        // Sync to Supabase
+        if (user) {
+          upsertTask(merged, user.id, catMapRef.current, prev).catch(() => {});
+        }
+        return merged;
+      }),
+    );
+  }, [user]);
+
+  const completeTask = useCallback((id: string) => {
+    beginLayoutAnimation();
+    const now = Date.now();
+    setTasks(prev => {
+      const updated = prev.map(t => {
+        if (t.id !== id) { return t; }
+        const actualMins = t.startedAt
+          ? calculateActualMinutes(t.startedAt, now)
+          : null;
+        return {
+          ...t,
+          isCompleted: true,
+          completedAt: now,
+          updatedAt: now,
+          actualMinutes: actualMins,
+        };
+      });
+
+      const completedTask = updated.find(t => t.id === id);
+      if (completedTask && user) {
+        const uid = user.id;
+        const catMap = catMapRef.current;
+        // ── POST /tasks/{id}/complete → fallback to direct Supabase if backend down ──
+        api.post(`/tasks/${id}/complete`, {
+          actual_minutes: completedTask.actualMinutes ?? undefined,
+        }).then(({ error, isBackendDown }) => {
+          if (error || isBackendDown) {
+            upsertTask(completedTask, uid, catMap, updated).catch(() => {});
+          }
+        }).catch(() => {
+          upsertTask(completedTask, uid, catMap, updated).catch(() => {});
+        });
+      }
+
+      // Run pattern learning in background
+      if (completedTask?.actualMinutes && !isTooShort(completedTask.actualMinutes)) {
+        const allCompleted = updated.filter(t => t.isCompleted && t.actualMinutes && t.actualMinutes >= 1);
+        updatePatternsOnCompletion(completedTask, allCompleted).catch(() => { });
+      }
+
+      return withRecurringSpawn(completedTask, updated, now);
+    });
+  }, [user]);
+
+  const startTask = useCallback((id: string) => {
+    const now = Date.now();
+    setTasks(prev =>
+      prev.map(t => {
+        if (t.id !== id) return t;
+        const updated = { ...t, startedAt: now, updatedAt: now };
+        if (user) upsertTask(updated, user.id, catMapRef.current, prev).catch(() => {});
+        return updated;
+      }),
+    );
+  }, [user]);
+
+  const completeTimedTask = useCallback((id: string, adjustedMinutes?: number) => {
+    beginLayoutAnimation();
+    const now = Date.now();
+    setTasks(prev => {
+      const updated = prev.map(t => {
+        if (t.id !== id) { return t; }
+        const calcMins = t.startedAt
+          ? calculateActualMinutes(t.startedAt, now)
+          : null;
+        const actualMins = adjustedMinutes != null ? adjustedMinutes : calcMins;
+        return {
+          ...t,
+          isCompleted: true,
+          completedAt: now,
+          updatedAt: now,
+          actualMinutes: actualMins,
+        };
+      });
+
+      const completedTask = updated.find(t => t.id === id);
+      if (completedTask && user) {
+        const uid = user.id;
+        const catMap = catMapRef.current;
+        api.post(`/tasks/${id}/complete`, {
+          actual_minutes: completedTask.actualMinutes ?? undefined,
+        }).then(({ error, isBackendDown }) => {
+          if (error || isBackendDown) {
+            upsertTask(completedTask, uid, catMap, updated).catch(() => {});
+          }
+        }).catch(() => {
+          upsertTask(completedTask, uid, catMap, updated).catch(() => {});
+        });
+      }
+      if (completedTask?.actualMinutes && !isTooShort(completedTask.actualMinutes)) {
+        const allCompleted = updated.filter(t => t.isCompleted && t.actualMinutes && t.actualMinutes >= 1);
+        updatePatternsOnCompletion(completedTask, allCompleted).catch(() => { });
+      }
+
+      return withRecurringSpawn(completedTask, updated, now);
+    });
+  }, [user]);
+
+  const uncompleteTask = useCallback((id: string) => {
+    beginLayoutAnimation();
+    const now = Date.now();
+    setTasks(prev =>
+      prev.map(t => {
+        if (t.id !== id) return t;
+        const updatedTask = { ...t, isCompleted: false, completedAt: null, updatedAt: now };
+        if (user) {
+          const uid = user.id;
+          const catMap = catMapRef.current;
+          // POST /tasks/{id}/uncomplete clears completed_at + actual_minutes atomically
+          api.post(`/tasks/${id}/uncomplete`).then(({ error, isBackendDown }) => {
+            if (error || isBackendDown) {
+              upsertTask(updatedTask, uid, catMap, prev).catch(() => {});
+            }
+          }).catch(() => {
+            upsertTask(updatedTask, uid, catMap, prev).catch(() => {});
+          });
+        }
+        return updatedTask;
+      }),
+    );
+  }, [user]);
+
+  const deferTask = useCallback((id: string, option: SnoozeOption = 'tomorrow') => {
+    // Client computes the snooze target in LOCAL time (source of truth) and
+    // sends it to the backend — the old POST /defer computed "tomorrow" in UTC,
+    // which drifted the deadline for non-UTC users.
+    const target = computeSnoozeTarget(option);
+    const now = Date.now();
+
+    setTasks(prev =>
+      prev.map(t => {
+        if (t.id !== id) return t;
+        const updated = {
+          ...t,
+          deadline: target,
+          scheduledStartAt: null,
+          scheduledEndAt: null,
+          deferCount: t.deferCount + 1,
+          overdueStartDate: null,
+          updatedAt: now,
+        };
+        if (user) {
+          const uid = user.id;
+          const catMap = catMapRef.current;
+          api.post(`/tasks/${id}/defer`, { deadline: new Date(target).toISOString() })
+            .then(({ error, isBackendDown }) => {
+              if (error || isBackendDown) {
+                upsertTask(updated, uid, catMap, prev).catch(() => {});
+              }
+            }).catch(() => {
+              upsertTask(updated, uid, catMap, prev).catch(() => {});
+            });
+        }
+        return updated;
+      }),
+    );
+  }, [user]);
+
+  const archiveTask = useCallback((id: string) => {
+    beginLayoutAnimation();
+    const now = Date.now();
+
+    setTasks(prev => {
+      const task = prev.find(t => t.id === id);
+      if (!task) return prev;
+
+      const archivedTask = {
+        ...task,
+        isArchived: true,
+        archivedAt: now,
+        updatedAt: now,
+        scheduledStartAt: null,
+        scheduledEndAt: null,
+      };
+
+      setArchivedTasks(current => [archivedTask, ...current.filter(t => t.id !== id)]);
+
+      if (user) {
+        const uid = user.id;
+        const catMap = catMapRef.current;
+        api.post(`/tasks/${id}/archive`).then(({ error, isBackendDown }) => {
+          if (error || isBackendDown) {
+            upsertTask(archivedTask, uid, catMap, prev).catch(() => {});
+          }
+        }).catch(() => {
+          upsertTask(archivedTask, uid, catMap, prev).catch(() => {});
+        });
+      }
+
+      return prev.filter(t => t.id !== id);
+    });
+  }, [user]);
+
+  const deleteTask = useCallback((id: string) => {
+    beginLayoutAnimation();
+    recordTombstone('tasks', id).catch(() => {}); // guard against sync resurrection
+    setTasks(prev => {
+      const task = prev.find(t => t.id === id);
+      if (!task) return prev;
+      // Remove from parent's childIds
+      let updated = prev;
+      if (task.parentId) {
+        updated = updated.map(t =>
+          t.id === task.parentId
+            ? { ...t, childIds: t.childIds.filter(cid => cid !== id), updatedAt: Date.now() }
+            : t,
+        );
+        // Sync parent update
+        if (user) {
+          const parent = updated.find(t => t.id === task.parentId);
+          if (parent) upsertTask(parent, user.id, catMapRef.current).catch(() => {});
+        }
+      }
+      // Route through API; fall back to direct Supabase delete
+      if (user) {
+        api.delete(`/tasks/${id}`)
+          .then(({ error, isBackendDown }) => {
+            if (error || isBackendDown) deleteTaskFromDb(id).catch(() => {});
+          })
+          .catch(() => { deleteTaskFromDb(id).catch(() => {}); });
+      }
+      return updated.filter(t => t.id !== id);
+    });
+  }, [user]);
+
+  const deleteTaskWithCascade = useCallback((id: string) => {
+    beginLayoutAnimation();
+    setTasks(prev => {
+      const task = prev.find(t => t.id === id);
+      if (!task) return prev;
+      const descendantIds = getAllDescendantIds(id, prev);
+      const idsToRemove = new Set([id, ...descendantIds]);
+      recordTombstones('tasks', Array.from(idsToRemove)).catch(() => {}); // guard against resurrection
+      // Remove from parent's childIds
+      let updated = prev;
+      if (task.parentId) {
+        updated = updated.map(t =>
+          t.id === task.parentId
+            ? { ...t, childIds: t.childIds.filter(cid => cid !== id), updatedAt: Date.now() }
+            : t,
+        );
+        if (user) {
+          const parent = updated.find(t => t.id === task.parentId);
+          if (parent) upsertTask(parent, user.id, catMapRef.current).catch(() => {});
+        }
+      }
+      // Backend DELETE /tasks/{id} cascades one level of children; clean up deeper
+      // descendants with a batch delete.  Fall back entirely to direct Supabase.
+      if (user) {
+        api.delete(`/tasks/${id}`)
+          .then(({ error, isBackendDown }) => {
+            if (error || isBackendDown) {
+              deleteTasksFromDb(Array.from(idsToRemove)).catch(() => {});
+            } else if (descendantIds.length > 0) {
+              const deeper = descendantIds.filter(did => {
+                const d = prev.find(t => t.id === did);
+                return d && d.depth > (prev.find(t => t.id === id)?.depth ?? 0) + 1;
+              });
+              if (deeper.length > 0) deleteTasksFromDb(deeper).catch(() => {});
+            }
+          })
+          .catch(() => { deleteTasksFromDb(Array.from(idsToRemove)).catch(() => {}); });
+      }
+      return updated.filter(t => !idsToRemove.has(t.id));
+    });
+  }, [user]);
+
+  // Restore previously deleted/completed tasks from snapshots (for Undo)
+  const restoreTasks = useCallback((snapshots: Task[]) => {
+    beginLayoutAnimation();
+    setTasks(prev => {
+      const existingIds = new Set(prev.map(t => t.id));
+      const toRestore = snapshots.filter(s => !existingIds.has(s.id));
+      let updated = [...prev, ...toRestore];
+      // Re-attach children to parents
+      for (const restored of toRestore) {
+        if (restored.parentId) {
+          updated = updated.map(t =>
+            t.id === restored.parentId && !t.childIds.includes(restored.id)
+              ? { ...t, childIds: [...t.childIds, restored.id], updatedAt: Date.now() }
+              : t,
+          );
+        }
+      }
+
+      // Sync restored tasks to Supabase
+      if (user) {
+        for (const restored of toRestore) {
+          upsertTask(restored, user.id, catMapRef.current, updated).catch(() => {});
+        }
+      }
+
+      return updated;
+    });
+  }, [user]);
+
+  const moveTaskToParent = useCallback((taskId: string, newParentId: string | null) => {
+    const now = Date.now();
+    setTasks(prev => {
+      const task = prev.find(t => t.id === taskId);
+      if (!task) return prev;
+
+      let updated = [...prev];
+
+      // Remove from old parent's childIds
+      if (task.parentId) {
+        updated = updated.map(t =>
+          t.id === task.parentId
+            ? { ...t, childIds: t.childIds.filter(cid => cid !== taskId), updatedAt: now }
+            : t,
+        );
+      }
+
+      if (newParentId) {
+        const newParent = updated.find(t => t.id === newParentId);
+        if (!newParent || newParent.depth >= 3) return prev;
+
+        const depthDiff = (newParent.depth + 1) - task.depth;
+
+        // Update new parent's childIds
+        updated = updated.map(t => {
+          if (t.id === newParentId) {
+            return { ...t, childIds: [...t.childIds, taskId], updatedAt: now };
+          }
+          return t;
+        });
+
+        // Update the task and all descendants' depths
+        const descendantIds = getAllDescendantIds(taskId, updated);
+        updated = updated.map(t => {
+          if (t.id === taskId) {
+            return { ...t, parentId: newParentId, depth: newParent.depth + 1, updatedAt: now };
+          }
+          if (descendantIds.includes(t.id)) {
+            return { ...t, depth: t.depth + depthDiff, updatedAt: now };
+          }
+          return t;
+        });
+      } else {
+        // Moving to root
+        const depthDiff = -task.depth;
+        const descendantIds = getAllDescendantIds(taskId, updated);
+        updated = updated.map(t => {
+          if (t.id === taskId) {
+            return { ...t, parentId: null, depth: 0, updatedAt: now };
+          }
+          if (descendantIds.includes(t.id)) {
+            return { ...t, depth: t.depth + depthDiff, updatedAt: now };
+          }
+          return t;
+        });
+      }
+
+      // Sync all affected tasks to Supabase
+      if (user) {
+        const affectedIds = new Set([taskId]);
+        if (task.parentId) affectedIds.add(task.parentId);
+        if (newParentId) affectedIds.add(newParentId);
+        const descendantIds = getAllDescendantIds(taskId, updated);
+        descendantIds.forEach(did => affectedIds.add(did));
+        for (const aid of affectedIds) {
+          const t = updated.find(x => x.id === aid);
+          if (t) upsertTask(t, user.id, catMapRef.current, updated).catch(() => {});
+        }
+      }
+
+      return updated;
+    });
+  }, [user]);
+
+  const reviveTask = useCallback((id: string) => {
+    const now = Date.now();
+    const todayEnd = new Date();
+    todayEnd.setHours(23, 59, 59, 999);
+
+    beginLayoutAnimation();
+    setTasks(prev =>
+      prev.map(t => {
+        if (t.id !== id) return t;
+        const updated = {
+          ...t,
+          overdueStartDate: null,
+          revivedAt: now,
+          deadline: todayEnd.getTime(),
+          updatedAt: now,
+        };
+        if (user) upsertTask(updated, user.id, catMapRef.current, prev).catch(() => {});
+        return updated;
+      }),
+    );
+  }, [user]);
+
+  const getFullyDecayedTasks = useCallback((): Task[] => {
+    return tasksRef.current.filter(t => isFullyDecayed(t));
+  }, []);
+
+  const archiveOverdueTasks = useCallback(() => {
+    const now = Date.now();
+    const toArchive = tasksRef.current.filter(t => isFullyDecayed(t));
+
+    if (toArchive.length === 0) { return; }
+
+    const archivedItems = toArchive.map(t => ({
+      ...t,
+      isArchived: true,
+      archivedAt: now,
+      updatedAt: now,
+    }));
+
+    beginLayoutAnimation();
+    setTasks(prev => prev.filter(t => !isFullyDecayed(t)));
+    setArchivedTasks(prev => [...archivedItems, ...prev]);
+
+    // POST /tasks/{id}/archive for each item → fallback to upsertTask if backend down
+    if (user) {
+      const uid = user.id;
+      const catMap = catMapRef.current;
+      const snapshot = tasksRef.current;
+      for (const t of archivedItems) {
+        api.post(`/tasks/${t.id}/archive`).then(({ error, isBackendDown }) => {
+          if (error || isBackendDown) {
+            upsertTask(t, uid, catMap, snapshot).catch(() => {});
+          }
+        }).catch(() => {
+          upsertTask(t, uid, catMap, snapshot).catch(() => {});
+        });
+      }
+    }
+  }, [user]);
+
+  const getTask = useCallback((id: string): Task | undefined => {
+    return tasksRef.current.find(t => t.id === id);
+  }, []);
+
+  /**
+   * Add a task object to local state without triggering a DB sync.
+   * Use this when the backend has already persisted the task (e.g. after
+   * a successful POST /inbox/{id}/convert).
+   */
+  const addTaskLocal = useCallback((task: Task): void => {
+    beginLayoutAnimation();
+    setTasks(prev => [task, ...prev]);
+  }, []);
+
+  // ── Category CRUD ────────────────────────────────────────────────────
+
+  const addCategory = useCallback((name: string, icon: string, color: string): Category => {
+    const newCat: Category = {
+      id: generateId(),
+      name,
+      icon,
+      color,
+      isDefault: false,
+      // max(order)+1, not categories.length — after a delete, length can equal
+      // an existing order and collide (nondeterministic tab ordering).
+      order: categories.reduce((m, c) => Math.max(m, c.order), -1) + 1,
+    };
+    setCategories(prev => [...prev, newCat]);
+    // Route through API; fall back to direct Supabase upsert
+    if (user) {
+      const uid = user.id;
+      api.post('/categories', {
+        id:         newCat.id,
+        name:       newCat.name,
+        icon:       newCat.icon,
+        color:      newCat.color,
+        sort_order: newCat.order,
+      }).then(({ error, isBackendDown }) => {
+        if (error || isBackendDown) upsertCategory(newCat, uid).catch(() => {});
+      }).catch(() => { upsertCategory(newCat, uid).catch(() => {}); });
+    }
+    return newCat;
+  }, [categories.length, user]);
+
+  const updateCategory = useCallback((id: string, updates: Partial<Category>) => {
+    setCategories(prev => {
+      const updated = prev.map(c => c.id === id ? { ...c, ...updates } : c);
+      const cat = updated.find(c => c.id === id);
+      if (cat && user) {
+        const catUUID = catMapRef.current.toUUID[id] || (UUID_RE.test(id) ? id : null);
+        const patchBody: Record<string, unknown> = {};
+        if (updates.name  !== undefined) patchBody.name       = updates.name;
+        if (updates.icon  !== undefined) patchBody.icon       = updates.icon;
+        if (updates.color !== undefined) patchBody.color      = updates.color;
+        if (updates.order !== undefined) patchBody.sort_order = updates.order;
+        const uid = user.id;
+        if (catUUID && Object.keys(patchBody).length > 0) {
+          api.patch(`/categories/${catUUID}`, patchBody)
+            .then(({ error, isBackendDown }) => {
+              if (error || isBackendDown) upsertCategory(cat, uid).catch(() => {});
+            })
+            .catch(() => { upsertCategory(cat, uid).catch(() => {}); });
+        } else {
+          upsertCategory(cat, uid).catch(() => {});
+        }
+      }
+      return updated;
+    });
+  }, [user]);
+
+  const deleteCategory = useCallback((id: string) => {
+    setCategories(prev => prev.filter(c => c.id !== id));
+    // Reassign tasks from deleted category to 'personal'
+    setTasks(prev => prev.map(t =>
+      t.category === id ? { ...t, category: 'personal', updatedAt: Date.now() } : t,
+    ));
+    // If the active tab was the deleted category, go to overview
+    setActiveCategory(prev => prev === id ? 'overview' : prev);
+    // Route through API; fall back to direct Supabase delete
+    if (user) {
+      const catUUID = catMapRef.current.toUUID[id] || (UUID_RE.test(id) ? id : null);
+      if (catUUID) {
+        api.delete(`/categories/${catUUID}`)
+          .then(({ error, isBackendDown }) => {
+            if (error || isBackendDown) deleteCategoryFromDb(id).catch(() => {});
+          })
+          .catch(() => { deleteCategoryFromDb(id).catch(() => {}); });
+      } else {
+        deleteCategoryFromDb(id).catch(() => {});
+      }
+    }
+  }, [user]);
+
+  const reorderCategories = useCallback((orderedIds: string[]) => {
+    setCategories(prev => {
+      const map = new Map(prev.map(c => [c.id, c]));
+      return orderedIds.map((id, i) => {
+        const cat = map.get(id);
+        return cat ? { ...cat, order: i } : cat;
+      }).filter(Boolean) as Category[];
+    });
+
+    // POST /categories/reorder — persist new order to backend
+    // Map local string IDs → DB UUIDs; skip any IDs that can't be resolved
+    if (user) {
+      const catMap = catMapRef.current;
+      const apiOrderedIds = orderedIds
+        .map(id => catMap.toUUID[id] || (UUID_RE.test(id) ? id : null))
+        .filter((id): id is string => id !== null);
+      if (apiOrderedIds.length > 0) {
+        api.post('/categories/reorder', { ordered_ids: apiOrderedIds }).catch(() => {});
+      }
+    }
+  }, [user]);
+
+  return (
+    <TaskContext.Provider
+      value={{
+        tasks,
+        archivedTasks,
+        categories,
+        activeCategory,
+        setActiveCategory,
+        addCategory,
+        updateCategory,
+        deleteCategory,
+        reorderCategories,
+        isLoading,
+        addTask,
+        addSubtask,
+        updateTask,
+        completeTask,
+        uncompleteTask,
+        deferTask,
+        archiveTask,
+        deleteTask,
+        deleteTaskWithCascade,
+        getTask,
+        reviveTask,
+        archiveOverdueTasks,
+        getFullyDecayedTasks,
+        startTask,
+        completeTimedTask,
+        moveTaskToParent,
+        restoreTasks,
+        addTaskLocal,
+      }}>
+      {children}
+    </TaskContext.Provider>
+  );
+}
+
+// ── Hook ─────────────────────────────────────────────────────────────────────
+
+export function useTasks(): TaskContextType {
+  const ctx = useContext(TaskContext);
+  if (!ctx) { throw new Error('useTasks must be used within TaskProvider'); }
+  return ctx;
+}

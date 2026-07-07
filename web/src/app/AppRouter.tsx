@@ -1,0 +1,101 @@
+import { lazy, Suspense } from 'react';
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
+import { AnimatePresence, motion } from 'framer-motion';
+import { useAuth } from '../core/context/AuthContext';
+import { Spinner } from '../ui/Spinner';
+import { AppShell } from './AppShell';
+import { transitionFor, VARIANTS } from './navTransitions';
+import { BottomTabBar, isTabRoute } from '../components/BottomTabBar';
+
+// Auth screens are eager (first paint); the rest are code-split per route.
+import { LoginScreen } from '../screens/LoginScreen';
+import { RegisterScreen } from '../screens/RegisterScreen';
+const HomeScreen = lazy(() => import('../screens/HomeScreen').then((m) => ({ default: m.HomeScreen })));
+const CalendarScreen = lazy(() => import('../screens/CalendarScreen').then((m) => ({ default: m.CalendarScreen })));
+const ArchiveScreen = lazy(() => import('../screens/ArchiveScreen').then((m) => ({ default: m.ArchiveScreen })));
+const TaskDetailScreen = lazy(() => import('../screens/TaskDetailScreen').then((m) => ({ default: m.TaskDetailScreen })));
+const ProcessInboxScreen = lazy(() => import('../screens/ProcessInboxScreen').then((m) => ({ default: m.ProcessInboxScreen })));
+const RealityScoreScreen = lazy(() => import('../screens/RealityScoreScreen').then((m) => ({ default: m.RealityScoreScreen })));
+const ProfileScreen = lazy(() => import('../screens/ProfileScreen').then((m) => ({ default: m.ProfileScreen })));
+const HabitsScreen = lazy(() => import('../screens/HabitsScreen').then((m) => ({ default: m.HabitsScreen })));
+const HabitDetailScreen = lazy(() => import('../screens/HabitDetailScreen').then((m) => ({ default: m.HabitDetailScreen })));
+const SettingsScreen = lazy(() => import('../screens/SettingsScreen').then((m) => ({ default: m.SettingsScreen })));
+
+const pageStyle: React.CSSProperties = {
+  position: 'absolute',
+  inset: 0,
+  background: 'var(--c-background)',
+  willChange: 'transform, opacity',
+};
+
+const centered: React.CSSProperties = { position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' };
+
+function pageKey(pathname: string): string {
+  if (pathname.startsWith('/task/')) return '/task';
+  if (pathname.startsWith('/habits/')) return '/habits/detail';
+  return pathname;
+}
+
+function AnimatedRoutes() {
+  const location = useLocation();
+  const { user } = useAuth();
+  const kind = transitionFor(location.pathname);
+  // DEV-only: render the authed app without a live session (offline verification).
+  const authed = !!user || (import.meta.env.DEV && localStorage.getItem('__todyDevAuth') === '1');
+  const showTabs = authed && isTabRoute(location.pathname);
+
+  return (
+    <AppShell bottomBar={showTabs ? <BottomTabBar /> : undefined}>
+      <AnimatePresence initial={false} mode="popLayout">
+        <motion.div
+          key={pageKey(location.pathname)}
+          variants={VARIANTS[kind]}
+          initial="initial"
+          animate="animate"
+          exit="exit"
+          style={pageStyle}
+        >
+          <Suspense fallback={<div style={centered}><Spinner size={22} color="var(--c-text)" /></div>}>
+            <Routes location={location}>
+              {authed ? (
+                <>
+                  <Route path="/" element={<HomeScreen />} />
+                  <Route path="/calendar" element={<CalendarScreen />} />
+                  <Route path="/archive" element={<ArchiveScreen />} />
+                  <Route path="/task/:id" element={<TaskDetailScreen />} />
+                  <Route path="/process-inbox" element={<ProcessInboxScreen />} />
+                  <Route path="/reality-score" element={<RealityScoreScreen />} />
+                  <Route path="/profile" element={<ProfileScreen />} />
+                  <Route path="/habits" element={<HabitsScreen />} />
+                  <Route path="/habits/:id" element={<HabitDetailScreen />} />
+                  <Route path="/settings" element={<SettingsScreen />} />
+                  <Route path="*" element={<Navigate to="/" replace />} />
+                </>
+              ) : (
+                <>
+                  <Route path="/login" element={<LoginScreen />} />
+                  <Route path="/register" element={<RegisterScreen />} />
+                  <Route path="*" element={<Navigate to="/login" replace />} />
+                </>
+              )}
+            </Routes>
+          </Suspense>
+        </motion.div>
+      </AnimatePresence>
+    </AppShell>
+  );
+}
+
+export function AppRouter() {
+  const { isLoading } = useAuth();
+
+  if (isLoading) {
+    return <div style={centered}><Spinner size={22} color="var(--c-text)" /></div>;
+  }
+
+  return (
+    <BrowserRouter>
+      <AnimatedRoutes />
+    </BrowserRouter>
+  );
+}

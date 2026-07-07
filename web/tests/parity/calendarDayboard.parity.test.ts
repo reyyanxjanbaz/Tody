@@ -1,0 +1,186 @@
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
+import {
+  buildTimelineRows,
+  getDayboardData,
+  getWeekDays,
+  isTaskRelevantToDate,
+  resolveSchedulePlacement,
+} from '../../src/core/utils/calendarDayboard';
+import type { Task } from '../../src/core/types';
+
+/**
+ * Direct port of native `__tests__/calendarDayboard.test.ts` (jest -> vitest
+ * globals only) importing from the web core copy. Proves the dayboard engine
+ * behaves identically post-port, on top of the byte-identical file check in
+ * core-identical.test.ts.
+ */
+
+function makeTask(overrides: Partial<Task>): Task {
+  const baseTime = new Date(2026, 2, 20, 9, 0, 0, 0).getTime();
+
+  return {
+    id: overrides.id ?? `task-${Math.random()}`,
+    title: overrides.title ?? 'Task',
+    description: overrides.description ?? '',
+    createdAt: overrides.createdAt ?? baseTime,
+    updatedAt: overrides.updatedAt ?? baseTime,
+    deadline: overrides.deadline ?? null,
+    scheduledStartAt: overrides.scheduledStartAt ?? null,
+    scheduledEndAt: overrides.scheduledEndAt ?? null,
+    completedAt: overrides.completedAt ?? null,
+    priority: overrides.priority ?? 'none',
+    energyLevel: overrides.energyLevel ?? 'medium',
+    isCompleted: overrides.isCompleted ?? false,
+    isRecurring: overrides.isRecurring ?? false,
+    recurringFrequency: overrides.recurringFrequency ?? null,
+    deferCount: overrides.deferCount ?? 0,
+    createdHour: overrides.createdHour ?? 9,
+    overdueStartDate: overrides.overdueStartDate ?? null,
+    revivedAt: overrides.revivedAt ?? null,
+    archivedAt: overrides.archivedAt ?? null,
+    isArchived: overrides.isArchived ?? false,
+    estimatedMinutes: overrides.estimatedMinutes ?? null,
+    actualMinutes: overrides.actualMinutes ?? null,
+    startedAt: overrides.startedAt ?? null,
+    parentId: overrides.parentId ?? null,
+    childIds: overrides.childIds ?? [],
+    depth: overrides.depth ?? 0,
+    category: overrides.category ?? 'personal',
+    userId: overrides.userId ?? 'user-1',
+  } as Task;
+}
+
+describe('Phase 1 parity — calendarDayboard behaves identically to native', () => {
+  beforeAll(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(2026, 2, 20, 10, 0, 0, 0));
+  });
+
+  afterAll(() => {
+    vi.useRealTimers();
+  });
+
+  it('splits tasks into committed, due today, flexible, and renegotiation', () => {
+    const selectedDate = new Date(2026, 2, 20, 0, 0, 0, 0).getTime();
+    const overdueDeadline = new Date(2026, 2, 18, 18, 0, 0, 0).getTime();
+
+    const tasks: Task[] = [
+      makeTask({
+        id: 'scheduled',
+        title: 'Deep work',
+        scheduledStartAt: new Date(2026, 2, 20, 11, 0, 0, 0).getTime(),
+        scheduledEndAt: new Date(2026, 2, 20, 12, 0, 0, 0).getTime(),
+        estimatedMinutes: 60,
+      }),
+      makeTask({
+        id: 'timed-deadline',
+        title: 'Call supplier',
+        deadline: new Date(2026, 2, 20, 15, 30, 0, 0).getTime(),
+        estimatedMinutes: 30,
+        priority: 'high',
+      }),
+      makeTask({
+        id: 'due-today',
+        title: 'Send recap',
+        deadline: new Date(2026, 2, 20, 23, 59, 0, 0).getTime(),
+      }),
+      makeTask({
+        id: 'flexible',
+        title: 'Outline next sprint',
+        estimatedMinutes: 45,
+      }),
+      makeTask({
+        id: 'overdue',
+        title: 'Fix the bug',
+        deadline: overdueDeadline,
+        overdueStartDate: overdueDeadline,
+      }),
+    ];
+
+    const result = getDayboardData(tasks, selectedDate, 'overview');
+
+    expect(result.committed.map((item) => item.task.id)).toEqual(['scheduled', 'timed-deadline']);
+    expect(result.dueToday.map((task) => task.id)).toEqual(['due-today']);
+    expect(result.flexible.map((task) => task.id)).toEqual(['flexible']);
+    expect(result.renegotiation.map((task) => task.id)).toEqual(['overdue']);
+    expect(result.statusText).toContain('gentle reset');
+  });
+
+  it('filters by category while keeping overview inclusive', () => {
+    const selectedDate = new Date(2026, 2, 20, 0, 0, 0, 0).getTime();
+    const tasks: Task[] = [
+      makeTask({ id: 'work-1', category: 'work', title: 'Review roadmap' }),
+      makeTask({ id: 'personal-1', category: 'personal', title: 'Stretch' }),
+    ];
+
+    const workResult = getDayboardData(tasks, selectedDate, 'work');
+    const overviewResult = getDayboardData(tasks, selectedDate, 'overview');
+
+    expect(workResult.flexible.map((task) => task.id)).toEqual(['work-1']);
+    expect(overviewResult.flexible.map((task) => task.id)).toEqual(['work-1', 'personal-1']);
+  });
+
+  it('builds week strips using the preferred week start', () => {
+    const anchor = new Date(2026, 2, 20, 0, 0, 0, 0).getTime();
+
+    const sundayWeek = getWeekDays(anchor, 'sunday');
+    const mondayWeek = getWeekDays(anchor, 'monday');
+
+    expect(sundayWeek[0].getDay()).toBe(0);
+    expect(mondayWeek[0].getDay()).toBe(1);
+  });
+
+  it('treats scheduled-only tasks as relevant to the scheduled date', () => {
+    const selectedDate = new Date(2026, 2, 21, 0, 0, 0, 0).getTime();
+    const task = makeTask({
+      scheduledStartAt: new Date(2026, 2, 21, 14, 0, 0, 0).getTime(),
+      scheduledEndAt: new Date(2026, 2, 21, 15, 0, 0, 0).getTime(),
+      deadline: null,
+    });
+
+    expect(isTaskRelevantToDate(task, selectedDate)).toBe(true);
+  });
+
+  it('rejects schedule placement when a task overflows the selected gap', () => {
+    const task = makeTask({
+      estimatedMinutes: 90,
+    });
+
+    const placement = resolveSchedulePlacement(
+      task,
+      new Date(2026, 2, 20, 10, 0, 0, 0).getTime(),
+      {
+        startAt: new Date(2026, 2, 20, 10, 0, 0, 0).getTime(),
+        endAt: new Date(2026, 2, 20, 10, 30, 0, 0).getTime(),
+      },
+    );
+
+    expect(placement.fitsGap).toBe(false);
+    expect(placement.availableGapMinutes).toBe(30);
+  });
+
+  it('expands the timeline window to include early and late commitments', () => {
+    const selectedDate = new Date(2026, 2, 20, 0, 0, 0, 0).getTime();
+    const committed = [
+      {
+        task: makeTask({ id: 'early' }),
+        startAt: new Date(2026, 2, 20, 6, 30, 0, 0).getTime(),
+        endAt: new Date(2026, 2, 20, 7, 15, 0, 0).getTime(),
+        kind: 'scheduled' as const,
+      },
+      {
+        task: makeTask({ id: 'late' }),
+        startAt: new Date(2026, 2, 20, 22, 30, 0, 0).getTime(),
+        endAt: new Date(2026, 2, 20, 23, 0, 0, 0).getTime(),
+        kind: 'scheduled' as const,
+      },
+    ];
+
+    const { rows, window } = buildTimelineRows(committed, selectedDate);
+
+    expect(window.startHour).toBeLessThanOrEqual(6);
+    expect(window.endHour).toBeGreaterThanOrEqual(23);
+    expect(rows.some((row) => row.type === 'item' && row.item.task.id === 'early')).toBe(true);
+    expect(rows.some((row) => row.type === 'item' && row.item.task.id === 'late')).toBe(true);
+  });
+});
