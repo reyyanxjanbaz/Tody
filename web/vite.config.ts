@@ -15,7 +15,12 @@ export default defineConfig({
       '@react-native-async-storage/async-storage': r('./src/shims/asyncStorage.ts'),
       'react-native-haptic-feedback': r('./src/shims/haptics.ts'),
       'react-native-url-polyfill/auto': r('./src/shims/empty.ts'),
+      'react-native': r('./src/shims/reactNative.ts'),
     },
+  },
+  define: {
+    // RN's global dev flag, referenced verbatim in ported logging code.
+    __DEV__: 'import.meta.env.DEV',
   },
   build: {
     chunkSizeWarningLimit: 800,

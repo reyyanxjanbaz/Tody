@@ -22,7 +22,8 @@
       "@core/*": ["./src/core/*"],
       "@react-native-async-storage/async-storage": ["./src/shims/asyncStorage.ts"],
       "react-native-haptic-feedback": ["./src/shims/haptics.ts"],
-      "react-native-url-polyfill/auto": ["./src/shims/empty.ts"]
+      "react-native-url-polyfill/auto": ["./src/shims/empty.ts"],
+      "react-native": ["./src/shims/reactNative.ts"]
     },
 
     /* Linting — relaxed so the verbatim-ported RN logic layer type-checks
