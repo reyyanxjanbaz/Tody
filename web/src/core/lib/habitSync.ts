@@ -34,6 +34,7 @@ export function habitToRow(h: Habit, userId: string) {
     tiny_version: h.tinyVersion,
     reminder_time: h.reminderTime,
     order: h.order,
+    workspace_id: h.workspaceId ?? null,
     created_at: toISO(h.createdAt),
     updated_at: toISO(h.updatedAt),
     archived_at: toISO(h.archivedAt),
@@ -59,6 +60,7 @@ export function rowToHabit(r: any): Habit {
     updatedAt: fromISO(r.updated_at),
     archivedAt: r.archived_at ? fromISO(r.archived_at) : null,
     deletedAt: r.deleted_at ? fromISO(r.deleted_at) : null,
+    workspaceId: r.workspace_id ?? null,
     userId: r.user_id,
   };
 }

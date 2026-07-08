@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { AnimatePresence } from 'framer-motion';
-import { STAGGER_LIST, STAGGER_LIST_MAX } from '../theme/motion';
+import { AnimatePresence, motion } from 'framer-motion';
+import { STAGGER_LIST, STAGGER_LIST_MAX, DUR_QUICK } from '../theme/motion';
 import { useTasks } from '../core/context/TaskContext';
 import { useInbox } from '../core/context/InboxContext';
 import { useTheme } from '../core/context/ThemeContext';
@@ -29,6 +29,9 @@ import { PlanningRitual } from '../components/PlanningRitual';
 import { getFocusList } from '../utils/focusList';
 import { sortTasks } from '../core/utils/sortTasks';
 import type { SortOption } from '../core/types';
+import { useWorkspaceFilter } from '../features/workspaces/useWorkspaceFilter';
+import { workspaceIdForDb } from '../features/workspaces/types';
+import { WorkspaceSwitcher } from '../features/workspaces/WorkspaceSwitcher';
 
 interface TreeRow {
   task: Task;
@@ -91,6 +94,7 @@ export function HomeScreen() {
   const { inboxCount } = useInbox();
   const { isDark, toggleTheme } = useTheme();
   const { showUndo } = useUndo();
+  const { activeWorkspaceId, filter: filterWs } = useWorkspaceFilter();
 
   const [searching, setSearching] = useState(false);
   const [query, setQuery] = useState('');
@@ -120,15 +124,17 @@ export function HomeScreen() {
 
   const assignableCats = useMemo(() => categories.filter((c) => c.id !== 'overview'), [categories]);
 
-  // Filter by category, then by current-energy capacity (session-only)
+  // Scope to the active workspace first, then category, then current-energy.
+  const workspaceTasks = useMemo(() => filterWs(tasks), [filterWs, tasks]);
   const visibleTasks = useMemo(() => {
-    const byCat = activeCategory === 'overview' ? tasks : tasks.filter((t) => t.category === activeCategory);
+    const byCat = activeCategory === 'overview' ? workspaceTasks : workspaceTasks.filter((t) => t.category === activeCategory);
     if (!energyFilter) return byCat;
     return byCat.filter((t) => t.energyLevel === energyFilter);
-  }, [tasks, activeCategory, energyFilter]);
+  }, [workspaceTasks, activeCategory, energyFilter]);
 
   const sections = useMemo(() => organizeTasks(visibleTasks), [visibleTasks]);
-  const searchResults = useMemo(() => (query.trim() ? searchTasks(tasks, query) : []), [tasks, query]);
+  // Search is scoped to the active workspace (a workspace should feel self-contained).
+  const searchResults = useMemo(() => (query.trim() ? searchTasks(workspaceTasks, query) : []), [workspaceTasks, query]);
 
   // Top-3 tasks for Focus mode: the first uncompleted root tasks in urgency
   // order across the organized sections.
@@ -148,6 +154,7 @@ export function HomeScreen() {
       category: params?.category ?? (activeCategory !== 'overview' ? activeCategory : 'personal'),
       isRecurring: params?.isRecurring ?? false,
       recurringFrequency: params?.recurringFrequency ?? null,
+      workspaceId: workspaceIdForDb(activeWorkspaceId),
     });
   };
 
@@ -197,7 +204,10 @@ export function HomeScreen() {
           </>
         ) : (
           <>
-            <h1 style={{ fontSize: 30, fontWeight: 700, letterSpacing: '-0.6px', flex: 1 }}>Today</h1>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 2, flex: 1, minWidth: 0 }}>
+              <h1 style={{ fontSize: 30, fontWeight: 700, letterSpacing: '-0.6px' }}>Today</h1>
+              <WorkspaceSwitcher />
+            </div>
             {focusTasks.length > 0 && (
               <Pressable onPress={() => setFocusMode(true)} aria-label="Focus" style={{ padding: 6 }}>
                 <Icon name="flame-outline" size={22} />
@@ -251,12 +261,20 @@ export function HomeScreen() {
         />
       )}
 
-      {!searching && tasks.length > 0 && (
+      {!searching && workspaceTasks.length > 0 && (
         <EnergyFilter value={energyFilter} onChange={setEnergyFilter} />
       )}
 
-      {/* List */}
-      <div className="tody-scroll" style={{ flex: 1, minHeight: 0 }}>
+      {/* List. Keyed on the active workspace so switching refocuses with a quick
+          crossfade (the filtering itself is instant). */}
+      <motion.div
+        key={activeWorkspaceId}
+        initial={{ opacity: 0, scale: 0.99 }}
+        animate={{ opacity: 1, scale: 1 }}
+        transition={{ duration: DUR_QUICK }}
+        className="tody-scroll"
+        style={{ flex: 1, minHeight: 0 }}
+      >
         {!searching && !isEmpty && activeCategory === 'overview' && !energyFilter && (
           <PlanningRitual onStartFocus={() => setFocusMode(true)} />
         )}
@@ -292,6 +310,7 @@ export function HomeScreen() {
                   priority: t.priority,
                   energyLevel: t.energyLevel,
                   estimatedMinutes: t.estimatedMinutes,
+                  workspaceId: workspaceIdForDb(activeWorkspaceId),
                 }),
               );
             }}
@@ -351,7 +370,7 @@ export function HomeScreen() {
           })()
         )}
         <div style={{ height: 8 }} />
-      </div>
+      </motion.div>
 
       {/* Add task */}
       {!searching && (

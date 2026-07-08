@@ -131,7 +131,7 @@ test.describe('Phase 3.3 — HomeScreen', () => {
     });
     await expect(page.getByText('Work task')).toBeVisible();
     await expect(page.getByText('Personal task')).toBeVisible();
-    await page.getByRole('button', { name: 'Work' }).click();
+    await page.getByRole('button', { name: 'Work', exact: true }).click();
     await expect(page.getByText('Work task')).toBeVisible();
     await expect(page.getByText('Personal task')).not.toBeVisible();
   });

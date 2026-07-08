@@ -75,13 +75,16 @@ function isResponseNetworkError(error: { message: string; [k: string]: any } | n
 
 function isScheduleFieldSchemaError(message: string | undefined): boolean {
   if (!message) return false;
-  return /scheduled_start_at|scheduled_end_at/i.test(message);
+  // Includes workspace_id so a client running ahead of migration v5 degrades
+  // gracefully (the row still saves locally; the column is dropped on retry).
+  return /scheduled_start_at|scheduled_end_at|workspace_id/i.test(message);
 }
 
 function stripScheduleFields<T extends Record<string, any>>(row: T): T {
   const sanitized = { ...row };
   delete sanitized.scheduled_start_at;
   delete sanitized.scheduled_end_at;
+  delete sanitized.workspace_id;
   return sanitized;
 }
 
@@ -191,6 +194,7 @@ interface DbTask {
   id: string;
   user_id: string;
   category_id: string | null;
+  workspace_id: string | null;
   title: string;
   description: string;
   priority: string;
@@ -220,6 +224,7 @@ interface DbTask {
 interface DbCategory {
   id: string;
   user_id: string;
+  workspace_id: string | null;
   name: string;
   icon: string;
   color: string;
@@ -232,6 +237,7 @@ interface DbCategory {
 interface DbInboxTask {
   id: string;
   user_id: string;
+  workspace_id: string | null;
   raw_text: string;
   captured_at: string;
 }
@@ -264,6 +270,7 @@ export function taskToDbRow(task: Task, userId: string, catMap: CategoryMap): Pa
     started_at: toISO(task.startedAt),
     parent_id: task.parentId || null,
     depth: task.depth ?? 0,
+    workspace_id: task.workspaceId ?? null,
     created_at: toISO(task.createdAt) || new Date().toISOString(),
     updated_at: toISO(task.updatedAt) || new Date().toISOString(),
   };
@@ -309,6 +316,7 @@ export function dbRowToTask(row: DbTask, catMap: CategoryMap): Task {
     childIds: [], // Will be rebuilt from parent_id relationships
     depth: row.depth ?? 0,
     category: row.category_id ? (catMap.toLocal[row.category_id] || undefined) : undefined,
+    workspaceId: row.workspace_id ?? null,
     userId: row.user_id,
   };
 }
@@ -321,6 +329,7 @@ function dbRowToCategory(row: DbCategory): Category {
     color: row.color,
     isDefault: row.is_default,
     order: row.sort_order,
+    workspaceId: row.workspace_id ?? null,
   };
 }
 
@@ -329,6 +338,7 @@ function dbRowToInboxTask(row: DbInboxTask): InboxTask {
     id: row.id,
     rawText: row.raw_text,
     capturedAt: fromISO(row.captured_at) ?? Date.now(),
+    workspaceId: row.workspace_id ?? null,
   };
 }
 
@@ -388,6 +398,7 @@ export async function upsertCategory(cat: Category, userId: string): Promise<voi
     color: cat.color,
     is_default: cat.isDefault,
     sort_order: cat.order,
+    workspace_id: cat.workspaceId ?? null,
   };
   const { error } = await supabase
     .from('categories')
@@ -418,6 +429,7 @@ export async function pushCategories(categories: Category[], userId: string): Pr
     color: c.color,
     is_default: c.isDefault,
     sort_order: c.order,
+    workspace_id: c.workspaceId ?? null,
   }));
 
   try {
@@ -694,6 +706,7 @@ export async function pushInboxTasks(tasks: InboxTask[], userId: string): Promis
     user_id: userId,
     raw_text: t.rawText,
     captured_at: toISO(t.capturedAt) || new Date().toISOString(),
+    workspace_id: t.workspaceId ?? null,
   }));
 
   // Use ignoreDuplicates so if a row with the same ID already exists
@@ -720,6 +733,7 @@ export async function upsertInboxTask(task: InboxTask, userId: string): Promise<
     user_id: userId,
     raw_text: task.rawText,
     captured_at: toISO(task.capturedAt) || new Date().toISOString(),
+    workspace_id: task.workspaceId ?? null,
   };
   try {
     const { error } = await withRetry('upsertInboxTask', () =>

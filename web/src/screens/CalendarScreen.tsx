@@ -10,6 +10,7 @@ import { Icon } from '../ui/Icon';
 import { Pressable } from '../ui/Pressable';
 import { Checkbox } from '../ui/Checkbox';
 import { CalendarStrip } from '../components/CalendarStrip';
+import { useWorkspaceFilter } from '../features/workspaces/useWorkspaceFilter';
 
 const PRIORITY_BAR: Record<Task['priority'], string> = {
   high: 'var(--c-text)',
@@ -22,9 +23,11 @@ export function CalendarScreen() {
   const navigate = useNavigate();
   const { tasks, activeCategory, completeTask } = useTasks();
   const { prefs } = usePreferences();
+  const { filter: filterWs } = useWorkspaceFilter();
   const [selected, setSelected] = useState(() => startOfDay().getTime());
 
-  const board = useMemo(() => getDayboardData(tasks, selected, activeCategory), [tasks, selected, activeCategory]);
+  const workspaceTasks = useMemo(() => filterWs(tasks), [filterWs, tasks]);
+  const board = useMemo(() => getDayboardData(workspaceTasks, selected, activeCategory), [workspaceTasks, selected, activeCategory]);
 
   const row = (task: Task, meta?: string) => (
     // Container is a plain div (no role) so the Checkbox isn't an interactive

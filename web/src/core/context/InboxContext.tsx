@@ -26,7 +26,7 @@ interface InboxContextType {
   inboxTasks: InboxTask[];
   inboxCount: number;
   isLoading: boolean;
-  captureTask: (rawText: string) => InboxTask | null;
+  captureTask: (rawText: string, workspaceId?: string | null) => InboxTask | null;
   deleteInboxTask: (id: string) => void;
   getInboxTask: (id: string) => InboxTask | undefined;
   removeInboxTask: (id: string) => void;
@@ -159,7 +159,7 @@ export function InboxProvider({ children }: { children: React.ReactNode }) {
     };
   }, [inboxTasks, isLoading]);
 
-  const captureTask = useCallback((rawText: string): InboxTask | null => {
+  const captureTask = useCallback((rawText: string, workspaceId: string | null = null): InboxTask | null => {
     const currentCount = tasksRef.current.length;
 
     if (currentCount >= MAX_INBOX_ITEMS) {
@@ -181,6 +181,7 @@ export function InboxProvider({ children }: { children: React.ReactNode }) {
       id: generateId(),
       rawText,
       capturedAt: Date.now(),
+      workspaceId,
     };
 
     setInboxTasks(prev => [task, ...prev]);

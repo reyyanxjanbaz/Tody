@@ -32,6 +32,7 @@ class CategoryCreate(BaseModel):
     color: str = "#3B82F6"
     sort_order: int = 0
     is_default: bool = False
+    workspace_id: Optional[str] = None  # NULL = Personal workspace
 
     @field_validator("name")
     @classmethod
@@ -56,6 +57,7 @@ class CategoryUpdate(BaseModel):
     icon: Optional[str] = None
     color: Optional[str] = None
     sort_order: Optional[int] = None
+    workspace_id: Optional[str] = None
 
     @field_validator("name")
     @classmethod

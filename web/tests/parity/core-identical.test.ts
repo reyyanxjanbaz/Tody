@@ -28,12 +28,12 @@ const EDITED_ALLOWLIST_WITH_REASONS: Record<string, string> = {
   'utils/colors.ts': 'RN StyleSheet/Platform → plain tokens',
   'context/ThemeContext.tsx': 'RN StatusBar → DOM/meta',
   'context/TaskContext.tsx': 'RN LayoutAnimation → web; + overhaul: defer/tombstones/focus-sync/recurrence/order',
-  'context/InboxContext.tsx': 'RN Alert → web; + overhaul: tombstones/focus-sync',
+  'context/InboxContext.tsx': 'RN Alert → web; + overhaul: tombstones/focus-sync; Phase B workspace capture',
   'utils/decay.ts': 'P1.3 startOfDay-normalized isFullyDecayed; removed dead MIN_OPACITY',
   'utils/statsCalculation.ts': 'P1.5 canonical reality-score formula (estimated denominator, default 0)',
   'utils/profileStats.ts': 'P1.6 monotonic history-derived XP + extraXP; P1.12 single-day calendar count',
   'utils/patternLearning.ts': 'P1.13 bounded pattern store (MAX_PATTERNS), removed dead age constant',
-  'lib/supabaseSync.ts': 'P1.10 soft-delete + filter tombstoned rows; P1.14 persisted category UUID map',
+  'lib/supabaseSync.ts': 'P1.10 soft-delete + filter tombstoned rows; P1.14 persisted category UUID map; Phase B workspace_id row mapping',
 };
 const EDITED_ALLOWLIST = new Set(Object.keys(EDITED_ALLOWLIST_WITH_REASONS));
 

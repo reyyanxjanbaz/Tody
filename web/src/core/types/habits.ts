@@ -35,6 +35,7 @@ export interface Habit {
   updatedAt: number;
   archivedAt: number | null;
   deletedAt: number | null;
+  workspaceId?: string | null; // Phase B. null = Personal workspace
   userId?: string;
 }
 
@@ -71,6 +72,7 @@ export const DEFAULT_HABIT: Omit<Habit, 'id' | 'createdAt' | 'updatedAt'> = {
   order: 0,
   archivedAt: null,
   deletedAt: null,
+  workspaceId: null,
 };
 
 /** Max streak-freezes a user can bank (classic Duolingo cap). */

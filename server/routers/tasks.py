@@ -40,6 +40,7 @@ class TaskCreate(BaseModel):
     priority: str = "none"
     energy_level: str = "medium"
     category_id: Optional[str] = None
+    workspace_id: Optional[str] = None  # NULL = Personal workspace
     deadline: Optional[str] = None  # ISO timestamp string
     scheduled_start_at: Optional[str] = None
     scheduled_end_at: Optional[str] = None
@@ -118,6 +119,7 @@ class TaskUpdate(BaseModel):
     priority: Optional[str] = None
     energy_level: Optional[str] = None
     category_id: Optional[str] = None
+    workspace_id: Optional[str] = None  # NULL = Personal workspace
     deadline: Optional[str] = None
     scheduled_start_at: Optional[str] = None
     scheduled_end_at: Optional[str] = None

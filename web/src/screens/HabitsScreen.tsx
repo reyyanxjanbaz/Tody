@@ -12,6 +12,8 @@ import { metaStreak } from '../core/utils/habitStreaks';
 import { todayKey } from '../core/utils/dayKey';
 import { haptic } from '../core/utils/haptics';
 import type { Habit, HabitTimeOfDay } from '../core/types/habits';
+import { useWorkspaceFilter } from '../features/workspaces/useWorkspaceFilter';
+import { workspaceIdForDb } from '../features/workspaces/types';
 
 const TIME_ORDER: HabitTimeOfDay[] = ['morning', 'afternoon', 'evening', 'anytime'];
 const TIME_LABELS: Record<HabitTimeOfDay, string> = { morning: 'Morning', afternoon: 'Afternoon', evening: 'Evening', anytime: 'Anytime' };
@@ -19,8 +21,10 @@ const RISK_HOUR = 18;
 
 export function HabitsScreen() {
   const navigate = useNavigate();
-  const { habits, logs, freezes, isLoading, addHabit, toggleHabit, getStreakInfo } = useHabits();
+  const { habits: allHabits, logs, freezes, isLoading, addHabit, toggleHabit, getStreakInfo } = useHabits();
   const { prefs } = usePreferences();
+  const { activeWorkspaceId, filter: filterWs } = useWorkspaceFilter();
+  const habits = useMemo(() => filterWs(allHabits), [filterWs, allHabits]);
   const [editorOpen, setEditorOpen] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
 
@@ -120,7 +124,7 @@ export function HabitsScreen() {
         )}
       </div>
 
-      <HabitEditorSheet open={editorOpen} onClose={() => setEditorOpen(false)} onSave={(v) => addHabit(v)} />
+      <HabitEditorSheet open={editorOpen} onClose={() => setEditorOpen(false)} onSave={(v) => addHabit({ ...v, workspaceId: workspaceIdForDb(activeWorkspaceId) })} />
 
       <AnimatePresence>
         {toast && (

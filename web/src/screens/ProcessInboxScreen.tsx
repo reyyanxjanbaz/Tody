@@ -11,16 +11,26 @@ import { Icon } from '../ui/Icon';
 import { Pressable } from '../ui/Pressable';
 import { EmptyState } from '../ui/EmptyState';
 import { haptic } from '../core/utils/haptics';
+import { useWorkspaceFilter } from '../features/workspaces/useWorkspaceFilter';
+import { useWorkspaces } from '../features/workspaces/WorkspaceContext';
+import { workspaceIdForDb, PERSONAL_WORKSPACE_ID } from '../features/workspaces/types';
 
 const PRIORITIES: Priority[] = ['high', 'medium', 'low'];
 const ENERGIES: EnergyLevel[] = ['high', 'medium', 'low'];
 
 export function ProcessInboxScreen() {
   const navigate = useNavigate();
-  const { inboxTasks, captureTask, deleteInboxTask, removeInboxTask } = useInbox();
+  const { inboxTasks: allInboxTasks, captureTask, deleteInboxTask, removeInboxTask } = useInbox();
   const { addTask, addTaskLocal } = useTasks();
   const { user } = useAuth();
   const { isDark } = useTheme();
+  const { activeWorkspaceId, activeWorkspace } = useWorkspaces();
+  const { filter: filterWs } = useWorkspaceFilter();
+  const [showAll, setShowAll] = useState(false);
+  const inboxTasks = useMemo(
+    () => (showAll ? allInboxTasks : filterWs(allInboxTasks)),
+    [showAll, filterWs, allInboxTasks],
+  );
 
   const [index, setIndex] = useState(0);
   const [expanded, setExpanded] = useState(false);
@@ -45,10 +55,13 @@ export function ProcessInboxScreen() {
     if (!t) return;
     const id = current.id;
     haptic('success');
+    // The converted task inherits the inbox item's workspace (captured context).
+    const wsId = current.workspaceId ?? null;
     api.post<{ id: string; created_at: string }>(`/inbox/${id}/convert`, {
       title: t,
       priority,
       energy_level: energy,
+      workspace_id: wsId ?? undefined,
       deadline: deadline ? new Date(deadline).toISOString() : undefined,
     }).then(({ data, isBackendDown }) => {
       if (!isBackendDown && data) {
@@ -56,7 +69,7 @@ export function ProcessInboxScreen() {
         const nt: Task = {
           id: data.id, title: t, description: '', priority, energyLevel: energy, deadline,
           isCompleted: false, completedAt: null, createdAt: data.created_at ? new Date(data.created_at).getTime() : now,
-          updatedAt: now, category: 'personal', deferCount: 0, createdHour: new Date().getHours(),
+          updatedAt: now, category: 'personal', workspaceId: wsId, deferCount: 0, createdHour: new Date().getHours(),
           overdueStartDate: null, revivedAt: null, archivedAt: null, isArchived: false, estimatedMinutes: null,
           actualMinutes: null, startedAt: null, parentId: null, childIds: [], depth: 0, isRecurring: false,
           recurringFrequency: null, scheduledStartAt: null, scheduledEndAt: null, userId: user?.id,
@@ -64,10 +77,10 @@ export function ProcessInboxScreen() {
         addTaskLocal(nt);
         removeInboxTask(id);
       } else {
-        addTask(t, { priority, energyLevel: energy, deadline });
+        addTask(t, { priority, energyLevel: energy, deadline, workspaceId: wsId });
         removeInboxTask(id);
       }
-    }).catch(() => { addTask(t, { priority, energyLevel: energy, deadline }); removeInboxTask(id); });
+    }).catch(() => { addTask(t, { priority, energyLevel: energy, deadline, workspaceId: wsId }); removeInboxTask(id); });
     reset();
     advance();
   };
@@ -76,13 +89,14 @@ export function ProcessInboxScreen() {
     if (!current) return;
     const id = current.id;
     const raw = current.rawText;
+    const wsId = current.workspaceId ?? null;
     haptic('success');
     removeInboxTask(id);
     reset();
     advance();
-    api.post(`/inbox/${id}/convert`, { title: raw, is_completed: true }).then(({ isBackendDown }) => {
-      if (isBackendDown) addTask(raw, { isCompleted: true, completedAt: Date.now() });
-    }).catch(() => addTask(raw, { isCompleted: true, completedAt: Date.now() }));
+    api.post(`/inbox/${id}/convert`, { title: raw, is_completed: true, workspace_id: wsId ?? undefined }).then(({ isBackendDown }) => {
+      if (isBackendDown) addTask(raw, { isCompleted: true, completedAt: Date.now(), workspaceId: wsId });
+    }).catch(() => addTask(raw, { isCompleted: true, completedAt: Date.now(), workspaceId: wsId }));
   };
 
   const discard = () => { if (!current) return; haptic('medium'); deleteInboxTask(current.id); reset(); advance(); };
@@ -102,6 +116,17 @@ export function ProcessInboxScreen() {
       <header style={{ display: 'flex', alignItems: 'center', gap: 8, padding: 'calc(var(--safe-top) + 12px) 20px 8px' }}>
         <Pressable onPress={() => navigate('/')} style={{ padding: 4 }}><Icon name="chevron-down" size={26} /></Pressable>
         <h1 style={{ fontSize: 22, fontWeight: 700, flex: 1 }}>Process Inbox</h1>
+        {activeWorkspaceId !== PERSONAL_WORKSPACE_ID && (
+          <Pressable
+            onPress={() => setShowAll((v) => !v)}
+            aria-label={showAll ? 'Show only this workspace' : 'Show all workspaces'}
+            style={{ padding: '4px 10px', borderRadius: 14, background: 'var(--c-gray50)', border: '1px solid var(--c-border-light)' }}
+          >
+            <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--c-text-secondary)' }}>
+              {showAll ? 'All' : activeWorkspace.name}
+            </span>
+          </Pressable>
+        )}
         {total > 0 && <span style={{ fontSize: 13, color: 'var(--c-text-tertiary)' }}>{total} left</span>}
       </header>
 
@@ -182,11 +207,11 @@ export function ProcessInboxScreen() {
         <input
           value={memo}
           onChange={(e) => setMemo(e.target.value)}
-          onKeyDown={(e) => { if (e.key === 'Enter' && memo.trim()) { captureTask(memo.trim()); setMemo(''); } }}
+          onKeyDown={(e) => { if (e.key === 'Enter' && memo.trim()) { captureTask(memo.trim(), workspaceIdForDb(activeWorkspaceId)); setMemo(''); } }}
           placeholder="Capture a thought…"
           style={{ flex: 1, height: 44, padding: '0 14px', borderRadius: 'var(--r-input)', background: 'var(--c-surface)', border: '1px solid var(--c-gray200)', color: 'var(--c-text)', fontSize: 15 }}
         />
-        <Pressable onPress={() => { if (memo.trim()) { captureTask(memo.trim()); setMemo(''); } }} style={{ width: 44, height: 44, borderRadius: 22, background: 'var(--c-surface-dark)' }}>
+        <Pressable onPress={() => { if (memo.trim()) { captureTask(memo.trim(), workspaceIdForDb(activeWorkspaceId)); setMemo(''); } }} style={{ width: 44, height: 44, borderRadius: 22, background: 'var(--c-surface-dark)' }}>
           <Icon name="add" size={22} color="var(--c-white)" />
         </Pressable>
       </div>

@@ -3,6 +3,7 @@ import { MotionConfig } from 'framer-motion';
 import { ThemeProvider } from '../core/context/ThemeContext';
 import { PreferencesProvider, usePreferences } from './PreferencesContext';
 import { AuthProvider } from '../core/context/AuthContext';
+import { WorkspaceProvider } from '../features/workspaces/WorkspaceContext';
 import { TaskProvider } from '../core/context/TaskContext';
 import { InboxProvider } from '../core/context/InboxContext';
 import { HabitProvider } from '../core/context/HabitContext';
@@ -40,7 +41,7 @@ function PreferencesEffects({ children }: { children: ReactNode }) {
 
 /**
  * Provider nesting (web):
- *   Theme → Preferences → [Effects: MotionConfig + Celebration] → Auth → Task → Inbox → Undo
+ *   Theme → Preferences → [Effects: MotionConfig + Celebration] → Auth → Workspace → Task → Inbox → Undo
  * Preferences sits above Auth so screens and formatters can read date/time/
  * week-start settings everywhere; Theme stays outermost as the sole owner of
  * darkMode (both read-merge-write the same stored preferences object).
@@ -51,13 +52,15 @@ export function AppProviders({ children }: { children: ReactNode }) {
       <PreferencesProvider>
         <PreferencesEffects>
           <AuthProvider>
-            <TaskProvider>
-              <InboxProvider>
-                <HabitProvider>
-                  <UndoProvider>{children}</UndoProvider>
-                </HabitProvider>
-              </InboxProvider>
-            </TaskProvider>
+            <WorkspaceProvider>
+              <TaskProvider>
+                <InboxProvider>
+                  <HabitProvider>
+                    <UndoProvider>{children}</UndoProvider>
+                  </HabitProvider>
+                </InboxProvider>
+              </TaskProvider>
+            </WorkspaceProvider>
           </AuthProvider>
         </PreferencesEffects>
       </PreferencesProvider>

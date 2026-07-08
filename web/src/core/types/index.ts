@@ -39,6 +39,9 @@ export interface Task {
   // Category
   category?: string; // Category ID (e.g., 'work', 'personal', 'health')
 
+  // Workspace (Phase B). undefined/null = the implicit "Personal" workspace.
+  workspaceId?: string | null;
+
   // User
   userId?: string; // Owner of this task
 }
@@ -86,6 +89,7 @@ export interface InboxTask {
   rawText: string;
   capturedAt: number;
   isProcessing?: boolean;
+  workspaceId?: string | null; // Phase B. null = Personal workspace
 }
 
 export type RootStackParamList = {
@@ -155,6 +159,7 @@ export interface Category {
   color: string;      // Hex accent color
   isDefault: boolean; // Overview can't be deleted
   order: number;
+  workspaceId?: string | null; // Phase B. null = Personal workspace
 }
 
 export type SortOption = 'default' | 'smart' | 'deadline-asc' | 'deadline-desc' | 'priority-high' | 'priority-low' | 'newest' | 'oldest';

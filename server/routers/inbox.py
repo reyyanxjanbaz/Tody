@@ -26,6 +26,7 @@ class InboxCreate(BaseModel):
     id: Optional[str] = None  # Allow client-generated UUIDs for sync
     raw_text: str
     captured_at: Optional[str] = None
+    workspace_id: Optional[str] = None  # NULL = Personal workspace
 
     @field_validator("raw_text")
     @classmethod
@@ -44,6 +45,7 @@ class InboxConvert(BaseModel):
     priority: str = "none"
     energy_level: str = "medium"
     category_id: Optional[str] = None
+    workspace_id: Optional[str] = None  # NULL = Personal workspace
     deadline: Optional[str] = None
     estimated_minutes: Optional[int] = None
     is_completed: bool = False   # True → create task as already-completed (quick-complete flow)
@@ -70,6 +72,8 @@ def capture_inbox(body: InboxCreate, user_id: str = Depends(get_current_user_id)
         data["id"] = body.id
     if body.captured_at:
         data["captured_at"] = body.captured_at
+    if body.workspace_id:
+        data["workspace_id"] = body.workspace_id
     result = (
         sb.table("inbox_tasks")
         .insert(data)
@@ -100,6 +104,8 @@ def batch_upsert_inbox(
             data["id"] = str(uuid.uuid4())
         if item.captured_at:
             data["captured_at"] = item.captured_at
+        if item.workspace_id:
+            data["workspace_id"] = item.workspace_id
         rows.append(data)
     if not rows:
         return []
@@ -145,6 +151,7 @@ def convert_inbox_to_task(
         "created_hour": datetime.utcnow().hour,
     }
     if body.category_id:       task_data["category_id"]       = body.category_id
+    if body.workspace_id:      task_data["workspace_id"]       = body.workspace_id
     if body.deadline:          task_data["deadline"]           = body.deadline
     if body.estimated_minutes: task_data["estimated_minutes"]  = body.estimated_minutes
 

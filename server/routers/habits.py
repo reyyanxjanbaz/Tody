@@ -58,6 +58,7 @@ class HabitCreate(BaseModel):
     tiny_version: str = ""
     reminder_time: Optional[str] = None
     order: int = 0
+    workspace_id: Optional[str] = None  # NULL = Personal workspace
     created_at: Optional[str] = None
     updated_at: Optional[str] = None
     archived_at: Optional[str] = None
@@ -118,6 +119,7 @@ class HabitUpdate(BaseModel):
     tiny_version: Optional[str] = None
     reminder_time: Optional[str] = None
     order: Optional[int] = None
+    workspace_id: Optional[str] = None
     archived_at: Optional[str] = None
 
 
