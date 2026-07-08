@@ -214,38 +214,9 @@ def list_members(workspace_id: str, user_id: str = Depends(get_current_user_id))
     ]
 
 
-@router.post("/{workspace_id}/invites", status_code=201)
-def create_workspace_invite(workspace_id: str, user_id: str = Depends(get_current_user_id)):
-    """Owner-only: mint a workspace invite code (reuses the invites table)."""
-    sb = get_supabase()
-    ws = (
-        sb.table("workspaces")
-        .select("owner_id")
-        .eq("id", workspace_id)
-        .maybe_single()
-        .execute()
-    )
-    if not ws.data:
-        raise HTTPException(status_code=404, detail="Workspace not found")
-    if ws.data["owner_id"] != user_id:
-        raise HTTPException(status_code=403, detail="Only the owner can invite members")
-
-    import secrets, string
-    alphabet = string.ascii_lowercase + string.digits
-    for _ in range(3):
-        code = "".join(secrets.choice(alphabet) for _ in range(8))
-        if not sb.table("invites").select("code").eq("code", code).execute().data:
-            break
-    else:
-        raise HTTPException(status_code=500, detail="Could not allocate invite code")
-
-    row = {"code": code, "inviter_id": user_id, "kind": "workspace", "target_id": workspace_id}
-    res = sb.table("invites").insert(row).execute()
-    if not res.data:
-        raise HTTPException(status_code=500, detail="Failed to create invite")
-    created = res.data[0]
-    logger.info("Created workspace invite %s for %s", code, workspace_id)
-    return {"code": created["code"], "kind": "workspace", "expires_at": created["expires_at"]}
+# NOTE: workspace invites are minted through POST /social/invites (kind='workspace'),
+# which now enforces owner-only authorization. The former create_workspace_invite
+# endpoint here was unused and has been removed to avoid two divergent paths.
 
 
 @router.delete("/{workspace_id}/members/{member_id}", status_code=204)
@@ -277,11 +248,38 @@ def remove_member(workspace_id: str, member_id: str, user_id: str = Depends(get_
 
 
 @router.delete("/{workspace_id}", status_code=204)
-def delete_workspace(workspace_id: str, user_id: str = Depends(get_current_user_id)):
-    """Soft-delete a workspace. Its tasks/categories/habits fall back to Personal
-    via the ON DELETE SET NULL foreign keys once the row is hard-removed; while
-    soft-deleted the client already treats them as Personal (workspace hidden)."""
+def delete_workspace(
+    workspace_id: str,
+    mode: str = "move",
+    user_id: str = Depends(get_current_user_id),
+):
+    """Soft-delete a workspace. `mode` decides what happens to its content:
+      • move  (default) — reassign tasks/categories/habits/inbox to Personal
+                          (workspace_id = NULL) so nothing disappears.
+      • delete          — tombstone the workspace's tasks & habits too.
+    A plain soft-delete alone would orphan the rows: the FK ON DELETE SET NULL
+    does NOT fire on a soft delete, so the rows would keep a workspace_id that no
+    longer appears in any list and become invisible."""
+    if mode not in ("move", "delete"):
+        raise HTTPException(status_code=400, detail="mode must be 'move' or 'delete'")
     sb = get_supabase()
+
+    ws = sb.table("workspaces").select("owner_id").eq("id", workspace_id).maybe_single().execute()
+    if not ws.data or ws.data["owner_id"] != user_id:
+        raise HTTPException(status_code=404, detail="Workspace not found")
+
+    if mode == "move":
+        # Detach content back to Personal.
+        for table in ("tasks", "categories", "habits", "inbox_tasks"):
+            sb.table(table).update({"workspace_id": None}).eq("workspace_id", workspace_id).execute()
+    else:
+        now = _now_iso()
+        # Tombstone the workspace's tasks & habits (soft-delete columns exist).
+        sb.table("tasks").update({"deleted_at": now}).eq("workspace_id", workspace_id).execute()
+        sb.table("habits").update({"deleted_at": now}).eq("workspace_id", workspace_id).execute()
+        sb.table("inbox_tasks").update({"deleted_at": now}).eq("workspace_id", workspace_id).execute()
+        sb.table("categories").update({"deleted_at": now}).eq("workspace_id", workspace_id).execute()
+
     result = (
         sb.table("workspaces")
         .update({"deleted_at": _now_iso()})
@@ -292,5 +290,5 @@ def delete_workspace(workspace_id: str, user_id: str = Depends(get_current_user_
     )
     if not result.data:
         raise HTTPException(status_code=404, detail="Workspace not found")
-    logger.info("Soft-deleted workspace %s for user %s", workspace_id, user_id[:8])
+    logger.info("Soft-deleted workspace %s (mode=%s) for user %s", workspace_id, mode, user_id[:8])
     return None

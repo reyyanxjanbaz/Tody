@@ -10,6 +10,7 @@ import { Icon } from '../../ui/Icon';
 import { Pressable } from '../../ui/Pressable';
 import { haptic } from '../../core/utils/haptics';
 import { SPRING_BOUNCY } from '../../theme/motion';
+import { useOnline } from '../../utils/useOnline';
 import { useAuth } from '../../core/context/AuthContext';
 import { usePacts } from './PactContext';
 import { PactProgressRing } from './PactProgressRing';
@@ -26,7 +27,7 @@ export function PactCard({ pact }: { pact: Pact }) {
   const [done, total] = pactProgress(pact);
   const me = myParticipation(pact, user?.id);
   const myDone = me?.state === 'done';
-  const online = typeof navigator === 'undefined' ? true : navigator.onLine;
+  const online = useOnline();
 
   const markDone = async () => {
     if (busy || myDone) return;

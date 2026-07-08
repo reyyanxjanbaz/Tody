@@ -48,13 +48,17 @@ export function PactProvider({ children }: { children: ReactNode }) {
   const [pacts, setPacts] = useState<Pact[]>(() => readCache());
   const [isLoading, setIsLoading] = useState(false);
   const prevStatus = useRef<Map<string, string>>(new Map());
+  const celebratedRef = useRef<Set<string>>(new Set()); // pact ids already celebrated (L7 dedupe)
 
   // Fire confetti when a pact newly becomes completed (for everyone connected).
+  // Deduped by pact id so patch() + the Realtime refetch can't double-fire.
   const detectCompletions = useCallback((next: Pact[]) => {
     let celebrated = false;
     for (const p of next) {
       const before = prevStatus.current.get(p.id);
-      if (before && before !== 'completed' && p.status === 'completed' && !celebrated) {
+      const newlyDone = before && before !== 'completed' && p.status === 'completed';
+      if (newlyDone && !celebratedRef.current.has(p.id) && !celebrated) {
+        celebratedRef.current.add(p.id);
         celebrate(window.innerWidth / 2, window.innerHeight / 3);
         celebrated = true;
       }
@@ -79,25 +83,36 @@ export function PactProvider({ children }: { children: ReactNode }) {
     setIsLoading(false);
   }, [user, detectCompletions]);
 
-  // Load on login + on focus.
+  // Load on login + on focus (focus throttled to once / 30s — fix L5).
   const loadedFor = useRef<string | null>(null);
+  const lastFocusRefresh = useRef(0);
   useEffect(() => {
     if (!user) return;
     if (loadedFor.current !== user.id) { loadedFor.current = user.id; void refresh(); }
-    const onFocus = () => { void refresh(); };
+    const onFocus = () => {
+      if (Date.now() - lastFocusRefresh.current < 30_000) return;
+      lastFocusRefresh.current = Date.now();
+      void refresh();
+    };
     window.addEventListener('focus', onFocus);
     return () => window.removeEventListener('focus', onFocus);
   }, [user, refresh]);
 
-  // Realtime: any change to my pacts (RLS-scoped) → refetch.
+  // Realtime: any change to my pacts (RLS-scoped) → refetch, debounced so a burst
+  // of participant updates coalesces into one fetch (L7).
   useEffect(() => {
     if (!user) return;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const debouncedRefresh = () => {
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(() => { void refresh(); }, 500);
+    };
     const channel = supabase
       .channel('pacts')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'pacts' }, () => { void refresh(); })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'pact_participants' }, () => { void refresh(); })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'pacts' }, debouncedRefresh)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'pact_participants' }, debouncedRefresh)
       .subscribe();
-    return () => { supabase.removeChannel(channel); };
+    return () => { if (timer) clearTimeout(timer); supabase.removeChannel(channel); };
   }, [user, refresh]);
 
   const patch = useCallback((updated: Pact | null) => {

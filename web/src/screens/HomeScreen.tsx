@@ -136,7 +136,24 @@ export function HomeScreen() {
   const entranceDelay = (i: number) =>
     firstLoad.current ? Math.min(i, STAGGER_LIST_MAX) * STAGGER_LIST : 0;
 
-  const assignableCats = useMemo(() => categories.filter((c) => c.id !== 'overview'), [categories]);
+  // Category tabs are scoped to the active workspace (fix L4): Personal shows
+  // categories with no workspace; a shared workspace shows its own + Overview.
+  const wsDbId = workspaceIdForDb(activeWorkspaceId);
+  const workspaceCategories = useMemo(
+    () => categories.filter((c) => c.id === 'overview' || (c.workspaceId ?? null) === wsDbId),
+    [categories, wsDbId],
+  );
+  const assignableCats = useMemo(() => workspaceCategories.filter((c) => c.id !== 'overview'), [workspaceCategories]);
+
+  // Reset the category tab when switching workspaces so a stale selection from
+  // another workspace doesn't hide everything.
+  const prevWsRef = useRef(activeWorkspaceId);
+  useEffect(() => {
+    if (prevWsRef.current !== activeWorkspaceId) {
+      prevWsRef.current = activeWorkspaceId;
+      setActiveCategory('overview');
+    }
+  }, [activeWorkspaceId, setActiveCategory]);
 
   // Scope to the active workspace first, then (in shared workspaces) optionally
   // to tasks assigned to me, then category, then current-energy.
@@ -275,7 +292,7 @@ export function HomeScreen() {
 
       {!searching && (
         <CategoryTabs
-          categories={categories}
+          categories={workspaceCategories}
           activeCategory={activeCategory}
           onCategoryChange={setActiveCategory}
           onAddPress={() => setAddingCat(true)}
@@ -471,7 +488,7 @@ export function HomeScreen() {
           const trimmed = name.trim();
           if (trimmed) {
             const palette = ['#3B82F6', '#8B5CF6', '#10B981', '#F59E0B', '#EF4444', '#EC4899'];
-            addCategory(trimmed, 'folder-outline', palette[categories.length % palette.length]);
+            addCategory(trimmed, 'folder-outline', palette[categories.length % palette.length], wsDbId);
           }
           setAddingCat(false);
         }}
@@ -483,7 +500,7 @@ export function HomeScreen() {
       {/* Manage categories */}
       <ManageCategoriesModal
         open={managingCats}
-        categories={categories}
+        categories={workspaceCategories}
         onClose={() => setManagingCats(false)}
         onRename={(id, name) => updateCategory(id, { name })}
         onDelete={deleteCategory}

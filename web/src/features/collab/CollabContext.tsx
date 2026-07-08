@@ -44,7 +44,7 @@ const CollabContext = createContext<CollabContextValue | undefined>(undefined);
 export function CollabProvider({ children }: { children: ReactNode }) {
   const { user } = useAuth();
   const { activeWorkspaceId } = useWorkspaces();
-  const { mergeRemoteTasks, applyRemoteDelete, updateTask } = useTasks();
+  const { mergeRemoteTasks, applyRemoteDelete, updateTask, getTask, mergeWorkspaceCategories } = useTasks();
   const [members, setMembers] = useState<Member[]>([]);
 
   const isPersonal = activeWorkspaceId === PERSONAL_WORKSPACE_ID;
@@ -57,6 +57,22 @@ export function CollabProvider({ children }: { children: ReactNode }) {
   }, [activeWorkspaceId, isPersonal]);
 
   useEffect(() => { refreshMembers(); }, [refreshMembers]);
+
+  // Fold the workspace's shared categories into TaskContext so shared-task rows
+  // resolve their category and the tabs are workspace-correct (fix M2/L4).
+  useEffect(() => {
+    if (isPersonal) return;
+    let cancelled = false;
+    supabase.from('categories').select('*').eq('workspace_id', activeWorkspaceId).is('deleted_at', null)
+      .then(({ data }) => {
+        if (cancelled || !Array.isArray(data)) return;
+        mergeWorkspaceCategories(data.map((r: any) => ({
+          id: r.id, name: r.name, icon: r.icon, color: r.color,
+          isDefault: r.is_default, order: r.sort_order, workspaceId: r.workspace_id ?? null,
+        })));
+      });
+    return () => { cancelled = true; };
+  }, [activeWorkspaceId, isPersonal, mergeWorkspaceCategories]);
 
   const isSharedWorkspace = !isPersonal && members.length > 1;
 
@@ -100,15 +116,24 @@ export function CollabProvider({ children }: { children: ReactNode }) {
   }, [user, isSharedWorkspace, activeWorkspaceId, mergeRemoteTasks, applyRemoteDelete]);
 
   const assignTask = useCallback(async (taskId: string, assigneeId: string | null) => {
+    // Capture the prior assignee so we can revert if the server rejects (M4).
+    const prev = getTask(taskId)?.assigneeId ?? null;
     // Optimistic local update; the server stamps updated_at so its echo wins LWW.
     updateTask(taskId, { assigneeId });
-    const { isBackendDown } = await api.post(`/tasks/${taskId}/assign`, { assignee_id: assigneeId });
+    const { error, isBackendDown } = await api.post(`/tasks/${taskId}/assign`, { assignee_id: assigneeId });
     if (isBackendDown) {
       // Offline fallback: write assignee directly (RLS allows members). The
       // assignee trigger validates membership server-side.
-      await supabase.from('tasks').update({ assignee_id: assigneeId, updated_at: new Date().toISOString() }).eq('id', taskId);
+      const { error: sbError } = await supabase
+        .from('tasks')
+        .update({ assignee_id: assigneeId, updated_at: new Date().toISOString() })
+        .eq('id', taskId);
+      if (sbError) updateTask(taskId, { assigneeId: prev }); // revert on RLS/trigger reject
+    } else if (error) {
+      // Logical rejection (e.g. assignee is not a member) — revert the optimism.
+      updateTask(taskId, { assigneeId: prev });
     }
-  }, [updateTask]);
+  }, [updateTask, getTask]);
 
   const membersById = useMemo(() => {
     const m: Record<string, Member> = {};

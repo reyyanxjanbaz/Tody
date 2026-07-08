@@ -33,6 +33,15 @@ MIN_TASK_AGE_SECONDS = 60          # ignore tasks completed <60s after creation
 MAX_XP_COMPLETIONS_PER_DAY = 30    # cap XP-earning completions per day
 
 _CODE_ALPHABET = string.ascii_lowercase + string.digits
+_UUID_RE = __import__("re").compile(r"^[0-9a-fA-F-]{36}$")
+
+
+def _safe_uid(uid: str) -> str:
+    """Defense-in-depth: user_id already comes from a Supabase-validated JWT, but
+    we interpolate it into PostgREST .or_() filters, so assert the UUID shape."""
+    if not _UUID_RE.match(uid or ""):
+        raise HTTPException(status_code=400, detail="Invalid user id")
+    return uid
 
 
 def _now() -> datetime:
@@ -70,6 +79,32 @@ def create_invite(body: InviteCreate, user_id: str = Depends(get_current_user_id
     if body.kind not in ("friend", "workspace", "pact"):
         raise HTTPException(status_code=400, detail="Invalid invite kind")
     sb = get_supabase()
+
+    # Authorization on the invite TARGET (get_supabase is the service role, so we
+    # check explicitly). Without this, any authenticated user could mint a join
+    # code for a workspace/pact they don't belong to.
+    if body.kind == "workspace":
+        if not body.target_id:
+            raise HTTPException(status_code=400, detail="Workspace invite needs a target_id")
+        ws = sb.table("workspaces").select("owner_id").eq("id", body.target_id).maybe_single().execute()
+        if not ws.data:
+            raise HTTPException(status_code=404, detail="Workspace not found")
+        if ws.data["owner_id"] != user_id:
+            raise HTTPException(status_code=403, detail="Only the workspace owner can invite members")
+    elif body.kind == "pact":
+        if not body.target_id:
+            raise HTTPException(status_code=400, detail="Pact invite needs a target_id")
+        pact = sb.table("pacts").select("creator_id").eq("id", body.target_id).maybe_single().execute()
+        if not pact.data:
+            raise HTTPException(status_code=404, detail="Pact not found")
+        is_creator = pact.data["creator_id"] == user_id
+        is_participant = bool(
+            sb.table("pact_participants").select("user_id")
+            .eq("pact_id", body.target_id).eq("user_id", user_id).execute().data
+        )
+        if not (is_creator or is_participant):
+            raise HTTPException(status_code=403, detail="Only a pact participant can invite others")
+
     # Retry a couple of times on the (astronomically unlikely) code collision.
     for _ in range(3):
         code = _gen_code()
@@ -151,10 +186,21 @@ def _join_workspace(sb, workspace_id: Optional[str], user_id: str) -> None:
 def _join_pact(sb, pact_id: Optional[str], user_id: str) -> None:
     if not pact_id:
         raise HTTPException(status_code=400, detail="Invite has no pact target")
-    # Only flips 'invited' → 'accepted', or inserts an accepted participant.
-    sb.table("pact_participants").upsert(
-        {"pact_id": pact_id, "user_id": user_id, "state": "accepted"},
-        on_conflict="pact_id,user_id",
+    # Never downgrade an existing participant (fix L1): re-accepting an invite for
+    # a pact you've already completed must NOT reset 'done' → 'accepted'. Insert as
+    # accepted only when there's no row yet.
+    existing = (
+        sb.table("pact_participants")
+        .select("state")
+        .eq("pact_id", pact_id)
+        .eq("user_id", user_id)
+        .maybe_single()
+        .execute()
+    )
+    if existing and existing.data:
+        return  # already a participant in some state — leave it untouched
+    sb.table("pact_participants").insert(
+        {"pact_id": pact_id, "user_id": user_id, "state": "accepted"}
     ).execute()
 
 
@@ -168,7 +214,7 @@ def list_friends(user_id: str = Depends(get_current_user_id)):
     fr = (
         sb.table("friendships")
         .select("user_a,user_b")
-        .or_(f"user_a.eq.{user_id},user_b.eq.{user_id}")
+        .or_(f"user_a.eq.{_safe_uid(user_id)},user_b.eq.{user_id}")
         .execute()
     )
     friend_ids = []
@@ -198,10 +244,16 @@ def remove_friend(friend_id: str, user_id: str = Depends(get_current_user_id)):
 # ── Leaderboard ──────────────────────────────────────────────────────────────
 
 
-def _week_start(now: datetime) -> datetime:
-    """Monday 00:00 UTC of the current ISO week."""
-    monday = now - timedelta(days=now.weekday())
-    return monday.replace(hour=0, minute=0, second=0, microsecond=0)
+def _week_start(now: datetime, week_starts_on: str = "monday") -> datetime:
+    """00:00 UTC of the current week's first day, honouring the caller's
+    week_starts_on preference (fix L9). Python weekday(): Mon=0 … Sun=6."""
+    if week_starts_on == "sunday":
+        # Days since the most recent Sunday.
+        back = (now.weekday() + 1) % 7
+    else:
+        back = now.weekday()  # days since Monday
+    start = now - timedelta(days=back)
+    return start.replace(hour=0, minute=0, second=0, microsecond=0)
 
 
 def _weekly_xp_for_user(sb, uid: str, since_iso: str) -> dict:
@@ -284,18 +336,27 @@ def leaderboard(period: str = "week", user_id: str = Depends(get_current_user_id
     if period != "week":
         raise HTTPException(status_code=400, detail="Only period=week is supported")
 
+    # Evict expired cache entries (fix L2 — otherwise _LB_CACHE grows unbounded).
+    now_ts = time.time()
+    for k in [k for k, (ts, _) in _LB_CACHE.items() if now_ts - ts >= _LB_TTL]:
+        _LB_CACHE.pop(k, None)
+
     cached = _LB_CACHE.get(user_id)
-    if cached and (time.time() - cached[0]) < _LB_TTL:
+    if cached and (now_ts - cached[0]) < _LB_TTL:
         return cached[1]
 
     sb = get_supabase()
-    since = _week_start(_now()).isoformat()
+
+    # Week window honours the caller's week-start preference (fix L9).
+    me = sb.table("profiles").select("week_starts_on").eq("id", user_id).maybe_single().execute()
+    week_starts_on = (me.data or {}).get("week_starts_on", "monday") if me else "monday"
+    since = _week_start(_now(), week_starts_on).isoformat()
 
     # Friend ids
     fr = (
         sb.table("friendships")
         .select("user_a,user_b")
-        .or_(f"user_a.eq.{user_id},user_b.eq.{user_id}")
+        .or_(f"user_a.eq.{_safe_uid(user_id)},user_b.eq.{user_id}")
         .execute()
     )
     friend_ids = []

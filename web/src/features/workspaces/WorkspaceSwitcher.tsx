@@ -10,10 +10,12 @@ import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { Icon } from '../../ui/Icon';
 import { Pressable } from '../../ui/Pressable';
-import { Sheet } from '../../ui/Modal';
+import { Sheet, Modal } from '../../ui/Modal';
 import { PromptModal } from '../../ui/PromptModal';
+import { Button } from '../../ui/Button';
 import { haptic } from '../../core/utils/haptics';
 import { SPRING_SNAPPY } from '../../theme/motion';
+import { useTasks } from '../../core/context/TaskContext';
 import { useWorkspaces } from './WorkspaceContext';
 import { PERSONAL_WORKSPACE_ID } from './types';
 import { InviteSheet } from '../social/InviteSheet';
@@ -23,9 +25,20 @@ export function WorkspaceSwitcher() {
     workspaces, activeWorkspace, activeWorkspaceId, setActiveWorkspace,
     addWorkspace, deleteWorkspace,
   } = useWorkspaces();
+  const { reassignWorkspaceTasks } = useTasks();
   const [open, setOpen] = useState(false);
   const [adding, setAdding] = useState(false);
   const [shareId, setShareId] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+
+  const removeWorkspace = (mode: 'move' | 'delete') => {
+    if (!deletingId) return;
+    haptic(mode === 'delete' ? 'heavy' : 'medium');
+    reassignWorkspaceTasks(deletingId, mode); // local mirror (offline-safe)
+    deleteWorkspace(deletingId, mode);         // server + workspace list
+    setDeletingId(null);
+  };
+  const deletingName = workspaces.find((w) => w.id === deletingId)?.name ?? 'this workspace';
 
   const pick = (id: string) => {
     if (id !== activeWorkspaceId) { haptic('selection'); setActiveWorkspace(id); }
@@ -109,7 +122,7 @@ export function WorkspaceSwitcher() {
                     </Pressable>
                     {!active && (
                       <Pressable
-                        onPress={() => { haptic('warning'); deleteWorkspace(ws.id); }}
+                        onPress={() => { haptic('warning'); setDeletingId(ws.id); }}
                         aria-label={`Delete ${ws.name}`}
                         style={{ padding: 8, background: 'transparent' }}
                       >
@@ -169,6 +182,21 @@ export function WorkspaceSwitcher() {
         title="Share workspace"
         subtitle="They join this workspace and can see and complete its tasks."
       />
+
+      {/* Delete confirm — choose what happens to the workspace's tasks (H3). */}
+      <Modal open={deletingId != null} onClose={() => setDeletingId(null)}>
+        <div style={{ padding: 20 }}>
+          <h2 style={{ fontSize: 18, fontWeight: 700, marginBottom: 6 }}>Delete “{deletingName}”?</h2>
+          <p style={{ fontSize: 14, color: 'var(--c-text-secondary)', marginBottom: 16, lineHeight: 1.5 }}>
+            Choose what to do with its tasks, habits and captures.
+          </p>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <Button title="Move everything to Personal" onPress={() => removeWorkspace('move')} variant="primary" />
+            <Button title="Delete everything in it" onPress={() => removeWorkspace('delete')} variant="secondary" />
+            <Button title="Cancel" onPress={() => setDeletingId(null)} variant="ghost" />
+          </div>
+        </div>
+      </Modal>
     </>
   );
 }

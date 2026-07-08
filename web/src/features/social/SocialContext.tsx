@@ -125,14 +125,21 @@ export function SocialProvider({ children }: { children: ReactNode }) {
   }, [user, maybeNotifyPassed]);
 
   // Refresh on login and on window focus (online-only; cached snapshot otherwise).
+  // Focus refresh throttled to once / 30s so a tab switch doesn't fan out cold
+  // Render calls (fix L5).
   const loadedFor = useRef<string | null>(null);
+  const lastFocusRefresh = useRef(0);
   useEffect(() => {
     if (!user) return;
     if (loadedFor.current !== user.id) {
       loadedFor.current = user.id;
       void refresh();
     }
-    const onFocus = () => { void refresh(); };
+    const onFocus = () => {
+      if (Date.now() - lastFocusRefresh.current < 30_000) return;
+      lastFocusRefresh.current = Date.now();
+      void refresh();
+    };
     window.addEventListener('focus', onFocus);
     return () => window.removeEventListener('focus', onFocus);
   }, [user, refresh]);

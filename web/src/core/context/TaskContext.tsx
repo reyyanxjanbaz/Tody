@@ -35,6 +35,7 @@ import {
   deleteCategoryFromDb,
   buildCategoryMap,
   dbRowToTask,
+  rebuildChildIds,
   CategoryMap,
 } from '../lib/supabaseSync';
 import { api } from '../lib/api';
@@ -52,8 +53,10 @@ interface TaskContextType {
   categories: Category[];
   activeCategory: string;
   setActiveCategory: (id: string) => void;
-  addCategory: (name: string, icon: string, color: string) => Category;
+  addCategory: (name: string, icon: string, color: string, workspaceId?: string | null) => Category;
   updateCategory: (id: string, updates: Partial<Category>) => void;
+  /** Fold a shared workspace's categories into local state + catMap (M2/L4). */
+  mergeWorkspaceCategories: (cats: Category[]) => void;
   deleteCategory: (id: string) => void;
   reorderCategories: (orderedIds: string[]) => void;
   // Task operations
@@ -80,6 +83,8 @@ interface TaskContextType {
   mergeRemoteTasks: (rows: any[]) => Promise<void>;
   /** Apply a remote delete (Phase D): remove locally + tombstone. */
   applyRemoteDelete: (id: string) => void;
+  /** Local mirror of a workspace deletion (H3): move its tasks to Personal, or delete them. */
+  reassignWorkspaceTasks: (workspaceId: string, mode: 'move' | 'delete') => void;
 }
 
 const TaskContext = createContext<TaskContextType | undefined>(undefined);
@@ -104,25 +109,26 @@ function mergeTaskLists(local: Task[], remote: Task[]): Task[] {
 
 /**
  * Phase D echo guard (pure, exported for tests). Given the current local list,
- * incoming remote rows, a set of tombstoned ids, and "now", returns the merged
- * list. Rules:
+ * incoming remote rows, a set of tombstoned ids, and the set of ids the LOCAL
+ * user just mutated, returns the merged list. Rules:
  *   • Tombstoned ids are dropped from both incoming and the result.
- *   • Any local task updated within `guardMs` of `now` is "recently mutated":
- *     its incoming remote copy is skipped so a just-made local edit can't be
- *     clobbered by the server echo of an earlier state (clock-skew safe).
+ *   • An id in `mutatedIds` is skipped: that task has a pending local write whose
+ *     server echo would otherwise clobber a same-second follow-up edit under
+ *     clock skew, so local wins until the next full sync reconciles it.
  *   • Otherwise LWW by updatedAt (mergeTaskLists).
+ *
+ * NOTE (fix M1): the guard is keyed on an EXPLICIT locally-mutated set, not on
+ * "recent updatedAt". A freshly-merged *remote* row also has a near-now
+ * updatedAt; the old proxy guarded those too, which dropped rapid successive
+ * remote edits. Only genuinely-local mutations belong in `mutatedIds`.
  */
 export function selectMergeableRemote(
   local: Task[],
   remote: Task[],
   deletedIds: Set<string>,
-  nowMs: number,
-  guardMs: number,
+  mutatedIds: Set<string>,
 ): Task[] {
-  const guarded = new Set(
-    local.filter(t => nowMs - t.updatedAt < guardMs).map(t => t.id),
-  );
-  const incoming = remote.filter(t => !deletedIds.has(t.id) && !guarded.has(t.id));
+  const incoming = remote.filter(t => !deletedIds.has(t.id) && !mutatedIds.has(t.id));
   return mergeTaskLists(local, incoming).filter(t => !deletedIds.has(t.id));
 }
 
@@ -140,6 +146,21 @@ export function TaskProvider({ children }: { children: React.ReactNode }) {
   const catMapRef = useRef<CategoryMap>({ toUUID: {}, toLocal: {} });
   const hasSyncedRef = useRef(false);
   const lastSyncRef = useRef(0);
+
+  // Echo guard (fix M1): ids the local user mutated recently → expiry ms. The
+  // Realtime merge skips these so a server echo can't clobber a pending local
+  // edit. Only genuinely-local mutations go in here (never remote merges).
+  const recentlyMutatedRef = useRef<Map<string, number>>(new Map());
+  const MUTATION_GUARD_MS = 5000;
+  const markMutated = useCallback((id: string) => {
+    recentlyMutatedRef.current.set(id, Date.now() + MUTATION_GUARD_MS);
+  }, []);
+  const liveMutatedIds = useCallback((): Set<string> => {
+    const now = Date.now();
+    const m = recentlyMutatedRef.current;
+    for (const [id, exp] of m) if (exp <= now) m.delete(id); // expire on read
+    return new Set(m.keys());
+  }, []);
 
   // Debounced persist
   const persistTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -557,6 +578,7 @@ export function TaskProvider({ children }: { children: React.ReactNode }) {
       ...overrides,
     };
 
+    markMutated(task.id);
     beginLayoutAnimation();
     setTasks(prev => [task, ...prev]);
 
@@ -650,6 +672,7 @@ export function TaskProvider({ children }: { children: React.ReactNode }) {
   }, [user]);
 
   const updateTask = useCallback((id: string, updates: Partial<Task>) => {
+    markMutated(id);
     setTasks(prev =>
       prev.map(t => {
         if (t.id !== id) { return t; }
@@ -668,6 +691,7 @@ export function TaskProvider({ children }: { children: React.ReactNode }) {
   }, [user]);
 
   const completeTask = useCallback((id: string) => {
+    markMutated(id);
     beginLayoutAnimation();
     const now = Date.now();
     setTasks(prev => {
@@ -712,6 +736,7 @@ export function TaskProvider({ children }: { children: React.ReactNode }) {
   }, [user]);
 
   const startTask = useCallback((id: string) => {
+    markMutated(id);
     const now = Date.now();
     setTasks(prev =>
       prev.map(t => {
@@ -724,6 +749,7 @@ export function TaskProvider({ children }: { children: React.ReactNode }) {
   }, [user]);
 
   const completeTimedTask = useCallback((id: string, adjustedMinutes?: number) => {
+    markMutated(id);
     beginLayoutAnimation();
     const now = Date.now();
     setTasks(prev => {
@@ -766,6 +792,7 @@ export function TaskProvider({ children }: { children: React.ReactNode }) {
   }, [user]);
 
   const uncompleteTask = useCallback((id: string) => {
+    markMutated(id);
     beginLayoutAnimation();
     const now = Date.now();
     setTasks(prev =>
@@ -790,6 +817,7 @@ export function TaskProvider({ children }: { children: React.ReactNode }) {
   }, [user]);
 
   const deferTask = useCallback((id: string, option: SnoozeOption = 'tomorrow') => {
+    markMutated(id);
     // Client computes the snooze target in LOCAL time (source of truth) and
     // sends it to the backend — the old POST /defer computed "tomorrow" in UTC,
     // which drifted the deadline for non-UTC users.
@@ -826,6 +854,7 @@ export function TaskProvider({ children }: { children: React.ReactNode }) {
   }, [user]);
 
   const archiveTask = useCallback((id: string) => {
+    markMutated(id);
     beginLayoutAnimation();
     const now = Date.now();
 
@@ -861,6 +890,7 @@ export function TaskProvider({ children }: { children: React.ReactNode }) {
   }, [user]);
 
   const deleteTask = useCallback((id: string) => {
+    markMutated(id);
     beginLayoutAnimation();
     recordTombstone('tasks', id).catch(() => {}); // guard against sync resurrection
     setTasks(prev => {
@@ -893,6 +923,7 @@ export function TaskProvider({ children }: { children: React.ReactNode }) {
   }, [user]);
 
   const deleteTaskWithCascade = useCallback((id: string) => {
+    markMutated(id);
     beginLayoutAnimation();
     setTasks(prev => {
       const task = prev.find(t => t.id === id);
@@ -964,6 +995,7 @@ export function TaskProvider({ children }: { children: React.ReactNode }) {
   }, [user]);
 
   const moveTaskToParent = useCallback((taskId: string, newParentId: string | null) => {
+    markMutated(taskId);
     const now = Date.now();
     setTasks(prev => {
       const task = prev.find(t => t.id === taskId);
@@ -1038,6 +1070,7 @@ export function TaskProvider({ children }: { children: React.ReactNode }) {
   }, [user]);
 
   const reviveTask = useCallback((id: string) => {
+    markMutated(id);
     const now = Date.now();
     const todayEnd = new Date();
     todayEnd.setHours(23, 59, 59, 999);
@@ -1119,26 +1152,26 @@ export function TaskProvider({ children }: { children: React.ReactNode }) {
   // server echo would otherwise clobber a same-second follow-up edit under clock
   // skew) or a change we just made — so local wins until the next full sync
   // reconciles it. Merge is read-only into state; it never re-upserts.
-  const REMOTE_GUARD_MS = 5000;
   const mergeRemoteTasks = useCallback(async (rows: any[]): Promise<void> => {
     if (!rows || rows.length === 0) return;
     // Convert raw DB rows with the private category map (keeps catMap encapsulated).
     const remote = rows.map(r => dbRowToTask(r, catMapRef.current));
     const deletedIds = await loadTombstoneIds('tasks');
-    const now = Date.now();
+    const mutatedIds = liveMutatedIds();
     const fresh = remote.filter(t => !deletedIds.has(t.id));
     const activeIds = new Set(fresh.filter(t => !t.isArchived).map(t => t.id));
     const archivedIds = new Set(fresh.filter(t => t.isArchived).map(t => t.id));
 
     beginLayoutAnimation();
     // A task can flip active↔archived remotely; drop it from the opposite list.
-    setTasks(prev => selectMergeableRemote(
-      prev.filter(t => !archivedIds.has(t.id)), fresh.filter(t => !t.isArchived), deletedIds, now, REMOTE_GUARD_MS,
-    ));
+    // rebuildChildIds so remote tasks keep their subtask hierarchy (fix M3).
+    setTasks(prev => rebuildChildIds(selectMergeableRemote(
+      prev.filter(t => !archivedIds.has(t.id)), fresh.filter(t => !t.isArchived), deletedIds, mutatedIds,
+    )));
     setArchivedTasks(prev => selectMergeableRemote(
-      prev.filter(t => !activeIds.has(t.id)), fresh.filter(t => t.isArchived), deletedIds, now, REMOTE_GUARD_MS,
+      prev.filter(t => !activeIds.has(t.id)), fresh.filter(t => t.isArchived), deletedIds, mutatedIds,
     ));
-  }, []);
+  }, [liveMutatedIds]);
 
   /** Apply a remote hard/soft delete: remove locally and tombstone so a later
    *  pull can't resurrect it. */
@@ -1149,9 +1182,30 @@ export function TaskProvider({ children }: { children: React.ReactNode }) {
     setArchivedTasks(prev => prev.filter(t => t.id !== id));
   }, []);
 
+  /**
+   * Local mirror of a workspace deletion (Phase B/H3). The server has already
+   * detached or tombstoned the workspace's rows; this keeps local state in sync
+   * immediately so nothing is invisibly stranded on a deleted workspace_id.
+   *   • mode 'move'   → reassign the workspace's tasks to Personal (workspace_id null)
+   *   • mode 'delete' → remove them locally + tombstone
+   */
+  const reassignWorkspaceTasks = useCallback((workspaceId: string, mode: 'move' | 'delete'): void => {
+    beginLayoutAnimation();
+    if (mode === 'move') {
+      const bump = (t: Task) => (t.workspaceId === workspaceId ? { ...t, workspaceId: null, updatedAt: Date.now() } : t);
+      setTasks(prev => prev.map(bump));
+      setArchivedTasks(prev => prev.map(bump));
+    } else {
+      const doomed = [...tasksRef.current, ...archivedTasks].filter(t => t.workspaceId === workspaceId).map(t => t.id);
+      if (doomed.length > 0) recordTombstones('tasks', doomed).catch(() => {});
+      setTasks(prev => prev.filter(t => t.workspaceId !== workspaceId));
+      setArchivedTasks(prev => prev.filter(t => t.workspaceId !== workspaceId));
+    }
+  }, [archivedTasks]);
+
   // ── Category CRUD ────────────────────────────────────────────────────
 
-  const addCategory = useCallback((name: string, icon: string, color: string): Category => {
+  const addCategory = useCallback((name: string, icon: string, color: string, workspaceId?: string | null): Category => {
     const newCat: Category = {
       id: generateId(),
       name,
@@ -1161,6 +1215,9 @@ export function TaskProvider({ children }: { children: React.ReactNode }) {
       // max(order)+1, not categories.length — after a delete, length can equal
       // an existing order and collide (nondeterministic tab ordering).
       order: categories.reduce((m, c) => Math.max(m, c.order), -1) + 1,
+      // Stamp the workspace so a category created in a shared workspace is
+      // visible to all members (fix M2) — NULL/undefined = Personal.
+      workspaceId: workspaceId ?? null,
     };
     setCategories(prev => [...prev, newCat]);
     // Route through API; fall back to direct Supabase upsert
@@ -1172,12 +1229,32 @@ export function TaskProvider({ children }: { children: React.ReactNode }) {
         icon:       newCat.icon,
         color:      newCat.color,
         sort_order: newCat.order,
+        workspace_id: newCat.workspaceId ?? null,
       }).then(({ error, isBackendDown }) => {
         if (error || isBackendDown) upsertCategory(newCat, uid).catch(() => {});
       }).catch(() => { upsertCategory(newCat, uid).catch(() => {}); });
     }
     return newCat;
   }, [categories.length, user]);
+
+  /**
+   * Fold a shared workspace's categories (fetched by CollabContext) into local
+   * state so (a) shared-task rows can resolve their category via catMap, and
+   * (b) the category tabs reflect the workspace (fix M2/L4). Server category ids
+   * ARE their UUIDs, so the local id == uuid mapping is identity.
+   */
+  const mergeWorkspaceCategories = useCallback((cats: Category[]): void => {
+    if (cats.length === 0) return;
+    setCategories(prev => {
+      const byId = new Map(prev.map(c => [c.id, c]));
+      for (const c of cats) byId.set(c.id, c);
+      return Array.from(byId.values());
+    });
+    for (const c of cats) {
+      catMapRef.current.toLocal[c.id] = c.id;
+      catMapRef.current.toUUID[c.id] = c.id;
+    }
+  }, []);
 
   const updateCategory = useCallback((id: string, updates: Partial<Category>) => {
     setCategories(prev => {
@@ -1283,6 +1360,8 @@ export function TaskProvider({ children }: { children: React.ReactNode }) {
         addTaskLocal,
         mergeRemoteTasks,
         applyRemoteDelete,
+        reassignWorkspaceTasks,
+        mergeWorkspaceCategories,
       }}>
       {children}
     </TaskContext.Provider>

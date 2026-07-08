@@ -28,6 +28,15 @@ import {
 
 const CACHE_KEY = 'tody:workspaces';
 const ACTIVE_KEY = 'tody:activeWorkspace';
+const PENDING_KEY = 'tody:workspacesPendingPush'; // ids created offline, awaiting sync (L3)
+
+function readPending(): Set<string> {
+  try { return new Set(JSON.parse(localStorage.getItem(PENDING_KEY) || '[]')); }
+  catch { return new Set(); }
+}
+function writePending(ids: Set<string>) {
+  try { localStorage.setItem(PENDING_KEY, JSON.stringify([...ids])); } catch { /* ignore */ }
+}
 
 interface DbWorkspaceRow {
   id: string;
@@ -75,7 +84,7 @@ interface WorkspaceContextValue {
   setActiveWorkspace: (id: string) => void;
   addWorkspace: (partial: { name: string; icon?: string; accent?: string | null }) => Workspace;
   updateWorkspace: (id: string, updates: Partial<Pick<Workspace, 'name' | 'icon' | 'accent'>>) => void;
-  deleteWorkspace: (id: string) => void;
+  deleteWorkspace: (id: string, mode?: 'move' | 'delete') => void;
   reorderWorkspaces: (orderedIds: string[]) => void;
 }
 
@@ -91,7 +100,36 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   });
 
   // Persist named workspaces to the offline cache whenever they change.
+  const namedRef = useRef(named);
+  namedRef.current = named;
   useEffect(() => { writeCache(named); }, [named]);
+
+  // Push one workspace (backend → Supabase fallback). On total failure, mark it
+  // pending so flushPending() can retry on reconnect/focus (fix L3).
+  const pushWorkspace = useCallback(async (ws: Workspace): Promise<void> => {
+    const body = { id: ws.id, name: ws.name, icon: ws.icon, accent: ws.accent, sort_order: ws.sortOrder };
+    try {
+      const { error, isBackendDown } = await api.post('/workspaces', body);
+      if (!error && !isBackendDown) { const p = readPending(); if (p.delete(ws.id)) writePending(p); return; }
+      if (isBackendDown && user) {
+        const { error: sbErr } = await supabase.from('workspaces').upsert({ ...body, owner_id: user.id }, { onConflict: 'id' });
+        if (!sbErr) { const p = readPending(); if (p.delete(ws.id)) writePending(p); return; }
+      }
+      throw new Error('push failed');
+    } catch {
+      const p = readPending(); p.add(ws.id); writePending(p);
+    }
+  }, [user]);
+
+  const flushPending = useCallback(async () => {
+    const pending = readPending();
+    if (pending.size === 0) return;
+    for (const id of pending) {
+      const ws = namedRef.current.find((w) => w.id === id);
+      if (ws) await pushWorkspace(ws);
+      else { const p = readPending(); if (p.delete(id)) writePending(p); } // gone locally
+    }
+  }, [pushWorkspace]);
 
   // Persist the active selection.
   useEffect(() => {
@@ -125,10 +163,13 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       if (cancelled) return;
       if (rows) setNamed(rows.map(rowToWorkspace));
       setIsLoading(false);
+      void flushPending(); // retry any offline-created workspaces
     })();
 
-    return () => { cancelled = true; };
-  }, [user]);
+    const onFocus = () => { void flushPending(); };
+    window.addEventListener('focus', onFocus);
+    return () => { cancelled = true; window.removeEventListener('focus', onFocus); };
+  }, [user, flushPending]);
 
   const setActiveWorkspace = useCallback((id: string) => setActiveWorkspaceId(id), []);
 
@@ -142,22 +183,9 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       sortOrder: named.length,
     };
     setNamed((prev) => [...prev, ws]);
-    // Push (backend → Supabase fallback). Client-generated UUID upserts safely.
-    (async () => {
-      const body = {
-        id: ws.id, name: ws.name, icon: ws.icon,
-        accent: ws.accent, sort_order: ws.sortOrder,
-      };
-      const { isBackendDown } = await api.post('/workspaces', body);
-      if (isBackendDown && user) {
-        await supabase.from('workspaces').upsert(
-          { ...body, owner_id: user.id },
-          { onConflict: 'id' },
-        );
-      }
-    })();
+    void pushWorkspace(ws); // client-generated UUID upserts safely; queues on failure
     return ws;
-  }, [named.length, user]);
+  }, [named.length, pushWorkspace]);
 
   const updateWorkspace = useCallback<WorkspaceContextValue['updateWorkspace']>((id, updates) => {
     if (id === PERSONAL_WORKSPACE_ID) return; // Personal is synthetic
@@ -174,14 +202,27 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     })();
   }, []);
 
-  const deleteWorkspace = useCallback<WorkspaceContextValue['deleteWorkspace']>((id) => {
+  const deleteWorkspace = useCallback<WorkspaceContextValue['deleteWorkspace']>((id, mode = 'move') => {
     if (id === PERSONAL_WORKSPACE_ID) return;
     setNamed((prev) => prev.filter((w) => w.id !== id));
     // If the deleted workspace was active, fall back to Personal.
     setActiveWorkspaceId((cur) => (cur === id ? PERSONAL_WORKSPACE_ID : cur));
     (async () => {
-      const { isBackendDown } = await api.delete(`/workspaces/${id}`);
+      const { isBackendDown } = await api.delete(`/workspaces/${id}?mode=${mode}`);
       if (isBackendDown) {
+        // Offline fallback: mirror the server's move/delete on the affected rows,
+        // then soft-delete the workspace. (Task-side mirror is done by the caller
+        // via TaskContext.reassignWorkspaceTasks.)
+        if (mode === 'move') {
+          for (const table of ['tasks', 'categories', 'habits', 'inbox_tasks']) {
+            await supabase.from(table).update({ workspace_id: null }).eq('workspace_id', id);
+          }
+        } else {
+          const now = new Date().toISOString();
+          for (const table of ['tasks', 'categories', 'habits', 'inbox_tasks']) {
+            await supabase.from(table).update({ deleted_at: now }).eq('workspace_id', id);
+          }
+        }
         await supabase.from('workspaces').update({ deleted_at: new Date().toISOString() }).eq('id', id);
       }
     })();
