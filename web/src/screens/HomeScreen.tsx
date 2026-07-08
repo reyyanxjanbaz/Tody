@@ -1,6 +1,7 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AnimatePresence } from 'framer-motion';
+import { STAGGER_LIST, STAGGER_LIST_MAX } from '../theme/motion';
 import { useTasks } from '../core/context/TaskContext';
 import { useInbox } from '../core/context/InboxContext';
 import { useTheme } from '../core/context/ThemeContext';
@@ -109,6 +110,13 @@ export function HomeScreen() {
     try { localStorage.setItem('tody:sortOption', o); } catch { /* ignore */ }
     setSortOpen(false);
   };
+
+  // Cascade the list in on the screen's very first paint only; after that,
+  // freshly-added rows fade in on their own (no re-stagger on filter/sort).
+  const firstLoad = useRef(true);
+  useEffect(() => { firstLoad.current = false; }, []);
+  const entranceDelay = (i: number) =>
+    firstLoad.current ? Math.min(i, STAGGER_LIST_MAX) * STAGGER_LIST : 0;
 
   const assignableCats = useMemo(() => categories.filter((c) => c.id !== 'overview'), [categories]);
 
@@ -312,31 +320,35 @@ export function HomeScreen() {
             />
           ))
         ) : (
-          sections.map((section) => {
-            const rows = buildTreeRows(flattenTasksHierarchically(section.data));
-            return (
-              <div key={section.key}>
-                <SectionHeader title={section.title} count={section.data.length} />
-                {section.key === 'now' && <TodayLine />}
-                {rows.map(({ task, isLastChild, ancestorContinuation }) => (
-                  <TaskItem
-                    key={task.id}
-                    task={task}
-                    onPress={openTask}
-                    onComplete={onComplete}
-                    onDefer={setSnoozeId}
-                    onRevive={reviveTask}
-                    onStart={startTask}
-                    onCompleteTimed={completeTimedTask}
-                    onLongPress={setMenuTask}
-                    isLocked={isTaskLocked(task, tasks)}
-                    isLastChild={isLastChild}
-                    ancestorContinuation={ancestorContinuation}
-                  />
-                ))}
-              </div>
-            );
-          })
+          (() => {
+            let rowIndex = 0; // running index across sections for first-load stagger
+            return sections.map((section) => {
+              const rows = buildTreeRows(flattenTasksHierarchically(section.data));
+              return (
+                <div key={section.key}>
+                  <SectionHeader title={section.title} count={section.data.length} />
+                  {section.key === 'now' && <TodayLine />}
+                  {rows.map(({ task, isLastChild, ancestorContinuation }) => (
+                    <TaskItem
+                      key={task.id}
+                      task={task}
+                      onPress={openTask}
+                      onComplete={onComplete}
+                      onDefer={setSnoozeId}
+                      onRevive={reviveTask}
+                      onStart={startTask}
+                      onCompleteTimed={completeTimedTask}
+                      onLongPress={setMenuTask}
+                      isLocked={isTaskLocked(task, tasks)}
+                      isLastChild={isLastChild}
+                      ancestorContinuation={ancestorContinuation}
+                      entranceDelay={entranceDelay(rowIndex++)}
+                    />
+                  ))}
+                </div>
+              );
+            });
+          })()
         )}
         <div style={{ height: 8 }} />
       </div>

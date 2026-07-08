@@ -13,7 +13,7 @@ import { useNow } from '../utils/useNow';
 import { useCelebration } from './Celebration';
 import { recordSwipeAction } from '../core/utils/swipeMemory';
 import { haptic } from '../core/utils/haptics';
-import { SPRING_SNAPPY, SPRING_CRITICAL, SWIPE_THRESHOLD, FLING_VELOCITY } from '../theme/motion';
+import { SPRING_SNAPPY, SPRING_CRITICAL, SPRING_LAYOUT, SWIPE_THRESHOLD, FLING_VELOCITY } from '../theme/motion';
 
 const ENERGY_ICONS: Record<EnergyLevel, { name: string; color: string; dark: string }> = {
   high: { name: 'flash', color: '#F59E0B', dark: '#FBBF24' },
@@ -40,6 +40,9 @@ interface TaskItemProps {
   ancestorContinuation?: boolean[];
   onLongPress?: (task: Task) => void;
   checkedOverride?: boolean;
+  /** Entrance-stagger delay (seconds). Set only on a screen's first paint;
+   *  0 (default) makes a freshly-mounted row fade in on its own. */
+  entranceDelay?: number;
 }
 
 export function TaskItem({
@@ -55,6 +58,7 @@ export function TaskItem({
   ancestorContinuation = [],
   onLongPress,
   checkedOverride,
+  entranceDelay = 0,
 }: TaskItemProps) {
   const { colors, isDark } = useTheme();
   const { celebrate } = useCelebration();
@@ -202,7 +206,13 @@ export function TaskItem({
   const checked = checkedOverride !== undefined ? checkedOverride : task.isCompleted;
 
   return (
-    <div style={{ position: 'relative', background: 'var(--c-background)' }}>
+    <motion.div
+      layout="position"
+      initial={{ opacity: 0, y: 8 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ ...SPRING_LAYOUT, delay: entranceDelay }}
+      style={{ position: 'relative', background: 'var(--c-background)' }}
+    >
       {/* Swipe action backgrounds */}
       <div
         style={{
@@ -433,7 +443,7 @@ export function TaskItem({
           backgroundImage: `repeating-linear-gradient(to right, ${colors.border} 0 4px, transparent 4px 7px)`,
         }}
       />
-    </div>
+    </motion.div>
   );
 }
 

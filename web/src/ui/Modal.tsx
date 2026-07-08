@@ -1,7 +1,7 @@
 import { createPortal } from 'react-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import type { ReactNode } from 'react';
-import { SPRING_SNAPPY } from '../theme/motion';
+import { SPRING_SNAPPY, SPRING_GENTLE, TIMING_FADE, FLING_VELOCITY } from '../theme/motion';
 
 interface BaseProps {
   open: boolean;
@@ -63,7 +63,7 @@ export function Sheet({ open, onClose, children }: BaseProps) {
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
-          transition={{ duration: 0.18 }}
+          transition={TIMING_FADE}
           onClick={onClose}
         >
           <motion.div
@@ -71,12 +71,12 @@ export function Sheet({ open, onClose, children }: BaseProps) {
             initial={{ y: '100%' }}
             animate={{ y: 0 }}
             exit={{ y: '100%' }}
-            transition={{ type: 'spring', damping: 30, stiffness: 300 }}
+            transition={SPRING_GENTLE}
             drag="y"
             dragConstraints={{ top: 0, bottom: 0 }}
             dragElastic={{ top: 0, bottom: 0.6 }}
             onDragEnd={(_e, info) => {
-              if (info.offset.y > 120 || info.velocity.y > 600) onClose();
+              if (info.offset.y > 120 || info.velocity.y > FLING_VELOCITY) onClose();
             }}
             style={{
               width: '100%',

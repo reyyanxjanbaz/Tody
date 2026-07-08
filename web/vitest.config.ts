@@ -35,6 +35,7 @@ export default defineConfig({
       'tests/phase4/**/*.artifacts.test.ts',
       'tests/phase4/**/*.test.tsx',
       'tests/phase5-habits/**/*.test.{ts,tsx}',
+      'tests/phaseA/**/*.test.{ts,tsx}',
     ],
   },
 })

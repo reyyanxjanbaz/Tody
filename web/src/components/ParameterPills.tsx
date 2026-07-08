@@ -4,6 +4,7 @@ import { haptic } from '../core/utils/haptics';
 import { formatMinutes } from '../core/utils/timeTracking';
 import type { Priority, EnergyLevel, RecurringFrequency } from '../core/types';
 import { RECURRENCE_SHORT } from '../core/utils/recurrence';
+import { SPRING_SNAPPY } from '../theme/motion';
 
 // ── Shared pill shell ─────────────────────────────────────────────────────────
 
@@ -20,6 +21,9 @@ function Pill({
 }) {
   return (
     <motion.button
+      initial={{ scale: 0.9, opacity: 0 }}
+      animate={{ scale: 1, opacity: 1 }}
+      transition={SPRING_SNAPPY}
       whileTap={{ scale: 0.9 }}
       onClick={onClick}
       style={{

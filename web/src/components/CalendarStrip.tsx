@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef } from 'react';
 import { motion } from 'framer-motion';
 import { startOfDay, addDays } from '../core/utils/dateUtils';
 import { haptic } from '../core/utils/haptics';
+import { SPRING_SNAPPY } from '../theme/motion';
 
 const PAST = 14;
 const FUTURE = 14;
@@ -39,6 +40,7 @@ export function CalendarStrip({ selectedDate, onDateChange }: { selectedDate: nu
             whileTap={{ scale: 0.95 }}
             onClick={() => { haptic('light'); onDateChange(d.ts); }}
             style={{
+              position: 'relative',
               flexShrink: 0,
               width: 48,
               display: 'flex',
@@ -46,13 +48,24 @@ export function CalendarStrip({ selectedDate, onDateChange }: { selectedDate: nu
               alignItems: 'center',
               padding: '8px 0',
               borderRadius: 'var(--r-button)',
-              background: selected ? 'var(--c-text)' : 'transparent',
             }}
           >
-            <span style={{ fontSize: 11, fontWeight: 600, letterSpacing: '0.3px', color: selected ? 'var(--c-background)' : d.isToday ? 'var(--c-text-secondary)' : 'var(--c-text-tertiary)', marginBottom: 4 }}>
+            {selected && (
+              <motion.span
+                layoutId="cal-selected"
+                transition={SPRING_SNAPPY}
+                style={{
+                  position: 'absolute',
+                  inset: 0,
+                  borderRadius: 'var(--r-button)',
+                  background: 'var(--c-text)',
+                }}
+              />
+            )}
+            <span style={{ position: 'relative', fontSize: 11, fontWeight: 600, letterSpacing: '0.3px', color: selected ? 'var(--c-background)' : d.isToday ? 'var(--c-text-secondary)' : 'var(--c-text-tertiary)', marginBottom: 4 }}>
               {d.label}
             </span>
-            <span style={{ fontSize: 18, fontWeight: selected || d.isToday ? 700 : 600, color: selected ? 'var(--c-background)' : 'var(--c-text)' }}>{d.num}</span>
+            <span style={{ position: 'relative', fontSize: 18, fontWeight: selected || d.isToday ? 700 : 600, color: selected ? 'var(--c-background)' : 'var(--c-text)' }}>{d.num}</span>
             {d.isToday && !selected && <span style={{ width: 4, height: 4, borderRadius: 2, background: 'var(--c-text)', marginTop: 4 }} />}
           </motion.button>
         );

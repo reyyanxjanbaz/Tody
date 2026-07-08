@@ -3,6 +3,7 @@ import { motion } from 'framer-motion';
 import { Icon } from '../ui/Icon';
 import { haptic } from '../core/utils/haptics';
 import { HABITS_ENABLED } from '../app/flags';
+import { SPRING_SNAPPY } from '../theme/motion';
 
 interface Tab {
   path: string;
@@ -55,6 +56,7 @@ export function BottomTabBar() {
             aria-label={tab.label}
             aria-current={active ? 'page' : undefined}
             style={{
+              position: 'relative',
               flex: 1,
               height: 'var(--tabbar-h)',
               display: 'flex',
@@ -65,6 +67,20 @@ export function BottomTabBar() {
               color: active ? 'var(--c-text)' : 'var(--c-gray400)',
             }}
           >
+            {active && (
+              <motion.span
+                layoutId="tab-indicator"
+                transition={SPRING_SNAPPY}
+                style={{
+                  position: 'absolute',
+                  top: 6,
+                  width: 26,
+                  height: 3,
+                  borderRadius: 2,
+                  background: 'var(--c-text)',
+                }}
+              />
+            )}
             <motion.span
               animate={{ scale: active ? 1 : 0.94, y: active ? 0 : 1 }}
               transition={{ type: 'spring', stiffness: 500, damping: 30 }}
