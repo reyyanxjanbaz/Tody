@@ -22,6 +22,7 @@ export const ROUTE_TRANSITION: Record<string, TransitionKind> = {
 export function transitionFor(pathname: string): TransitionKind {
   if (pathname.startsWith('/task/')) return 'slideRight';
   if (pathname.startsWith('/habits/')) return 'slideRight'; // habit detail (not the /habits tab)
+  if (pathname.startsWith('/pacts/')) return 'slideRight';  // pact detail
   return ROUTE_TRANSITION[pathname] ?? 'fade';
 }
 

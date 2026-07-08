@@ -35,6 +35,9 @@ import { workspaceIdForDb } from '../features/workspaces/types';
 import { WorkspaceSwitcher } from '../features/workspaces/WorkspaceSwitcher';
 import { useCollab } from '../features/collab/CollabContext';
 import { AssigneePicker } from '../features/collab/AssigneePicker';
+import { usePacts } from '../features/pacts/PactContext';
+import { PactCard } from '../features/pacts/PactCard';
+import { CreatePactSheet } from '../features/pacts/CreatePactSheet';
 import { haptic } from '../core/utils/haptics';
 
 interface TreeRow {
@@ -100,7 +103,9 @@ export function HomeScreen() {
   const { showUndo } = useUndo();
   const { activeWorkspaceId, filter: filterWs } = useWorkspaceFilter();
   const { isSharedWorkspace, membersById } = useCollab();
+  const { activePacts } = usePacts();
   const { user } = useAuth();
+  const [creatingPact, setCreatingPact] = useState(false);
   const [assignTaskId, setAssignTaskId] = useState<string | null>(null);
   const [assignedToMe, setAssignedToMe] = useState(false);
   const assigneeFor = (t: Task) => (isSharedWorkspace && t.assigneeId ? membersById[t.assigneeId] ?? null : null);
@@ -227,6 +232,9 @@ export function HomeScreen() {
                 <Icon name="flame-outline" size={22} />
               </Pressable>
             )}
+            <Pressable onPress={() => setCreatingPact(true)} aria-label="New pact" style={{ padding: 6 }}>
+              <Icon name="people-outline" size={22} />
+            </Pressable>
             <Pressable onPress={() => setSortOpen(true)} aria-label="Sort" style={{ padding: 6 }}>
               <Icon name={sortOption === 'default' ? 'swap-vertical-outline' : 'swap-vertical'} size={22} />
             </Pressable>
@@ -306,6 +314,12 @@ export function HomeScreen() {
         className="tody-scroll"
         style={{ flex: 1, minHeight: 0 }}
       >
+        {/* Pacts band — group commitments live above the task sections. */}
+        {!searching && activePacts.length > 0 && (
+          <div style={{ paddingTop: 8 }}>
+            {activePacts.map((p) => <PactCard key={p.id} pact={p} />)}
+          </div>
+        )}
         {!searching && !isEmpty && activeCategory === 'overview' && !energyFilter && (
           <PlanningRitual onStartFocus={() => setFocusMode(true)} />
         )}
@@ -443,6 +457,9 @@ export function HomeScreen() {
         taskId={assignTaskId}
         currentAssigneeId={assignTaskId ? tasks.find((t) => t.id === assignTaskId)?.assigneeId : null}
       />
+
+      {/* Create a pact */}
+      <CreatePactSheet open={creatingPact} onClose={() => setCreatingPact(false)} />
 
       {/* Add category prompt */}
       <PromptModal

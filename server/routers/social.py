@@ -27,6 +27,7 @@ XP_PER_TASK = 10
 XP_BONUS_ESTIMATED = 5
 XP_BONUS_ON_TIME = 8
 XP_PER_LEVEL = 120
+XP_PACT_BONUS = 25                 # per pact completed in the window (Phase E)
 # Anti-cheat
 MIN_TASK_AGE_SECONDS = 60          # ignore tasks completed <60s after creation
 MAX_XP_COMPLETIONS_PER_DAY = 30    # cap XP-earning completions per day
@@ -247,6 +248,21 @@ def _weekly_xp_for_user(sb, uid: str, since_iso: str) -> dict:
         deadline = _parse(t.get("deadline"))
         if deadline is not None and comp_dt <= deadline:
             xp += XP_BONUS_ON_TIME
+
+    # Pact bonus: +25 for each pact this user completed their part of in the window.
+    try:
+        parts = (
+            sb.table("pact_participants")
+            .select("pact_id,done_at,state")
+            .eq("user_id", uid)
+            .eq("state", "done")
+            .gte("done_at", since_iso)
+            .execute()
+        )
+        xp += XP_PACT_BONUS * len(parts.data or [])
+    except Exception:
+        pass  # pacts table may not exist yet (pre-v8); ignore
+
     return {"weekly_xp": xp, "tasks_completed": tasks_done}
 
 

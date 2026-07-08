@@ -22,6 +22,7 @@ const HabitDetailScreen = lazy(() => import('../screens/HabitDetailScreen').then
 const SettingsScreen = lazy(() => import('../screens/SettingsScreen').then((m) => ({ default: m.SettingsScreen })));
 const LeaderboardScreen = lazy(() => import('../features/social/LeaderboardScreen').then((m) => ({ default: m.LeaderboardScreen })));
 const AcceptInviteScreen = lazy(() => import('../features/social/AcceptInviteScreen').then((m) => ({ default: m.AcceptInviteScreen })));
+const PactDetailScreen = lazy(() => import('../features/pacts/PactDetailScreen').then((m) => ({ default: m.PactDetailScreen })));
 import { PendingInviteRedeemer } from '../features/social/AcceptInviteScreen';
 
 const pageStyle: React.CSSProperties = {
@@ -36,6 +37,8 @@ const centered: React.CSSProperties = { position: 'absolute', inset: 0, display:
 function pageKey(pathname: string): string {
   if (pathname.startsWith('/task/')) return '/task';
   if (pathname.startsWith('/habits/')) return '/habits/detail';
+  if (pathname.startsWith('/pacts/')) return '/pacts/detail';
+  if (pathname.startsWith('/invite/')) return '/invite';
   return pathname;
 }
 
@@ -74,6 +77,7 @@ function AnimatedRoutes() {
                   <Route path="/habits/:id" element={<HabitDetailScreen />} />
                   <Route path="/settings" element={<SettingsScreen />} />
                   <Route path="/leaderboard" element={<LeaderboardScreen />} />
+                  <Route path="/pacts/:id" element={<PactDetailScreen />} />
                   <Route path="/invite/:code" element={<AcceptInviteScreen />} />
                   <Route path="*" element={<Navigate to="/" replace />} />
                 </>

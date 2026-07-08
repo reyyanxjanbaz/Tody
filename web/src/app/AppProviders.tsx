@@ -6,6 +6,7 @@ import { AuthProvider } from '../core/context/AuthContext';
 import { WorkspaceProvider } from '../features/workspaces/WorkspaceContext';
 import { SocialProvider } from '../features/social/SocialContext';
 import { CollabProvider } from '../features/collab/CollabContext';
+import { PactProvider } from '../features/pacts/PactContext';
 import { TaskProvider } from '../core/context/TaskContext';
 import { InboxProvider } from '../core/context/InboxContext';
 import { HabitProvider } from '../core/context/HabitContext';
@@ -58,11 +59,13 @@ export function AppProviders({ children }: { children: ReactNode }) {
               <SocialProvider>
                 <TaskProvider>
                   <CollabProvider>
-                    <InboxProvider>
-                      <HabitProvider>
-                        <UndoProvider>{children}</UndoProvider>
-                      </HabitProvider>
-                    </InboxProvider>
+                    <PactProvider>
+                      <InboxProvider>
+                        <HabitProvider>
+                          <UndoProvider>{children}</UndoProvider>
+                        </HabitProvider>
+                      </InboxProvider>
+                    </PactProvider>
                   </CollabProvider>
                 </TaskProvider>
               </SocialProvider>
