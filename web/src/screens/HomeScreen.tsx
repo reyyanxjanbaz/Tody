@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import { STAGGER_LIST, STAGGER_LIST_MAX, DUR_QUICK } from '../theme/motion';
 import { useTasks } from '../core/context/TaskContext';
+import { useAuth } from '../core/context/AuthContext';
 import { useInbox } from '../core/context/InboxContext';
 import { useTheme } from '../core/context/ThemeContext';
 import { organizeTasks, searchTasks } from '../core/utils/taskIntelligence';
@@ -32,6 +33,9 @@ import type { SortOption } from '../core/types';
 import { useWorkspaceFilter } from '../features/workspaces/useWorkspaceFilter';
 import { workspaceIdForDb } from '../features/workspaces/types';
 import { WorkspaceSwitcher } from '../features/workspaces/WorkspaceSwitcher';
+import { useCollab } from '../features/collab/CollabContext';
+import { AssigneePicker } from '../features/collab/AssigneePicker';
+import { haptic } from '../core/utils/haptics';
 
 interface TreeRow {
   task: Task;
@@ -95,6 +99,11 @@ export function HomeScreen() {
   const { isDark, toggleTheme } = useTheme();
   const { showUndo } = useUndo();
   const { activeWorkspaceId, filter: filterWs } = useWorkspaceFilter();
+  const { isSharedWorkspace, membersById } = useCollab();
+  const { user } = useAuth();
+  const [assignTaskId, setAssignTaskId] = useState<string | null>(null);
+  const [assignedToMe, setAssignedToMe] = useState(false);
+  const assigneeFor = (t: Task) => (isSharedWorkspace && t.assigneeId ? membersById[t.assigneeId] ?? null : null);
 
   const [searching, setSearching] = useState(false);
   const [query, setQuery] = useState('');
@@ -124,8 +133,13 @@ export function HomeScreen() {
 
   const assignableCats = useMemo(() => categories.filter((c) => c.id !== 'overview'), [categories]);
 
-  // Scope to the active workspace first, then category, then current-energy.
-  const workspaceTasks = useMemo(() => filterWs(tasks), [filterWs, tasks]);
+  // Scope to the active workspace first, then (in shared workspaces) optionally
+  // to tasks assigned to me, then category, then current-energy.
+  const workspaceTasks = useMemo(() => {
+    const ws = filterWs(tasks);
+    if (assignedToMe && isSharedWorkspace && user) return ws.filter((t) => t.assigneeId === user.id);
+    return ws;
+  }, [filterWs, tasks, assignedToMe, isSharedWorkspace, user]);
   const visibleTasks = useMemo(() => {
     const byCat = activeCategory === 'overview' ? workspaceTasks : workspaceTasks.filter((t) => t.category === activeCategory);
     if (!energyFilter) return byCat;
@@ -261,6 +275,23 @@ export function HomeScreen() {
         />
       )}
 
+      {!searching && isSharedWorkspace && (
+        <div style={{ display: 'flex', gap: 8, padding: '0 16px 4px' }}>
+          <Pressable
+            onPress={() => { haptic('selection'); setAssignedToMe((v) => !v); }}
+            hapticStyle={null}
+            style={{
+              display: 'inline-flex', alignItems: 'center', gap: 6, height: 30, padding: '0 12px', borderRadius: 15,
+              background: assignedToMe ? 'var(--c-text)' : 'var(--c-gray50)',
+              border: '1px solid var(--c-border-light)',
+            }}
+          >
+            <Icon name="person-outline" size={14} color={assignedToMe ? 'var(--c-background)' : 'var(--c-text-secondary)'} />
+            <span style={{ fontSize: 12, fontWeight: 600, color: assignedToMe ? 'var(--c-background)' : 'var(--c-text-secondary)' }}>Assigned to me</span>
+          </Pressable>
+        </div>
+      )}
+
       {!searching && workspaceTasks.length > 0 && (
         <EnergyFilter value={energyFilter} onChange={setEnergyFilter} />
       )}
@@ -293,6 +324,7 @@ export function HomeScreen() {
                 onStart={startTask}
                 onCompleteTimed={completeTimedTask}
                 onLongPress={setMenuTask}
+                assignee={assigneeFor(t)}
               />
             ))
           )
@@ -336,6 +368,7 @@ export function HomeScreen() {
               onCompleteTimed={completeTimedTask}
               onLongPress={setMenuTask}
               isLocked={isTaskLocked(task, tasks)}
+              assignee={assigneeFor(task)}
             />
           ))
         ) : (
@@ -362,6 +395,7 @@ export function HomeScreen() {
                       isLastChild={isLastChild}
                       ancestorContinuation={ancestorContinuation}
                       entranceDelay={entranceDelay(rowIndex++)}
+                      assignee={assigneeFor(task)}
                     />
                   ))}
                 </div>
@@ -392,6 +426,7 @@ export function HomeScreen() {
         onAddSubtask={(t) => { setMenuTask(null); navigate(`/task/${t.id}`); }}
         onDelete={(t) => onDelete(t)}
         onSnooze={(t) => { setMenuTask(null); setSnoozeId(t.id); }}
+        onAssign={isSharedWorkspace ? (t) => { setMenuTask(null); setAssignTaskId(t.id); } : undefined}
       />
 
       {/* Snooze menu (defer swipe + preview + detail) */}
@@ -399,6 +434,14 @@ export function HomeScreen() {
         open={snoozeId != null}
         onClose={() => setSnoozeId(null)}
         onSelect={(option) => { if (snoozeId) deferTask(snoozeId, option); }}
+      />
+
+      {/* Assign a shared-workspace task to a member */}
+      <AssigneePicker
+        open={assignTaskId != null}
+        onClose={() => setAssignTaskId(null)}
+        taskId={assignTaskId}
+        currentAssigneeId={assignTaskId ? tasks.find((t) => t.id === assignTaskId)?.assigneeId : null}
       />
 
       {/* Add category prompt */}

@@ -34,6 +34,7 @@ import {
   deleteTasksFromDb,
   deleteCategoryFromDb,
   buildCategoryMap,
+  dbRowToTask,
   CategoryMap,
 } from '../lib/supabaseSync';
 import { api } from '../lib/api';
@@ -75,6 +76,10 @@ interface TaskContextType {
   restoreTasks: (snapshots: Task[]) => void;
   /** Add a task to local state without syncing to the DB (for tasks already persisted by the backend). */
   addTaskLocal: (task: Task) => void;
+  /** Merge raw task DB rows from Supabase Realtime (Phase D collaboration). Read-only into state. */
+  mergeRemoteTasks: (rows: any[]) => Promise<void>;
+  /** Apply a remote delete (Phase D): remove locally + tombstone. */
+  applyRemoteDelete: (id: string) => void;
 }
 
 const TaskContext = createContext<TaskContextType | undefined>(undefined);
@@ -95,6 +100,30 @@ function mergeTaskLists(local: Task[], remote: Task[]): Task[] {
     }
   }
   return Array.from(merged.values());
+}
+
+/**
+ * Phase D echo guard (pure, exported for tests). Given the current local list,
+ * incoming remote rows, a set of tombstoned ids, and "now", returns the merged
+ * list. Rules:
+ *   • Tombstoned ids are dropped from both incoming and the result.
+ *   • Any local task updated within `guardMs` of `now` is "recently mutated":
+ *     its incoming remote copy is skipped so a just-made local edit can't be
+ *     clobbered by the server echo of an earlier state (clock-skew safe).
+ *   • Otherwise LWW by updatedAt (mergeTaskLists).
+ */
+export function selectMergeableRemote(
+  local: Task[],
+  remote: Task[],
+  deletedIds: Set<string>,
+  nowMs: number,
+  guardMs: number,
+): Task[] {
+  const guarded = new Set(
+    local.filter(t => nowMs - t.updatedAt < guardMs).map(t => t.id),
+  );
+  const incoming = remote.filter(t => !deletedIds.has(t.id) && !guarded.has(t.id));
+  return mergeTaskLists(local, incoming).filter(t => !deletedIds.has(t.id));
 }
 
 // ── Provider ─────────────────────────────────────────────────────────────────
@@ -1082,6 +1111,44 @@ export function TaskProvider({ children }: { children: React.ReactNode }) {
     setTasks(prev => [task, ...prev]);
   }, []);
 
+  // ── Realtime merge (Phase D — collaborative workspaces) ──────────────────
+  // Merge task rows pushed by Supabase Realtime (other members' edits) into
+  // local state. Reuses the same LWW-by-updatedAt rule + tombstone filter as the
+  // focus-sync path. An echo guard skips any task whose LOCAL copy was updated in
+  // the last few seconds: that copy is either a pending write of ours (whose
+  // server echo would otherwise clobber a same-second follow-up edit under clock
+  // skew) or a change we just made — so local wins until the next full sync
+  // reconciles it. Merge is read-only into state; it never re-upserts.
+  const REMOTE_GUARD_MS = 5000;
+  const mergeRemoteTasks = useCallback(async (rows: any[]): Promise<void> => {
+    if (!rows || rows.length === 0) return;
+    // Convert raw DB rows with the private category map (keeps catMap encapsulated).
+    const remote = rows.map(r => dbRowToTask(r, catMapRef.current));
+    const deletedIds = await loadTombstoneIds('tasks');
+    const now = Date.now();
+    const fresh = remote.filter(t => !deletedIds.has(t.id));
+    const activeIds = new Set(fresh.filter(t => !t.isArchived).map(t => t.id));
+    const archivedIds = new Set(fresh.filter(t => t.isArchived).map(t => t.id));
+
+    beginLayoutAnimation();
+    // A task can flip active↔archived remotely; drop it from the opposite list.
+    setTasks(prev => selectMergeableRemote(
+      prev.filter(t => !archivedIds.has(t.id)), fresh.filter(t => !t.isArchived), deletedIds, now, REMOTE_GUARD_MS,
+    ));
+    setArchivedTasks(prev => selectMergeableRemote(
+      prev.filter(t => !activeIds.has(t.id)), fresh.filter(t => t.isArchived), deletedIds, now, REMOTE_GUARD_MS,
+    ));
+  }, []);
+
+  /** Apply a remote hard/soft delete: remove locally and tombstone so a later
+   *  pull can't resurrect it. */
+  const applyRemoteDelete = useCallback((id: string): void => {
+    recordTombstone('tasks', id).catch(() => {});
+    beginLayoutAnimation();
+    setTasks(prev => prev.filter(t => t.id !== id));
+    setArchivedTasks(prev => prev.filter(t => t.id !== id));
+  }, []);
+
   // ── Category CRUD ────────────────────────────────────────────────────
 
   const addCategory = useCallback((name: string, icon: string, color: string): Category => {
@@ -1214,6 +1281,8 @@ export function TaskProvider({ children }: { children: React.ReactNode }) {
         moveTaskToParent,
         restoreTasks,
         addTaskLocal,
+        mergeRemoteTasks,
+        applyRemoteDelete,
       }}>
       {children}
     </TaskContext.Provider>

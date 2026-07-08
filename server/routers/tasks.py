@@ -41,6 +41,7 @@ class TaskCreate(BaseModel):
     energy_level: str = "medium"
     category_id: Optional[str] = None
     workspace_id: Optional[str] = None  # NULL = Personal workspace
+    assignee_id: Optional[str] = None   # Phase D: member the task is assigned to
     deadline: Optional[str] = None  # ISO timestamp string
     scheduled_start_at: Optional[str] = None
     scheduled_end_at: Optional[str] = None
@@ -120,6 +121,7 @@ class TaskUpdate(BaseModel):
     energy_level: Optional[str] = None
     category_id: Optional[str] = None
     workspace_id: Optional[str] = None  # NULL = Personal workspace
+    assignee_id: Optional[str] = None   # Phase D: member the task is assigned to
     deadline: Optional[str] = None
     scheduled_start_at: Optional[str] = None
     scheduled_end_at: Optional[str] = None
@@ -343,6 +345,64 @@ def update_task(
     )
     if not result.data:
         raise HTTPException(status_code=404, detail="Task not found")
+    return result.data[0]
+
+
+class TaskAssign(BaseModel):
+    assignee_id: Optional[str] = None  # None clears the assignment
+
+
+@router.post("/{task_id}/assign")
+def assign_task(task_id: str, body: TaskAssign, user_id: str = Depends(get_current_user_id)):
+    """Assign a shared-workspace task to a member (or clear with null). The caller
+    and the assignee must both be members of the task's workspace. Stamps
+    updated_at so the Realtime echo carries a server timestamp that wins LWW."""
+    sb = get_supabase()
+    task_res = (
+        sb.table("tasks")
+        .select("id,workspace_id")
+        .eq("id", task_id)
+        .maybe_single()
+        .execute()
+    )
+    if not task_res.data:
+        raise HTTPException(status_code=404, detail="Task not found")
+    workspace_id = task_res.data.get("workspace_id")
+    if not workspace_id:
+        raise HTTPException(status_code=400, detail="Only shared-workspace tasks can be assigned")
+
+    # Caller must be a member.
+    caller = (
+        sb.table("workspace_members")
+        .select("user_id")
+        .eq("workspace_id", workspace_id)
+        .eq("user_id", user_id)
+        .execute()
+    )
+    if not caller.data:
+        raise HTTPException(status_code=403, detail="Not a member of this workspace")
+
+    # Assignee (when set) must be a member too.
+    if body.assignee_id:
+        target = (
+            sb.table("workspace_members")
+            .select("user_id")
+            .eq("workspace_id", workspace_id)
+            .eq("user_id", body.assignee_id)
+            .execute()
+        )
+        if not target.data:
+            raise HTTPException(status_code=400, detail="Assignee is not a member of the workspace")
+
+    result = (
+        sb.table("tasks")
+        .update({"assignee_id": body.assignee_id, "updated_at": datetime.utcnow().isoformat()})
+        .eq("id", task_id)
+        .execute()
+    )
+    if not result.data:
+        raise HTTPException(status_code=404, detail="Task not found")
+    logger.info("Assigned task %s to %s", task_id, (body.assignee_id or "nobody"))
     return result.data[0]
 
 

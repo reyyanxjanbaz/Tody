@@ -27,7 +27,7 @@ const NATIVE_ROOT = path.resolve(WEB_ROOT, '..');
 const EDITED_ALLOWLIST_WITH_REASONS: Record<string, string> = {
   'utils/colors.ts': 'RN StyleSheet/Platform → plain tokens',
   'context/ThemeContext.tsx': 'RN StatusBar → DOM/meta',
-  'context/TaskContext.tsx': 'RN LayoutAnimation → web; + overhaul: defer/tombstones/focus-sync/recurrence/order',
+  'context/TaskContext.tsx': 'RN LayoutAnimation → web; + overhaul: defer/tombstones/focus-sync/recurrence/order; Phase D mergeRemoteTasks + echo guard',
   'context/InboxContext.tsx': 'RN Alert → web; + overhaul: tombstones/focus-sync; Phase B workspace capture',
   'utils/decay.ts': 'P1.3 startOfDay-normalized isFullyDecayed; removed dead MIN_OPACITY',
   'utils/statsCalculation.ts': 'P1.5 canonical reality-score formula (estimated denominator, default 0)',

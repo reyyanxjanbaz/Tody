@@ -43,6 +43,8 @@ interface TaskItemProps {
   /** Entrance-stagger delay (seconds). Set only on a screen's first paint;
    *  0 (default) makes a freshly-mounted row fade in on its own. */
   entranceDelay?: number;
+  /** Assignee avatar (Phase D). Only passed in shared workspaces. */
+  assignee?: { display_name: string | null; avatar_url: string | null } | null;
 }
 
 export function TaskItem({
@@ -59,6 +61,7 @@ export function TaskItem({
   onLongPress,
   checkedOverride,
   entranceDelay = 0,
+  assignee,
 }: TaskItemProps) {
   const { colors, isDark } = useTheme();
   const { celebrate } = useCelebration();
@@ -414,6 +417,25 @@ export function TaskItem({
           {task.isRecurring && !task.isCompleted && (
             <span style={{ marginLeft: 4, display: 'inline-flex', alignItems: 'center' }}>
               <Icon name="repeat" size={12} color={isDark ? '#A78BFA' : '#8B5CF6'} />
+            </span>
+          )}
+
+          {/* Assignee avatar (shared workspaces) */}
+          {assignee && (
+            <span
+              title={assignee.display_name ?? undefined}
+              style={{
+                width: 20, height: 20, borderRadius: 10, marginLeft: 8, flexShrink: 0, overflow: 'hidden',
+                display: 'inline-flex', alignItems: 'center', justifyContent: 'center', background: colors.gray200,
+              }}
+            >
+              {assignee.avatar_url ? (
+                <img src={assignee.avatar_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+              ) : (
+                <span style={{ fontSize: 10, fontWeight: 700, color: colors.gray600 }}>
+                  {(assignee.display_name || '?').slice(0, 1).toUpperCase()}
+                </span>
+              )}
             </span>
           )}
 

@@ -38,6 +38,7 @@ export default defineConfig({
       'tests/phaseA/**/*.test.{ts,tsx}',
       'tests/phaseB/**/*.test.{ts,tsx}',
       'tests/phaseC/**/*.test.{ts,tsx}',
+      'tests/phaseD/**/*.test.{ts,tsx}',
     ],
   },
 })

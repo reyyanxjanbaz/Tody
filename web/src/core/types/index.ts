@@ -42,6 +42,9 @@ export interface Task {
   // Workspace (Phase B). undefined/null = the implicit "Personal" workspace.
   workspaceId?: string | null;
 
+  // Assignee (Phase D). In a shared workspace, the member responsible. null = unassigned.
+  assigneeId?: string | null;
+
   // User
   userId?: string; // Owner of this task
 }

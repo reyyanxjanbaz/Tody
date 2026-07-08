@@ -173,6 +173,109 @@ def reorder_workspaces(
     return result.data
 
 
+# ── Members & sharing (Phase D) ───────────────────────────────────────────────
+
+
+@router.get("/{workspace_id}/members")
+def list_members(workspace_id: str, user_id: str = Depends(get_current_user_id)):
+    """Member profile cards for a workspace the caller belongs to."""
+    sb = get_supabase()
+    # Authorize: caller must be a member.
+    mine = (
+        sb.table("workspace_members")
+        .select("user_id")
+        .eq("workspace_id", workspace_id)
+        .eq("user_id", user_id)
+        .execute()
+    )
+    if not mine.data:
+        raise HTTPException(status_code=403, detail="Not a member of this workspace")
+
+    members = (
+        sb.table("workspace_members")
+        .select("user_id,role")
+        .eq("workspace_id", workspace_id)
+        .execute()
+    )
+    rows = members.data or []
+    ids = [m["user_id"] for m in rows]
+    role_by_id = {m["user_id"]: m["role"] for m in rows}
+    if not ids:
+        return []
+    profs = (
+        sb.table("profiles")
+        .select("id,display_name,avatar_url")
+        .in_("id", ids)
+        .execute()
+    )
+    return [
+        {**p, "role": role_by_id.get(p["id"], "member")}
+        for p in (profs.data or [])
+    ]
+
+
+@router.post("/{workspace_id}/invites", status_code=201)
+def create_workspace_invite(workspace_id: str, user_id: str = Depends(get_current_user_id)):
+    """Owner-only: mint a workspace invite code (reuses the invites table)."""
+    sb = get_supabase()
+    ws = (
+        sb.table("workspaces")
+        .select("owner_id")
+        .eq("id", workspace_id)
+        .maybe_single()
+        .execute()
+    )
+    if not ws.data:
+        raise HTTPException(status_code=404, detail="Workspace not found")
+    if ws.data["owner_id"] != user_id:
+        raise HTTPException(status_code=403, detail="Only the owner can invite members")
+
+    import secrets, string
+    alphabet = string.ascii_lowercase + string.digits
+    for _ in range(3):
+        code = "".join(secrets.choice(alphabet) for _ in range(8))
+        if not sb.table("invites").select("code").eq("code", code).execute().data:
+            break
+    else:
+        raise HTTPException(status_code=500, detail="Could not allocate invite code")
+
+    row = {"code": code, "inviter_id": user_id, "kind": "workspace", "target_id": workspace_id}
+    res = sb.table("invites").insert(row).execute()
+    if not res.data:
+        raise HTTPException(status_code=500, detail="Failed to create invite")
+    created = res.data[0]
+    logger.info("Created workspace invite %s for %s", code, workspace_id)
+    return {"code": created["code"], "kind": "workspace", "expires_at": created["expires_at"]}
+
+
+@router.delete("/{workspace_id}/members/{member_id}", status_code=204)
+def remove_member(workspace_id: str, member_id: str, user_id: str = Depends(get_current_user_id)):
+    """Owner removes any member; a member may remove themselves (leave). The
+    owner cannot be removed (they must delete the workspace instead)."""
+    sb = get_supabase()
+    ws = (
+        sb.table("workspaces")
+        .select("owner_id")
+        .eq("id", workspace_id)
+        .maybe_single()
+        .execute()
+    )
+    if not ws.data:
+        raise HTTPException(status_code=404, detail="Workspace not found")
+    owner_id = ws.data["owner_id"]
+
+    is_owner = owner_id == user_id
+    is_self = member_id == user_id
+    if not (is_owner or is_self):
+        raise HTTPException(status_code=403, detail="Not allowed to remove this member")
+    if member_id == owner_id:
+        raise HTTPException(status_code=400, detail="The owner cannot leave; delete the workspace instead")
+
+    sb.table("workspace_members").delete().eq("workspace_id", workspace_id).eq("user_id", member_id).execute()
+    logger.info("Removed member %s from workspace %s", member_id[:8], workspace_id)
+    return None
+
+
 @router.delete("/{workspace_id}", status_code=204)
 def delete_workspace(workspace_id: str, user_id: str = Depends(get_current_user_id)):
     """Soft-delete a workspace. Its tasks/categories/habits fall back to Personal

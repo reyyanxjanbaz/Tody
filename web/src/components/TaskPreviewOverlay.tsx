@@ -15,6 +15,7 @@ interface Props {
   onAddSubtask: (task: Task) => void;
   onDelete: (task: Task) => void;
   onSnooze?: (task: Task) => void;
+  onAssign?: (task: Task) => void;
 }
 
 const PRIORITY_CONFIG: Record<Priority, { label: string; icon: string; color: string }> = {
@@ -36,7 +37,7 @@ const ENERGY_CONFIG: Record<EnergyLevel, { label: string; icon: string; color: s
  * deadline, priority + energy as labeled chips, subtask count — before
  * offering Edit / Add subtask / Delete. Replaces the old plain action sheet.
  */
-export function TaskPreviewOverlay({ task, allTasks, onClose, onEdit, onAddSubtask, onDelete, onSnooze }: Props) {
+export function TaskPreviewOverlay({ task, allTasks, onClose, onEdit, onAddSubtask, onDelete, onSnooze, onAssign }: Props) {
   const { colors } = useTheme();
   const open = !!task;
   const children = task ? getChildren(task, allTasks) : [];
@@ -122,6 +123,11 @@ export function TaskPreviewOverlay({ task, allTasks, onClose, onEdit, onAddSubta
               {onSnooze && !task.isCompleted && (
                 <button onClick={() => onSnooze(task)} style={action('var(--c-text)')}>
                   <Icon name="time-outline" size={19} color="var(--c-text-secondary)" /> Snooze
+                </button>
+              )}
+              {onAssign && (
+                <button onClick={() => onAssign(task)} style={action('var(--c-text)')}>
+                  <Icon name="people-outline" size={19} color="var(--c-text-secondary)" /> Assign
                 </button>
               )}
               <button onClick={() => onDelete(task)} style={action('#e06767')}>

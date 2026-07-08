@@ -75,9 +75,10 @@ function isResponseNetworkError(error: { message: string; [k: string]: any } | n
 
 function isScheduleFieldSchemaError(message: string | undefined): boolean {
   if (!message) return false;
-  // Includes workspace_id so a client running ahead of migration v5 degrades
-  // gracefully (the row still saves locally; the column is dropped on retry).
-  return /scheduled_start_at|scheduled_end_at|workspace_id/i.test(message);
+  // Includes workspace_id/assignee_id so a client running ahead of migration
+  // v5/v7 degrades gracefully (the row still saves locally; the unknown column
+  // is dropped on retry).
+  return /scheduled_start_at|scheduled_end_at|workspace_id|assignee_id/i.test(message);
 }
 
 function stripScheduleFields<T extends Record<string, any>>(row: T): T {
@@ -85,6 +86,7 @@ function stripScheduleFields<T extends Record<string, any>>(row: T): T {
   delete sanitized.scheduled_start_at;
   delete sanitized.scheduled_end_at;
   delete sanitized.workspace_id;
+  delete sanitized.assignee_id;
   return sanitized;
 }
 
@@ -195,6 +197,7 @@ interface DbTask {
   user_id: string;
   category_id: string | null;
   workspace_id: string | null;
+  assignee_id: string | null;
   title: string;
   description: string;
   priority: string;
@@ -271,6 +274,7 @@ export function taskToDbRow(task: Task, userId: string, catMap: CategoryMap): Pa
     parent_id: task.parentId || null,
     depth: task.depth ?? 0,
     workspace_id: task.workspaceId ?? null,
+    assignee_id: task.assigneeId ?? null,
     created_at: toISO(task.createdAt) || new Date().toISOString(),
     updated_at: toISO(task.updatedAt) || new Date().toISOString(),
   };
@@ -317,6 +321,7 @@ export function dbRowToTask(row: DbTask, catMap: CategoryMap): Task {
     depth: row.depth ?? 0,
     category: row.category_id ? (catMap.toLocal[row.category_id] || undefined) : undefined,
     workspaceId: row.workspace_id ?? null,
+    assigneeId: row.assignee_id ?? null,
     userId: row.user_id,
   };
 }

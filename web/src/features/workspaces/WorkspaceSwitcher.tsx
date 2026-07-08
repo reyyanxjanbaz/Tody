@@ -16,6 +16,7 @@ import { haptic } from '../../core/utils/haptics';
 import { SPRING_SNAPPY } from '../../theme/motion';
 import { useWorkspaces } from './WorkspaceContext';
 import { PERSONAL_WORKSPACE_ID } from './types';
+import { InviteSheet } from '../social/InviteSheet';
 
 export function WorkspaceSwitcher() {
   const {
@@ -24,6 +25,7 @@ export function WorkspaceSwitcher() {
   } = useWorkspaces();
   const [open, setOpen] = useState(false);
   const [adding, setAdding] = useState(false);
+  const [shareId, setShareId] = useState<string | null>(null);
 
   const pick = (id: string) => {
     if (id !== activeWorkspaceId) { haptic('selection'); setActiveWorkspace(id); }
@@ -95,15 +97,26 @@ export function WorkspaceSwitcher() {
                     </motion.span>
                   )}
                 </Pressable>
-                {/* Delete affordance for named workspaces only */}
-                {ws.id !== PERSONAL_WORKSPACE_ID && !active && (
-                  <Pressable
-                    onPress={() => { haptic('warning'); deleteWorkspace(ws.id); }}
-                    aria-label={`Delete ${ws.name}`}
-                    style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', padding: 8, background: 'transparent' }}
-                  >
-                    <Icon name="trash-outline" size={16} color="var(--c-gray400)" />
-                  </Pressable>
+                {/* Share + delete affordances for named workspaces */}
+                {ws.id !== PERSONAL_WORKSPACE_ID && (
+                  <span style={{ position: 'absolute', right: 6, top: '50%', transform: 'translateY(-50%)', display: 'flex', gap: 2 }}>
+                    <Pressable
+                      onPress={() => { haptic('light'); setOpen(false); setShareId(ws.id); }}
+                      aria-label={`Share ${ws.name}`}
+                      style={{ padding: 8, background: 'transparent' }}
+                    >
+                      <Icon name="people-outline" size={16} color="var(--c-gray400)" />
+                    </Pressable>
+                    {!active && (
+                      <Pressable
+                        onPress={() => { haptic('warning'); deleteWorkspace(ws.id); }}
+                        aria-label={`Delete ${ws.name}`}
+                        style={{ padding: 8, background: 'transparent' }}
+                      >
+                        <Icon name="trash-outline" size={16} color="var(--c-gray400)" />
+                      </Pressable>
+                    )}
+                  </span>
                 )}
               </div>
             );
@@ -146,6 +159,15 @@ export function WorkspaceSwitcher() {
           }
           setAdding(false);
         }}
+      />
+
+      <InviteSheet
+        open={shareId != null}
+        onClose={() => setShareId(null)}
+        kind="workspace"
+        targetId={shareId ?? undefined}
+        title="Share workspace"
+        subtitle="They join this workspace and can see and complete its tasks."
       />
     </>
   );
