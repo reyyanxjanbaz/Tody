@@ -17,6 +17,7 @@ import { PromptModal } from '../ui/PromptModal';
 import { haptic } from '../core/utils/haptics';
 import { PerformanceFusionSection } from '../components/profile/PerformanceFusionSection';
 import { SwipeHabitsSection } from '../components/profile/SwipeHabitsSection';
+import { FriendsCard } from '../features/social/FriendsCard';
 
 const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 const DOW_SUNDAY = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
@@ -146,6 +147,9 @@ export function ProfileScreen() {
             <motion.div initial={{ width: 0 }} animate={{ width: `${xp.progressPercent}%` }} transition={{ type: 'spring', damping: 20, stiffness: 300 }} style={{ height: '100%', borderRadius: 3, background: isDark ? 'var(--c-white)' : 'var(--c-surface-dark)' }} />
           </div>
         </div>
+
+        {/* Friends / weekly leaderboard */}
+        <FriendsCard />
 
         {/* Monthly calendar */}
         <div style={card}>

@@ -20,6 +20,9 @@ const ProfileScreen = lazy(() => import('../screens/ProfileScreen').then((m) => 
 const HabitsScreen = lazy(() => import('../screens/HabitsScreen').then((m) => ({ default: m.HabitsScreen })));
 const HabitDetailScreen = lazy(() => import('../screens/HabitDetailScreen').then((m) => ({ default: m.HabitDetailScreen })));
 const SettingsScreen = lazy(() => import('../screens/SettingsScreen').then((m) => ({ default: m.SettingsScreen })));
+const LeaderboardScreen = lazy(() => import('../features/social/LeaderboardScreen').then((m) => ({ default: m.LeaderboardScreen })));
+const AcceptInviteScreen = lazy(() => import('../features/social/AcceptInviteScreen').then((m) => ({ default: m.AcceptInviteScreen })));
+import { PendingInviteRedeemer } from '../features/social/AcceptInviteScreen';
 
 const pageStyle: React.CSSProperties = {
   position: 'absolute',
@@ -46,6 +49,7 @@ function AnimatedRoutes() {
 
   return (
     <AppShell bottomBar={showTabs ? <BottomTabBar /> : undefined}>
+      {authed && <PendingInviteRedeemer />}
       <AnimatePresence initial={false} mode="popLayout">
         <motion.div
           key={pageKey(location.pathname)}
@@ -69,12 +73,16 @@ function AnimatedRoutes() {
                   <Route path="/habits" element={<HabitsScreen />} />
                   <Route path="/habits/:id" element={<HabitDetailScreen />} />
                   <Route path="/settings" element={<SettingsScreen />} />
+                  <Route path="/leaderboard" element={<LeaderboardScreen />} />
+                  <Route path="/invite/:code" element={<AcceptInviteScreen />} />
                   <Route path="*" element={<Navigate to="/" replace />} />
                 </>
               ) : (
                 <>
                   <Route path="/login" element={<LoginScreen />} />
                   <Route path="/register" element={<RegisterScreen />} />
+                  {/* Reachable logged-out: captures the code, then bounces to /register. */}
+                  <Route path="/invite/:code" element={<AcceptInviteScreen />} />
                   <Route path="*" element={<Navigate to="/login" replace />} />
                 </>
               )}

@@ -16,6 +16,7 @@ export const ROUTE_TRANSITION: Record<string, TransitionKind> = {
   '/task': 'slideRight', // /task/:id
   '/process-inbox': 'slideUp',
   '/reality-score': 'slideUp',
+  '/leaderboard': 'slideUp',
 };
 
 export function transitionFor(pathname: string): TransitionKind {

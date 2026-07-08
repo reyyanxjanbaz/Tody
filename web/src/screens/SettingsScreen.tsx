@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
 import { Screen } from '../ui/Screen';
 import { Icon } from '../ui/Icon';
@@ -54,6 +54,25 @@ export function SettingsScreen() {
   const [pwMsg, setPwMsg] = useState('');
   const [showDelete, setShowDelete] = useState(false);
   const [notifPerm, setNotifPerm] = useState<NotificationPermission>(permissionState());
+  const [shareStats, setShareStats] = useState(false);
+
+  // Load the current stat-sharing preference (Phase C privacy, default off).
+  useEffect(() => {
+    let cancelled = false;
+    api.get<{ share_stats?: boolean }>('/profile').then(({ data }) => {
+      if (!cancelled && data && typeof data.share_stats === 'boolean') setShareStats(data.share_stats);
+    });
+    return () => { cancelled = true; };
+  }, []);
+
+  const toggleShareStats = () => {
+    haptic('light');
+    const next = !shareStats;
+    setShareStats(next); // optimistic
+    api.patch('/profile', { share_stats: next }).then(({ isBackendDown, error }) => {
+      if (isBackendDown || error) setShareStats(!next); // revert on failure
+    });
+  };
 
   const enableReminders = async () => {
     haptic('medium');
@@ -169,6 +188,16 @@ export function SettingsScreen() {
             </div>
           </>
         )}
+
+        {/* Privacy — Phase C */}
+        <div style={{ ...sectionTitle, marginTop: 32 }}>PRIVACY</div>
+        <div style={{ ...prefRow, alignItems: 'flex-start' }}>
+          <span style={{ display: 'flex', flexDirection: 'column', gap: 2, flex: 1, marginRight: 12 }}>
+            <span style={{ display: 'flex', alignItems: 'center', gap: 12 }}><Icon name="trophy-outline" size={18} color="var(--c-text-secondary)" /> <span style={{ fontSize: 15, fontWeight: 500 }}>Share my stats with friends</span></span>
+            <span style={{ fontSize: 12, color: 'var(--c-text-tertiary)', marginLeft: 30 }}>Lets friends see your weekly score on the leaderboard.</span>
+          </span>
+          <Toggle on={shareStats} onChange={toggleShareStats} label="Share stats with friends" />
+        </div>
 
         <Pressable onPress={() => { if (window.confirm('Restore all settings to defaults?')) { haptic('medium'); setPref('dateFormat', 'MM/DD/YYYY'); setPref('timeFormat', '12h'); setPref('weekStartsOn', 'sunday'); setWebPref('textSize', 'md'); setWebPref('reduceMotion', 'system'); } }} style={{ ...prefRow, gap: 12, justifyContent: 'flex-start', marginTop: 16 }}>
           <Icon name="refresh-outline" size={20} color="var(--c-text-secondary)" /> <span style={{ fontSize: 15, fontWeight: 500 }}>Reset Preferences</span>
