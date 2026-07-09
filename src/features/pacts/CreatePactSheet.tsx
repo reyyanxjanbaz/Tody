@@ -8,6 +8,7 @@ import { Button } from '../../ui/Button';
 import { haptic } from '../../core/utils/haptics';
 import { usePacts } from './PactContext';
 import { InviteSheet } from '../social/InviteSheet';
+import { maybePromptPush } from '../../core/lib/push';
 
 export function CreatePactSheet({ open, onClose }: { open: boolean; onClose: () => void }) {
   const { createPact } = usePacts();
@@ -24,7 +25,10 @@ export function CreatePactSheet({ open, onClose }: { open: boolean; onClose: () 
     setBusy(false);
     setTitle('');
     onClose();
-    if (pact) setSharePactId(pact.id); // immediately offer to invite others
+    if (pact) {
+      void maybePromptPush(); // opt into pact notifications at a high-intent moment
+      setSharePactId(pact.id); // immediately offer to invite others
+    }
   };
 
   return (

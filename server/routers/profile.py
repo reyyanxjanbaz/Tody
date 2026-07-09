@@ -36,6 +36,7 @@ class ProfileUpdate(BaseModel):
     week_starts_on: Optional[str] = None
     swipe_stats: Optional[dict] = None   # persisted JSONB; synced from the app
     share_stats: Optional[bool] = None   # Phase C: opt-in leaderboard stat sharing
+    notif_prefs: Optional[dict] = None   # Phase push: per-category push toggles
 
     @field_validator("date_format")
     @classmethod

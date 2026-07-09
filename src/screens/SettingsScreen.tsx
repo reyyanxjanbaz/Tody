@@ -13,6 +13,15 @@ import { type UserPreferences } from '../core/types';
 import { haptic } from '../core/utils/haptics';
 import { Alert } from '../lib/alert';
 import { notificationsSupported, permissionState, requestNotificationPermission } from '../core/lib/notifications';
+import { subscribeToPush, pushSupported } from '../core/lib/push';
+
+type NotifPrefs = { assignment: boolean; pact: boolean; friend: boolean };
+const DEFAULT_NOTIF_PREFS: NotifPrefs = { assignment: true, pact: true, friend: true };
+const PUSH_CATEGORIES: { key: keyof NotifPrefs; label: string; icon: string }[] = [
+  { key: 'assignment', label: 'Task assignments', icon: 'person-outline' },
+  { key: 'pact', label: 'Pact activity', icon: 'flag-outline' },
+  { key: 'friend', label: 'New friends', icon: 'people-outline' },
+];
 
 const DATE_FORMATS: UserPreferences['dateFormat'][] = ['MM/DD/YYYY', 'DD/MM/YYYY', 'YYYY-MM-DD'];
 const TIME_FORMATS: UserPreferences['timeFormat'][] = ['12h', '24h'];
@@ -55,15 +64,27 @@ export function SettingsScreen() {
   const [showDelete, setShowDelete] = useState(false);
   const [notifPerm, setNotifPerm] = useState<NotificationPermission>(permissionState());
   const [shareStats, setShareStats] = useState(false);
+  const [notifPrefs, setNotifPrefs] = useState<NotifPrefs>(DEFAULT_NOTIF_PREFS);
 
-  // Load the current stat-sharing preference (Phase C privacy, default off).
+  // Load stat-sharing + push-category preferences from the profile.
   useEffect(() => {
     let cancelled = false;
-    api.get<{ share_stats?: boolean }>('/profile').then(({ data }) => {
-      if (!cancelled && data && typeof data.share_stats === 'boolean') setShareStats(data.share_stats);
+    api.get<{ share_stats?: boolean; notif_prefs?: Partial<NotifPrefs> }>('/profile').then(({ data }) => {
+      if (cancelled || !data) return;
+      if (typeof data.share_stats === 'boolean') setShareStats(data.share_stats);
+      if (data.notif_prefs) setNotifPrefs({ ...DEFAULT_NOTIF_PREFS, ...data.notif_prefs });
     });
     return () => { cancelled = true; };
   }, []);
+
+  const toggleNotifPref = (key: keyof NotifPrefs) => {
+    haptic('light');
+    const next = { ...notifPrefs, [key]: !notifPrefs[key] };
+    setNotifPrefs(next); // optimistic
+    api.patch('/profile', { notif_prefs: next }).then(({ isBackendDown, error }) => {
+      if (isBackendDown || error) setNotifPrefs(notifPrefs); // revert on failure
+    });
+  };
 
   const toggleShareStats = () => {
     haptic('light');
@@ -78,6 +99,8 @@ export function SettingsScreen() {
     haptic('medium');
     const p = await requestNotificationPermission();
     setNotifPerm(p);
+    // Register this device for server-initiated push (assignment/pact/friend).
+    if (p === 'granted' && pushSupported()) void subscribeToPush();
   };
 
   const update = <K extends keyof UserPreferences>(k: K, v: UserPreferences[K]) => {
@@ -178,6 +201,16 @@ export function SettingsScreen() {
                 <span style={{ fontSize: 15, fontWeight: 500 }}>{notifPerm === 'denied' ? 'Reminders blocked — allow in your browser' : 'Enable reminders'}</span>
               </Pressable>
             )}
+            {/* Per-category push toggles — only meaningful once permission is granted. */}
+            {notifPerm === 'granted' && pushSupported() && PUSH_CATEGORIES.map((c) => (
+              <div key={c.key} style={prefRow}>
+                <span style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                  <Icon name={c.icon} size={18} color="var(--c-text-secondary)" />
+                  <span style={{ fontSize: 15, fontWeight: 500 }}>{c.label}</span>
+                </span>
+                <Toggle on={notifPrefs[c.key]} onChange={() => toggleNotifPref(c.key)} label={c.label} />
+              </div>
+            ))}
             <div style={{ ...prefRow, flexDirection: 'column', alignItems: 'stretch', gap: 10 }}>
               <span style={{ display: 'flex', alignItems: 'center', gap: 12 }}><Icon name="moon-outline" size={18} color="var(--c-text-secondary)" /> <span style={{ fontSize: 15, fontWeight: 500 }}>Quiet hours</span></span>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 14, color: 'var(--c-text-secondary)' }}>
