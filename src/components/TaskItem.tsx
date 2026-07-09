@@ -1,63 +1,31 @@
-/**
- * TaskItem – the centrepiece interaction component.
- *
- * Technical showcase:
- * ─ Reanimated 3 shared values + worklets for 60fps swipe/press
- * ─ Gesture Handler v2 composable gestures (Pan + Tap + LongPress)
- * ─ Physics-based springs (SPRING_SNAPPY / SPRING_CRITICAL)
- * ─ Haptic feedback on swipe thresholds and completion
- * ─ AnimatedCheckbox with morphing + path interpolation
- * ─ Layout animations via Reanimated entering/exiting
- *
- * Gesture semantics:
- *   Swipe right → START (unstarted) or DEFER (other)
- *   Swipe left  → DONE / REVIVE / COMPLETE (timed)
- *   Tap         → Navigate to detail
- *   Long-press  → Context menu
- */
+import { useRef } from 'react';
+import { animate, motion, useMotionValue, useTransform } from 'framer-motion';
+import { useDrag } from '@use-gesture/react';
+import { Icon } from '../ui/Icon';
+import { Checkbox } from '../ui/Checkbox';
+import { useTheme } from '../core/context/ThemeContext';
+import type { Task, Priority, EnergyLevel } from '../core/types';
+import { formatDeadline, formatCompletedDate, daysFromNow } from '../core/utils/dateUtils';
+import { formatOverdueGently } from '../core/utils/decay';
+import { formatMinutes, getElapsedMinutes } from '../core/utils/timeTracking';
+import { formatTimeUntil } from '../utils/timeUntil';
+import { useNow } from '../utils/useNow';
+import { useCelebration } from './Celebration';
+import { recordSwipeAction } from '../core/utils/swipeMemory';
+import { haptic } from '../core/utils/haptics';
+import { SPRING_SNAPPY, SPRING_CRITICAL, SPRING_LAYOUT, SWIPE_THRESHOLD, FLING_VELOCITY } from '../theme/motion';
 
-import React, { memo, useCallback, useMemo } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  Alert,
-  Platform,
-  Dimensions,
-} from 'react-native';
-import Animated, {
-  useSharedValue,
-  useAnimatedStyle,
-  withSpring,
-  withTiming,
-  runOnJS,
-  interpolate,
-  Extrapolation,
-  FadeIn,
-  FadeOut,
-  LinearTransition,
-} from 'react-native-reanimated';
-import { Gesture, GestureDetector } from 'react-native-gesture-handler';
-import Icon from 'react-native-vector-icons/Ionicons';
-import { Task, Priority, EnergyLevel } from '../types';
-import { Spacing, Typography, BorderRadius, FontFamily, type ThemeColors } from '../utils/colors';
-import { useTheme } from '../context/ThemeContext';
-import { formatDeadline, formatCompletedDate, daysFromNow } from '../utils/dateUtils';
-import { formatOverdueGently } from '../utils/decay';
-import { formatMinutes, getElapsedMinutes, isUnreasonableDuration } from '../utils/timeTracking';
-import { recordSwipeAction } from '../utils/swipeMemory';
-import { AnimatedCheckbox } from './ui/AnimatedCheckbox';
-import {
-  SPRING_SNAPPY,
-  SPRING_CRITICAL,
-  TIMING_FADE,
-  SWIPE_THRESHOLD,
-  FLING_VELOCITY,
-  PRESS_SCALE,
-} from '../utils/animations';
-import { haptic } from '../utils/haptics';
-
-// ── Props ───────────────────────────────────────────────────────────────────
+const ENERGY_ICONS: Record<EnergyLevel, { name: string; color: string; dark: string }> = {
+  high: { name: 'flash', color: '#F59E0B', dark: '#FBBF24' },
+  medium: { name: 'flash-outline', color: '#8B8B8B', dark: '#A0A0A0' },
+  low: { name: 'moon-outline', color: '#93C5FD', dark: '#60A5FA' },
+};
+const PRIORITY_ICONS: Record<Priority, { name: string; color: string; dark: string } | null> = {
+  high: { name: 'flag', color: '#EF4444', dark: '#F87171' },
+  medium: { name: 'flag', color: '#F59E0B', dark: '#FBBF24' },
+  low: { name: 'flag-outline', color: '#93C5FD', dark: '#60A5FA' },
+  none: null,
+};
 
 interface TaskItemProps {
   task: Task;
@@ -69,43 +37,17 @@ interface TaskItemProps {
   onCompleteTimed?: (id: string, adjustedMinutes?: number) => void;
   isLocked?: boolean;
   isLastChild?: boolean;
-  /** For each ancestor depth (0..depth-1), whether a vertical line should continue */
   ancestorContinuation?: boolean[];
   onLongPress?: (task: Task) => void;
-  onAddSubtask?: (task: Task) => void;
-  childHighlight?: boolean;
   checkedOverride?: boolean;
+  /** Entrance-stagger delay (seconds). Set only on a screen's first paint;
+   *  0 (default) makes a freshly-mounted row fade in on its own. */
+  entranceDelay?: number;
+  /** Assignee avatar (Phase D). Only passed in shared workspaces. */
+  assignee?: { display_name: string | null; avatar_url: string | null } | null;
 }
 
-// ── Constants ───────────────────────────────────────────────────────────────
-
-// ── Energy & Priority Icons ─────────────────────────────────────────────────
-
-const ENERGY_ICONS: Record<EnergyLevel, { name: string; color: string; darkColor: string }> = {
-  high: { name: 'flash', color: '#F59E0B', darkColor: '#FBBF24' },
-  medium: { name: 'flash-outline', color: '#8B8B8B', darkColor: '#A0A0A0' },
-  low: { name: 'moon-outline', color: '#93C5FD', darkColor: '#60A5FA' },
-};
-
-const PRIORITY_ICONS: Record<Priority, { name: string; color: string; darkColor: string } | null> = {
-  high: { name: 'flag', color: '#EF4444', darkColor: '#F87171' },
-  medium: { name: 'flag', color: '#F59E0B', darkColor: '#FBBF24' },
-  low: { name: 'flag-outline', color: '#93C5FD', darkColor: '#60A5FA' },
-  none: null,
-};
-
-// ── Dashed Line ─────────────────────────────────────────────────────────────
-
-const DASH_WIDTH = 4;
-const DASH_GAP = 3;
-const DASH_HEIGHT = 1;
-const SCREEN_WIDTH = Dimensions.get('window').width;
-const SEPARATOR_INSET = 24;
-const DASH_COUNT = Math.ceil((SCREEN_WIDTH - SEPARATOR_INSET * 2) / (DASH_WIDTH + DASH_GAP));
-
-// ── Component ───────────────────────────────────────────────────────────────
-
-export const TaskItem = memo(function TaskItem({
+export function TaskItem({
   task,
   onPress,
   onComplete,
@@ -117,46 +59,47 @@ export const TaskItem = memo(function TaskItem({
   isLastChild = false,
   ancestorContinuation = [],
   onLongPress,
-  onAddSubtask,
-  childHighlight = false,
   checkedOverride,
+  entranceDelay = 0,
+  assignee,
 }: TaskItemProps) {
-  // ── Shared values ─────────────────────────────────────────────────────
-  const translateX = useSharedValue(0);
-  const pressScale = useSharedValue(1);
-  const hasPassedThreshold = useSharedValue(false);
-  const hasPanned = useSharedValue(false);
-
-  // ── Computed ──────────────────────────────────────────────────────────
   const { colors, isDark } = useTheme();
-  const styles = useMemo(() => createStyles(colors), [colors]);
+  const { celebrate } = useCelebration();
+  const checkboxRef = useRef<HTMLDivElement>(null);
+  const x = useMotionValue(0);
+  const crossed = useRef(false);
+  const longTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const longFired = useRef(false);
+  const dragged = useRef(false);
 
-  const PRIORITY_COLORS: Record<Priority, string> = useMemo(() => ({
+  const now = useNow();
+  const isOverdue = task.deadline ? daysFromNow(task.deadline) < 0 : false;
+  // Relative "in 2h" chip for near-future deadlines (a time-blindness aid).
+  // Only when upcoming & urgent (<6h out) — overdue is already surfaced above.
+  const timeUntil = (!task.isCompleted && !isOverdue && task.deadline)
+    ? formatTimeUntil(task.deadline, now)
+    : null;
+  const isInProgress = !!task.startedAt && !task.isCompleted;
+  const depth = task.depth || 0;
+  const indentation = depth * 20;
+  const overdueLabel = formatOverdueGently(task);
+
+  const PRIORITY_BAR: Record<Priority, string> = {
     high: colors.text,
     medium: colors.gray500,
     low: colors.gray200,
     none: 'transparent',
-  }), [colors]);
+  };
 
-  const overdueLabel = useMemo(() => formatOverdueGently(task), [task]);
-  const isOverdue = task.deadline ? daysFromNow(task.deadline) < 0 : false;
-  const isInProgress = !!task.startedAt && !task.isCompleted;
-  const depth = task.depth || 0;
-  const indentation = depth * 20;
-  const hasChildren = task.childIds && task.childIds.length > 0;
+  const leftLabel = !task.startedAt && !task.isCompleted && onStart ? 'START' : 'DEFER';
+  const rightLabel = isOverdue && onRevive ? 'REVIVE' : isInProgress ? 'COMPLETE' : 'DONE';
 
-  // ── JS callbacks (run on JS thread via runOnJS) ───────────────────────
+  const leftOpacity = useTransform(x, [0, SWIPE_THRESHOLD * 0.6], [0, 1]);
+  const leftScale = useTransform(x, [0, SWIPE_THRESHOLD], [0.8, 1]);
+  const rightOpacity = useTransform(x, [-SWIPE_THRESHOLD, 0], [1, 0]);
+  const rightScale = useTransform(x, [-SWIPE_THRESHOLD, 0], [1, 0.5]);
 
-  const handlePress = useCallback(() => {
-    onPress(task);
-  }, [task, onPress]);
-
-  const handleLongPressAction = useCallback(() => {
-    haptic('medium');
-    onLongPress?.(task);
-  }, [task, onLongPress]);
-
-  const handleSwipeRight = useCallback(() => {
+  const swipeRight = () => {
     if (!task.startedAt && !task.isCompleted && onStart) {
       recordSwipeAction('start');
       haptic('medium');
@@ -166,531 +109,377 @@ export const TaskItem = memo(function TaskItem({
       haptic('medium');
       onDefer(task.id);
     }
-  }, [task, onStart, onDefer]);
-
-  const handleSwipeLeft = useCallback(() => {
+  };
+  const swipeLeft = () => {
     if (isOverdue && onRevive) {
       recordSwipeAction('revive');
       haptic('success');
       onRevive(task.id);
     } else if (isInProgress && onCompleteTimed) {
-      const elapsed = getElapsedMinutes(task.startedAt!);
-      if (isUnreasonableDuration(elapsed)) {
-        haptic('warning');
-        Alert.alert(
-          'Long duration',
-          `This task has been running for ${formatMinutes(elapsed)}. Did you work on it continuously?`,
-          [
-            { text: 'Use actual time', onPress: () => onCompleteTimed(task.id) },
-            {
-              text: 'Adjust',
-              onPress: () => {
-                if (Platform.OS === 'ios') {
-                  Alert.prompt(
-                    'Actual time (minutes)',
-                    'How many minutes did you actually work?',
-                    (text) => {
-                      const mins = parseInt(text, 10);
-                      if (!isNaN(mins) && mins > 0) {
-                        onCompleteTimed(task.id, mins);
-                      } else {
-                        onCompleteTimed(task.id);
-                      }
-                    },
-                    'plain-text',
-                    '',
-                    'number-pad',
-                  );
-                } else {
-                  // Android: offer preset durations (Alert.prompt is iOS-only)
-                  Alert.alert('Adjust time', 'How long did you actually work?', [
-                    { text: '15 min', onPress: () => onCompleteTimed(task.id, 15) },
-                    { text: '30 min', onPress: () => onCompleteTimed(task.id, 30) },
-                    { text: '1 hour', onPress: () => onCompleteTimed(task.id, 60) },
-                    { text: 'Use actual', onPress: () => onCompleteTimed(task.id) },
-                  ]);
-                }
-              },
-            },
-          ],
-        );
-      } else {
-        recordSwipeAction('complete');
-        haptic('success');
-        onComplete(task.id);
-      }
+      recordSwipeAction('complete');
+      haptic('success');
+      completeWithCheer(() => onCompleteTimed(task.id));
     } else {
       recordSwipeAction('complete');
       haptic('success');
-      onComplete(task.id);
+      completeWithCheer(() => onComplete(task.id));
     }
-  }, [task, isOverdue, isInProgress, onRevive, onCompleteTimed, onComplete]);
+  };
 
-  const handleCheckboxToggle = useCallback(() => {
-    if (isLocked) return; // AnimatedCheckbox handles the shake + haptic
-    haptic('success');
-    onComplete(task.id);
-  }, [task.id, onComplete, isLocked]);
+  // Complete + fire a confetti burst from the checkbox (no-op under reduce-motion).
+  const completeWithCheer = (fn: () => void) => {
+    if (!checked) {
+      const r = checkboxRef.current?.getBoundingClientRect();
+      if (r) celebrate(r.left + r.width / 2, r.top + r.height / 2);
+    }
+    fn();
+  };
 
-  const fireThresholdHaptic = useCallback(() => {
-    haptic('light');
-  }, []);
+  const startLong = () => {
+    longFired.current = false;
+    if (!onLongPress) return;
+    longTimer.current = setTimeout(() => {
+      longFired.current = true;
+      haptic('medium');
+      onLongPress(task);
+    }, 350);
+  };
+  const clearLong = () => {
+    if (longTimer.current) clearTimeout(longTimer.current);
+  };
 
-  // ── Gestures ──────────────────────────────────────────────────────────
-
-  const panGesture = Gesture.Pan()
-    .enabled(!task.isCompleted)
-    .activeOffsetX([-15, 15])
-    .failOffsetY([-10, 10])
-    .onStart(() => {
-      'worklet';
-      hasPanned.value = false;
-    })
-    .onUpdate((e) => {
-      'worklet';
-      translateX.value = e.translationX;
-
-      if (Math.abs(e.translationX) > 8) {
-        hasPanned.value = true;
+  const startedOnCheckbox = useRef(false);
+  const bind = useDrag(
+    ({ first, movement: [mx], velocity: [vx], last, tap, event }) => {
+      if (first) {
+        dragged.current = false;
+        // A press that begins on the checkbox must not arm long-press or swipe
+        // — it's a toggle, handled by the checkbox's own click.
+        startedOnCheckbox.current = !!(event?.target as HTMLElement | null)?.closest?.('[data-no-drag]');
+        if (!startedOnCheckbox.current) startLong();
       }
-
-      const crossedRight = e.translationX > SWIPE_THRESHOLD;
-      const crossedLeft = e.translationX < -SWIPE_THRESHOLD;
-      if ((crossedRight || crossedLeft) && !hasPassedThreshold.value) {
-        hasPassedThreshold.value = true;
-        runOnJS(fireThresholdHaptic)();
-      } else if (!crossedRight && !crossedLeft) {
-        hasPassedThreshold.value = false;
+      if (startedOnCheckbox.current) {
+        if (last) clearLong();
+        return;
       }
-    })
-    .onEnd((e) => {
-      'worklet';
-      const shouldActivate =
-        Math.abs(e.translationX) > SWIPE_THRESHOLD ||
-        Math.abs(e.velocityX) > FLING_VELOCITY;
-
-      if (shouldActivate) {
-        if (e.translationX > 0) {
-          translateX.value = withSpring(0, SPRING_CRITICAL);
-          runOnJS(handleSwipeRight)();
-        } else {
-          translateX.value = withSpring(0, SPRING_CRITICAL);
-          runOnJS(handleSwipeLeft)();
+      if (Math.abs(mx) > 6) {
+        dragged.current = true;
+        clearLong();
+      }
+      if (tap) {
+        clearLong();
+        return;
+      }
+      if (!last) {
+        if (task.isCompleted) return; // no swipe on completed
+        x.set(mx);
+        const isCrossed = Math.abs(mx) > SWIPE_THRESHOLD;
+        if (isCrossed && !crossed.current) {
+          crossed.current = true;
+          haptic('light');
+        } else if (!isCrossed) {
+          crossed.current = false;
         }
-      } else {
-        translateX.value = withSpring(0, SPRING_SNAPPY);
+        return;
       }
-      hasPassedThreshold.value = false;
-    });
-
-  const tapGesture = Gesture.Tap()
-    .onBegin(() => {
-      'worklet';
-      pressScale.value = withSpring(PRESS_SCALE, SPRING_SNAPPY);
-    })
-    .onFinalize((_e, success) => {
-      'worklet';
-      pressScale.value = withSpring(1, SPRING_SNAPPY);
-      if (success && !hasPanned.value) {
-        runOnJS(handlePress)();
+      // last
+      clearLong();
+      if (!task.isCompleted) {
+        const activate = Math.abs(mx) > SWIPE_THRESHOLD || Math.abs(vx) > FLING_VELOCITY / 1000;
+        animate(x, 0, activate ? SPRING_CRITICAL : SPRING_SNAPPY);
+        crossed.current = false;
+        if (activate) {
+          if (mx > 0) swipeRight();
+          else swipeLeft();
+        }
       }
-    });
-
-  const longPressGesture = Gesture.LongPress()
-    .enabled(!!onLongPress)
-    .minDuration(350)
-    .onStart(() => {
-      'worklet';
-      runOnJS(handleLongPressAction)();
-    })
-    .onFinalize(() => {
-      'worklet';
-      pressScale.value = withSpring(1, SPRING_SNAPPY);
-    });
-
-  const composed = Gesture.Simultaneous(
-    panGesture,
-    Gesture.Exclusive(longPressGesture, tapGesture),
+      setTimeout(() => (dragged.current = false), 0);
+    },
+    { axis: 'x', filterTaps: true, pointer: { touch: true } },
   );
 
-  // ── Animated styles ───────────────────────────────────────────────────
+  const handleClick = () => {
+    if (dragged.current || longFired.current) {
+      longFired.current = false;
+      return;
+    }
+    onPress(task);
+  };
 
-  const rowAnimatedStyle = useAnimatedStyle(() => ({
-    transform: [
-      { translateX: translateX.value },
-      { scale: pressScale.value },
-    ],
-  }));
-
-  const leftActionStyle = useAnimatedStyle(() => {
-    const o = interpolate(
-      translateX.value,
-      [0, SWIPE_THRESHOLD * 0.6],
-      [0, 1],
-      Extrapolation.CLAMP,
-    );
-    const s = interpolate(
-      translateX.value,
-      [0, SWIPE_THRESHOLD],
-      [0.8, 1],
-      Extrapolation.CLAMP,
-    );
-    return { opacity: o, transform: [{ scale: s }] };
-  });
-
-  const rightActionStyle = useAnimatedStyle(() => {
-    const o = interpolate(
-      translateX.value,
-      [-SWIPE_THRESHOLD, 0],
-      [1, 0],
-      Extrapolation.CLAMP,
-    );
-    const s = interpolate(
-      translateX.value,
-      [-SWIPE_THRESHOLD, 0],
-      [1, 0.5],
-      Extrapolation.CLAMP,
-    );
-    return { opacity: o, transform: [{ scale: s }] };
-  });
-
-  const leftActionBgAnimatedStyle = useAnimatedStyle(() => ({
-    opacity: translateX.value > 0 ? 1 : 0,
-    zIndex: translateX.value > 0 ? 1 : 0,
-  }));
-
-  const rightActionBgAnimatedStyle = useAnimatedStyle(() => ({
-    opacity: translateX.value < 0 ? 1 : 0,
-    zIndex: translateX.value < 0 ? 1 : 0,
-  }));
-
-  // ── Labels ────────────────────────────────────────────────────────────
-  const leftLabel = !task.startedAt && !task.isCompleted && onStart ? 'START' : 'DEFER';
-  const rightLabel = isOverdue && onRevive ? 'REVIVE' : isInProgress ? 'COMPLETE' : 'DONE';
-
-  // ── Render ────────────────────────────────────────────────────────────
+  const checked = checkedOverride !== undefined ? checkedOverride : task.isCompleted;
 
   return (
-    <Animated.View
-      entering={FadeIn.duration(250)}
-      exiting={FadeOut.duration(200)}
-      layout={LinearTransition.duration(250)}
-      style={styles.outerContainer}
+    <motion.div
+      layout="position"
+      initial={{ opacity: 0, y: 8 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ ...SPRING_LAYOUT, delay: entranceDelay }}
+      style={{ position: 'relative', background: 'var(--c-background)' }}
     >
-      <View>
-        {/* Left action background (revealed on swipe right) */}
-        <Animated.View style={[styles.leftActionBg, leftActionBgAnimatedStyle]}>
-          <Animated.Text style={[styles.swipeActionText, leftActionStyle]}>
-            {leftLabel}
-          </Animated.Text>
-        </Animated.View>
+      {/* Swipe action backgrounds */}
+      <div
+        style={{
+          position: 'absolute',
+          inset: 0,
+          background: '#2A2A2A',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'flex-start',
+          paddingLeft: 24,
+        }}
+      >
+        <motion.span style={{ opacity: leftOpacity, scale: leftScale, ...swipeText }}>{leftLabel}</motion.span>
+      </div>
+      <div
+        style={{
+          position: 'absolute',
+          inset: 0,
+          background: '#1A1A1A',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'flex-end',
+          paddingRight: 24,
+        }}
+      >
+        <motion.span style={{ opacity: rightOpacity, scale: rightScale, ...swipeText }}>{rightLabel}</motion.span>
+      </div>
 
-        {/* Right action background (revealed on swipe left) */}
-        <Animated.View style={[styles.rightActionBg, rightActionBgAnimatedStyle]}>
-          <Animated.Text style={[styles.swipeActionText, rightActionStyle]}>
-            {rightLabel}
-          </Animated.Text>
-        </Animated.View>
-
-        {/* Main row */}
-        <GestureDetector gesture={composed}>
-          <Animated.View style={[styles.container, rowAnimatedStyle]}>
-            <View style={[styles.innerContainer, { paddingLeft: Spacing.md + indentation }]}>
-              {/* Ancestor continuation vertical lines */}
-              {depth > 0 && ancestorContinuation.map((shouldContinue, i) => {
-                if (!shouldContinue) return null;
-                const ancestorDepth = i + 1; // depth levels 1..depth-1
-                return (
-                  <View
-                    key={`ancestor-${i}`}
-                    style={[
-                      styles.connectorVertical,
-                      {
-                        left: Spacing.md + (ancestorDepth * 20) - 14,
-                        height: '100%',
-                        top: 0,
-                      },
-                    ]}
-                  />
-                );
-              })}
-              {/* Connector lines for subtasks */}
-              {depth > 0 && (
-                <View
-                  style={[
-                    styles.connectorVertical,
-                    {
-                      left: Spacing.md + indentation - 14,
-                      height: isLastChild ? '50%' : '100%',
-                      top: 0,
-                    },
-                  ]}
+      {/* Main row — transform on motion.div, gestures on inner plain div */}
+      <motion.div
+        style={{
+          position: 'relative',
+          zIndex: 1,
+          background: 'var(--c-background)',
+          x,
+          touchAction: 'pan-y',
+          cursor: 'pointer',
+        }}
+      >
+        <div
+          {...bind()}
+          onClick={handleClick}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            minHeight: 56,
+            padding: `14px 16px 14px ${12 + indentation}px`,
+            position: 'relative',
+          }}
+        >
+          {/* Subtask connector lines */}
+          {depth > 0 &&
+            ancestorContinuation.map((cont, i) =>
+              cont ? (
+                <span
+                  key={i}
+                  style={{
+                    position: 'absolute',
+                    width: 1,
+                    background: colors.gray400,
+                    left: 12 + (i + 1) * 20 - 14,
+                    top: 0,
+                    bottom: 0,
+                  }}
                 />
-              )}
-              {depth > 0 && (
-                <View
-                  style={[
-                    styles.connectorHorizontal,
-                    {
-                      left: Spacing.md + indentation - 14,
-                      width: 14,
-                    },
-                  ]}
-                />
-              )}
-
-              {/* Priority indicator bar */}
-              <View
-                style={[
-                  styles.priorityBar,
-                  { backgroundColor: PRIORITY_COLORS[task.priority] },
-                ]}
+              ) : null,
+            )}
+          {depth > 0 && (
+            <>
+              <span
+                style={{
+                  position: 'absolute',
+                  width: 1,
+                  background: colors.gray400,
+                  left: 12 + indentation - 14,
+                  top: 0,
+                  height: isLastChild ? '50%' : '100%',
+                }}
               />
+              <span
+                style={{
+                  position: 'absolute',
+                  height: 1,
+                  width: 14,
+                  background: colors.gray400,
+                  left: 12 + indentation - 14,
+                  top: '50%',
+                }}
+              />
+            </>
+          )}
 
-              {/* Lock icon */}
-              {isLocked && (
-                <View style={styles.lockIcon}>
-                  <Icon name="lock-closed" size={11} color={colors.gray500} />
-                </View>
+          {/* Priority bar */}
+          <span
+            style={{
+              width: 4,
+              alignSelf: 'stretch',
+              marginRight: 8,
+              borderRadius: 2,
+              background: PRIORITY_BAR[task.priority],
+            }}
+          />
+
+          {isLocked && (
+            <span style={{ marginRight: 4, display: 'flex' }}>
+              <Icon name="lock-closed" size={11} color={colors.gray500} />
+            </span>
+          )}
+
+          {/* Checkbox. NOTE: we deliberately do NOT stopPropagation on
+              pointerdown here. @use-gesture's filterTaps installs a
+              capture-phase click listener on the bound row that suppresses any
+              click when it didn't see a tap gesture — and swallowing the
+              pointerdown made every stationary checkbox press look like a
+              non-tap, so the toggle click never landed. Letting pointerdown
+              reach the gesture lets a still press register as a tap (not
+              suppressed); the click-level stopPropagation still keeps the tap
+              from bubbling up and opening the task detail. */}
+          <div
+            ref={checkboxRef}
+            data-no-drag
+            onClick={(e) => e.stopPropagation()}
+            style={{ width: 28, display: 'flex', justifyContent: 'center', marginRight: 12 }}
+          >
+            <Checkbox checked={checked} locked={isLocked} onToggle={() => completeWithCheer(() => onComplete(task.id))} size={18} />
+          </div>
+
+          {/* Content */}
+          <div style={{ flex: 1, marginRight: 8, minWidth: 0 }}>
+            <div
+              style={{
+                fontSize: 16,
+                fontWeight: 700,
+                color: task.isCompleted ? colors.gray500 : colors.text,
+                textDecoration: task.isCompleted ? 'line-through' : 'none',
+                whiteSpace: 'nowrap',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+              }}
+            >
+              {task.title}
+            </div>
+            {task.description && (
+              <div style={{ fontSize: 14, color: colors.textSecondary, marginTop: 2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                {task.description}
+              </div>
+            )}
+            {isInProgress && task.startedAt ? (
+              <div style={{ fontSize: 12, color: colors.gray600, marginTop: 2 }}>
+                ● Started {formatMinutes(getElapsedMinutes(task.startedAt))} ago
+                {task.estimatedMinutes ? ` · est. ${formatMinutes(task.estimatedMinutes)}` : ''}
+              </div>
+            ) : task.isCompleted && task.actualMinutes != null && task.actualMinutes > 0 ? (
+              <div style={{ fontSize: 12, color: colors.gray600, marginTop: 2 }}>
+                Took {formatMinutes(task.actualMinutes)}
+                {task.estimatedMinutes ? ` · est. ${formatMinutes(task.estimatedMinutes)}` : ''}
+              </div>
+            ) : task.estimatedMinutes ? (
+              <div style={{ fontSize: 12, color: colors.gray600, marginTop: 2 }}>est. {formatMinutes(task.estimatedMinutes)}</div>
+            ) : null}
+          </div>
+
+          {/* Deadline / status tag */}
+          {task.isCompleted && task.completedAt ? (
+            <span style={tagStyle(colors.gray500)}>{formatCompletedDate(task.completedAt)}</span>
+          ) : isOverdue && overdueLabel ? (
+            <span style={tagStyle(colors.gray500)}>{overdueLabel}</span>
+          ) : task.deadline ? (
+            <span style={tagStyle(colors.textSecondary)}>{formatDeadline(task.deadline)}</span>
+          ) : null}
+
+          {/* Relative urgency chip — only when the deadline is close (<6h) */}
+          {timeUntil?.urgent && (
+            <span style={{ ...tagStyle('#F59E0B'), marginLeft: 4, fontWeight: 600 }}>{timeUntil.label}</span>
+          )}
+
+          {task.deferCount > 0 && !task.isCompleted && (
+            <span style={{ ...tagStyle(colors.gray500), marginLeft: 4 }}>{task.deferCount}×</span>
+          )}
+
+          {/* Recently revived (brought back from decay) — surfaces the
+              otherwise write-only revivedAt so the return is acknowledged. */}
+          {!task.isCompleted && task.revivedAt != null && Date.now() - task.revivedAt < 7 * 86400000 && (
+            <span
+              style={{
+                ...tagStyle(isDark ? '#FBBF24' : '#B45309'),
+                marginLeft: 4,
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 2,
+              }}
+            >
+              <Icon name="sparkles-outline" size={11} color={isDark ? '#FBBF24' : '#B45309'} />
+              Revived
+            </span>
+          )}
+
+          {/* Recurring indicator — this task respawns on completion */}
+          {task.isRecurring && !task.isCompleted && (
+            <span style={{ marginLeft: 4, display: 'inline-flex', alignItems: 'center' }}>
+              <Icon name="repeat" size={12} color={isDark ? '#A78BFA' : '#8B5CF6'} />
+            </span>
+          )}
+
+          {/* Assignee avatar (shared workspaces) */}
+          {assignee && (
+            <span
+              title={assignee.display_name ?? undefined}
+              style={{
+                width: 20, height: 20, borderRadius: 10, marginLeft: 8, flexShrink: 0, overflow: 'hidden',
+                display: 'inline-flex', alignItems: 'center', justifyContent: 'center', background: colors.gray200,
+              }}
+            >
+              {assignee.avatar_url ? (
+                <img src={assignee.avatar_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+              ) : (
+                <span style={{ fontSize: 10, fontWeight: 700, color: colors.gray600 }}>
+                  {(assignee.display_name || '?').slice(0, 1).toUpperCase()}
+                </span>
               )}
+            </span>
+          )}
 
-              {/* Animated Checkbox */}
-              <View style={styles.checkboxContainer}>
-                <AnimatedCheckbox
-                  checked={checkedOverride !== undefined ? checkedOverride : task.isCompleted}
-                  locked={isLocked}
-                  onToggle={handleCheckboxToggle}
-                  size={18}
-                />
-              </View>
+          {/* Energy + priority icons */}
+          <div style={{ width: 22, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, marginLeft: 8 }}>
+            {PRIORITY_ICONS[task.priority] && (
+              <Icon
+                name={PRIORITY_ICONS[task.priority]!.name}
+                size={12}
+                color={isDark ? PRIORITY_ICONS[task.priority]!.dark : PRIORITY_ICONS[task.priority]!.color}
+              />
+            )}
+            <Icon
+              name={ENERGY_ICONS[task.energyLevel].name}
+              size={12}
+              color={isDark ? ENERGY_ICONS[task.energyLevel].dark : ENERGY_ICONS[task.energyLevel].color}
+            />
+          </div>
+        </div>
+      </motion.div>
 
-              {/* Content */}
-              <View style={styles.content}>
-                <Text
-                  style={[
-                    styles.title,
-                    task.isCompleted && styles.titleCompleted,
-                  ]}
-                  numberOfLines={1}
-                >
-                  {task.title}
-                </Text>
-                {task.description ? (
-                  <Text style={styles.description} numberOfLines={1}>
-                    {task.description}
-                  </Text>
-                ) : null}
-                {isInProgress && task.startedAt ? (
-                  <Text style={styles.timingText}>
-                    ● Started {formatMinutes(getElapsedMinutes(task.startedAt))} ago
-                    {task.estimatedMinutes ? ` · est. ${formatMinutes(task.estimatedMinutes)}` : ''}
-                  </Text>
-                ) : task.isCompleted && task.actualMinutes != null && task.actualMinutes > 0 ? (
-                  <Text style={styles.timingText}>
-                    Took {formatMinutes(task.actualMinutes)}
-                    {task.estimatedMinutes ? ` · est. ${formatMinutes(task.estimatedMinutes)}` : ''}
-                  </Text>
-                ) : task.estimatedMinutes ? (
-                  <Text style={styles.timingText}>
-                    est. {formatMinutes(task.estimatedMinutes)}
-                  </Text>
-                ) : null}
-              </View>
-
-              {/* Deadline / Status */}
-              {task.isCompleted && task.completedAt ? (
-                <Text style={styles.completedTag}>
-                  {formatCompletedDate(task.completedAt)}
-                </Text>
-              ) : isOverdue && overdueLabel ? (
-                <Text style={styles.overdueTagGentle}>{overdueLabel}</Text>
-              ) : task.deadline ? (
-                <Text style={styles.deadlineTag}>{formatDeadline(task.deadline)}</Text>
-              ) : null}
-
-              {/* Defer count */}
-              {task.deferCount > 0 && !task.isCompleted ? (
-                <Text style={styles.deferBadge}>{task.deferCount}×</Text>
-              ) : null}
-
-              {/* Energy & Priority icons (right side) */}
-              <View style={styles.iconColumn}>
-                {PRIORITY_ICONS[task.priority] && (
-                  <Icon
-                    name={PRIORITY_ICONS[task.priority]!.name}
-                    size={12}
-                    color={isDark ? PRIORITY_ICONS[task.priority]!.darkColor : PRIORITY_ICONS[task.priority]!.color}
-                  />
-                )}
-                <Icon
-                  name={ENERGY_ICONS[task.energyLevel].name}
-                  size={12}
-                  color={isDark ? ENERGY_ICONS[task.energyLevel].darkColor : ENERGY_ICONS[task.energyLevel].color}
-                />
-              </View>
-            </View>
-          </Animated.View>
-        </GestureDetector>
-
-        <View style={styles.dashedSeparator}>
-          {Array.from({ length: DASH_COUNT }, (_, i) => (
-            <View key={i} style={styles.dash} />
-          ))}
-        </View>
-      </View>
-    </Animated.View>
+      {/* Dashed separator */}
+      <div
+        style={{
+          height: 1,
+          margin: '0 24px',
+          backgroundImage: `repeating-linear-gradient(to right, ${colors.border} 0 4px, transparent 4px 7px)`,
+        }}
+      />
+    </motion.div>
   );
-});
+}
 
-// ── Styles ──────────────────────────────────────────────────────────────────
+const swipeText: React.CSSProperties = {
+  color: '#FFFFFF',
+  fontSize: 14,
+  fontWeight: 800,
+  letterSpacing: '2px',
+};
 
-const createStyles = (c: ThemeColors) => StyleSheet.create({
-  outerContainer: {
-    position: 'relative',
-    overflow: 'visible',
-    backgroundColor: c.background,
-  },
-  dashedSeparator: {
-    flexDirection: 'row',
-    marginHorizontal: SEPARATOR_INSET,
-    height: DASH_HEIGHT,
-    alignItems: 'center',
-    overflow: 'hidden',
-  },
-  dash: {
-    width: DASH_WIDTH,
-    height: DASH_HEIGHT,
-    backgroundColor: c.border,
-    marginRight: DASH_GAP,
-    borderRadius: 0.5,
-  },
-  container: {
-    backgroundColor: c.background,
-    zIndex: 1,
-  },
-  innerContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: Spacing.md + 2,
-    paddingRight: Spacing.lg,
-    minHeight: 56,
-  },
-  leftActionBg: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: '#2A2A2A',
-    justifyContent: 'center',
-    alignItems: 'flex-start',
-    paddingLeft: 24,
-    zIndex: 0,
-  },
-  rightActionBg: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: '#1A1A1A',
-    justifyContent: 'center',
-    alignItems: 'flex-end',
-    paddingRight: 24,
-    zIndex: 0,
-  },
-  swipeActionText: {
-    color: '#FFFFFF',
-    fontSize: 14,
-    fontWeight: '800',
-    letterSpacing: 2,
-    fontFamily: FontFamily,
-  },
-  priorityBar: {
-    width: 4,
-    alignSelf: 'stretch',
-    marginRight: Spacing.sm,
-    borderRadius: 2,
-  },
-  checkboxContainer: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: Spacing.md,
-  },
-  content: {
-    flex: 1,
-    marginRight: Spacing.sm,
-  },
-  title: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: c.text,
-    fontFamily: FontFamily,
-  },
-  titleCompleted: {
-    textDecorationLine: 'line-through',
-    color: c.gray500,
-  },
-  description: {
-    fontSize: 14,
-    fontWeight: '400',
-    color: c.textSecondary,
-    marginTop: 2,
-    fontFamily: FontFamily,
-  },
-  timingText: {
-    fontSize: 12,
-    color: c.gray600,
-    marginTop: 2,
-    fontFamily: FontFamily,
-  },
-  deadlineTag: {
-    fontSize: 12,
-    fontWeight: '500',
-    letterSpacing: 0.2,
-    color: c.textSecondary,
-    fontFamily: FontFamily,
-  },
-  overdueTagGentle: {
-    fontSize: 12,
-    fontWeight: '500',
-    letterSpacing: 0.2,
-    color: c.gray500,
-    fontFamily: FontFamily,
-  },
-  completedTag: {
-    fontSize: 12,
-    fontWeight: '500',
-    letterSpacing: 0.2,
-    color: c.gray500,
-    fontFamily: FontFamily,
-  },
-  deferBadge: {
-    fontSize: 12,
-    fontWeight: '500',
-    letterSpacing: 0.2,
-    color: c.gray500,
-    marginLeft: Spacing.xs,
-    fontFamily: FontFamily,
-  },
-  iconColumn: {
-    width: 22,
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 3,
-    marginLeft: 8,
-  },
-  connectorVertical: {
-    position: 'absolute',
-    width: 1,
-    backgroundColor: c.gray400,
-  },
-  connectorHorizontal: {
-    position: 'absolute',
-    height: 1,
-    top: '50%',
-    backgroundColor: c.gray400,
-  },
-  lockIcon: {
-    width: 14,
-    height: 14,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 4,
-  },
+const tagStyle = (color: string): React.CSSProperties => ({
+  fontSize: 12,
+  fontWeight: 500,
+  letterSpacing: '0.2px',
+  color,
+  whiteSpace: 'nowrap',
 });

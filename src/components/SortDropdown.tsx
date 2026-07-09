@@ -1,143 +1,54 @@
-import React, { memo } from 'react';
-import {
-  View,
-  Text,
-  Pressable,
-  Modal,
-  StyleSheet,
-} from 'react-native';
-import Animated, { FadeIn } from 'react-native-reanimated';
-import Icon from 'react-native-vector-icons/Ionicons';
-import { Spacing, Typography, BorderRadius, FontFamily, type ThemeColors } from '../utils/colors';
-import { useTheme } from '../context/ThemeContext';
-import { SortOption } from '../types';
-import { haptic } from '../utils/haptics';
+import { Sheet } from '../ui/Modal';
+import { Icon } from '../ui/Icon';
+import { haptic } from '../core/utils/haptics';
+import { useTheme } from '../core/context/ThemeContext';
+import type { SortOption } from '../core/types';
+import { SORT_OPTIONS } from '../core/utils/sortTasks';
 
-const SORT_OPTIONS: { key: SortOption; label: string; icon: string }[] = [
-  { key: 'default',       label: 'Default (Sections)',  icon: 'layers-outline' },
-  { key: 'deadline-asc',  label: 'Deadline — soonest',  icon: 'arrow-up-outline' },
-  { key: 'deadline-desc', label: 'Deadline — latest',   icon: 'arrow-down-outline' },
-  { key: 'priority-high', label: 'Priority — high first', icon: 'flag' },
-  { key: 'priority-low',  label: 'Priority — low first',  icon: 'flag-outline' },
-  { key: 'newest',        label: 'Created — newest',    icon: 'time-outline' },
-  { key: 'oldest',        label: 'Created — oldest',    icon: 'hourglass-outline' },
-];
-
-interface SortDropdownProps {
-  visible: boolean;
+interface Props {
+  open: boolean;
   current: SortOption;
   onSelect: (option: SortOption) => void;
   onClose: () => void;
 }
 
-export const SortDropdown = memo(function SortDropdown({
-  visible,
-  current,
-  onSelect,
-  onClose,
-}: SortDropdownProps) {
-  const { colors } = useTheme();
-  const styles = React.useMemo(() => createStyles(colors), [colors]);
+/** Web port of native SortDropdown — 7 explicit sort orders in a bottom sheet. */
+export function SortDropdown({ open, current, onSelect, onClose }: Props) {
+  const { isDark } = useTheme();
+  const selText = isDark ? '#fff' : '#000';
 
   return (
-    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
-      <Pressable style={styles.overlay} onPress={onClose}>
-        <Animated.View entering={FadeIn.duration(200)} style={styles.card}>
-          <Text style={styles.title}>Sort Tasks</Text>
-          {SORT_OPTIONS.map((opt) => {
-            const isActive = current === opt.key;
-            return (
-              <Pressable
-                key={opt.key}
-                style={[styles.row, isActive && styles.rowActive]}
-                onPress={() => {
-                  haptic('selection');
-                  onSelect(opt.key);
-                }}
-              >
-                <Icon
-                  name={opt.icon}
-                  size={16}
-                  color={isActive ? colors.text : colors.gray500}
-                />
-                <Text style={[styles.rowText, isActive && styles.rowTextActive]}>
-                  {opt.label}
-                </Text>
-                {isActive && (
-                  <Icon name="checkmark" size={18} color={colors.text} />
-                )}
-              </Pressable>
-            );
-          })}
-          <Pressable
-            style={styles.doneBtn}
-            onPress={() => { haptic('selection'); onClose(); }}
-          >
-            <Text style={styles.doneText}>Done</Text>
-          </Pressable>
-        </Animated.View>
-      </Pressable>
-    </Modal>
+    <Sheet open={open} onClose={onClose}>
+      <div style={{ padding: '4px 8px 16px' }}>
+        <div
+          style={{
+            fontSize: 13, fontWeight: 700, letterSpacing: '0.6px', textTransform: 'uppercase',
+            color: 'var(--c-text-secondary)', padding: '4px 12px 8px',
+          }}
+        >
+          Sort by
+        </div>
+        {SORT_OPTIONS.map((opt) => {
+          const selected = opt.key === current;
+          return (
+            <button
+              key={opt.key}
+              onClick={() => { haptic('selection'); onSelect(opt.key); }}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 12, width: '100%',
+                padding: '13px 12px', borderRadius: 10,
+                background: selected ? (isDark ? '#1a1a1a' : '#f0f0f0') : 'transparent',
+              }}
+            >
+              <Icon name={opt.icon} size={18} color={selected ? selText : 'var(--c-text-secondary)'} />
+              <span style={{ flex: 1, textAlign: 'left', fontSize: 15, fontWeight: selected ? 700 : 500, color: selected ? selText : 'var(--c-text)' }}>
+                {opt.label}
+              </span>
+              {selected && <Icon name="checkmark" size={18} color={selText} />}
+            </button>
+          );
+        })}
+      </div>
+    </Sheet>
   );
-});
-
-const createStyles = (c: ThemeColors) => StyleSheet.create({
-  overlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.35)',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  card: {
-    width: '80%',
-    backgroundColor: c.surface,
-    borderRadius: BorderRadius.card,
-    paddingVertical: Spacing.lg,
-    paddingHorizontal: Spacing.lg,
-    borderWidth: 1,
-    borderColor: c.border,
-  },
-  title: {
-    fontSize: 15,
-    fontWeight: '700',
-    color: c.text,
-    letterSpacing: -0.3,
-    marginBottom: Spacing.sm,
-    paddingHorizontal: Spacing.sm,
-    fontFamily: FontFamily,
-  },
-  row: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: Spacing.md,
-    paddingHorizontal: Spacing.sm,
-    gap: 10,
-    borderRadius: 8,
-  },
-  rowActive: {
-    backgroundColor: c.gray50,
-  },
-  rowText: {
-    flex: 1,
-    fontSize: 14,
-    fontWeight: '500',
-    color: c.textSecondary,
-    fontFamily: FontFamily,
-  },
-  rowTextActive: {
-    color: c.text,
-    fontWeight: '600',
-  },
-  doneBtn: {
-    marginTop: Spacing.md,
-    paddingVertical: Spacing.md,
-    backgroundColor: c.surfaceDark,
-    borderRadius: 10,
-    alignItems: 'center',
-  },
-  doneText: {
-    ...Typography.body,
-    color: c.white,
-    fontWeight: '600',
-  },
-});
+}

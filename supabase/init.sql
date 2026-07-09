@@ -27,7 +27,8 @@
 --
 -- After running: set SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY in Render (backend
 -- env only — never commit the service_role key), and swap the project URL + anon
--- key in web/src/core/lib/env.ts and src/lib/env.ts.
+-- key in src/core/lib/env.ts (the web app is the only actively used client;
+-- legacy-native/src/lib/env.ts is archived and no longer wired to anything).
 -- =============================================================================
 
 

@@ -1,255 +1,75 @@
-/**
- * CalendarStrip – horizontal scrollable date picker.
- *
- * Displays a rolling window of dates (2 weeks past, 2 weeks future).
- * Each item shows the day-of-week abbreviation and date number.
- * Tapping a date selects it and fires `onDateChange`.
- * Auto-scrolls to "today" on mount.
- *
- * Design: inherits all styling from the app's design system –
- * Colors, Typography, Spacing, BorderRadius, animations, and haptics.
- */
+import { useEffect, useMemo, useRef } from 'react';
+import { motion } from 'framer-motion';
+import { startOfDay, addDays } from '../core/utils/dateUtils';
+import { haptic } from '../core/utils/haptics';
+import { SPRING_SNAPPY } from '../theme/motion';
 
-import React, { memo, useCallback, useEffect, useRef, useMemo } from 'react';
-import { View, Text, StyleSheet, ScrollView } from 'react-native';
-import Animated, {
-  useSharedValue,
-  useAnimatedStyle,
-  withSpring,
-  withTiming,
-  runOnJS,
-} from 'react-native-reanimated';
-import { Gesture, GestureDetector } from 'react-native-gesture-handler';
-import { Spacing, Typography, BorderRadius, FontFamily, type ThemeColors } from '../utils/colors';
-import { useTheme } from '../context/ThemeContext';
-import { SPRING_SNAPPY, TIMING_FADE, PRESS_SCALE } from '../utils/animations';
-import { haptic } from '../utils/haptics';
-import { startOfDay, addDays } from '../utils/dateUtils';
-
-// ── Constants ───────────────────────────────────────────────────────────────
-
-const PAST_DAYS = 14;
-const FUTURE_DAYS = 14;
-const TOTAL_DAYS = PAST_DAYS + 1 + FUTURE_DAYS; // 29 days
-const TODAY_INDEX = PAST_DAYS;
-const ITEM_WIDTH = 48;
-const ITEM_MARGIN = Spacing.xs;
+const PAST = 14;
+const FUTURE = 14;
 const DAY_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
-// ── Types ───────────────────────────────────────────────────────────────────
+export function CalendarStrip({ selectedDate, onDateChange }: { selectedDate: number; onDateChange: (ts: number) => void }) {
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const days = useMemo(() => {
+    const today = startOfDay();
+    const arr = [];
+    for (let i = -PAST; i <= FUTURE; i++) {
+      const d = addDays(today, i);
+      arr.push({ key: d.toISOString().slice(0, 10), ts: d.getTime(), label: DAY_LABELS[d.getDay()], num: d.getDate(), isToday: i === 0 });
+    }
+    return arr;
+  }, []);
 
-interface CalendarDay {
-  key: string;       // YYYY-MM-DD
-  date: Date;
-  dayLabel: string;  // "Mon", "Tue", …
-  dateNum: number;   // 1–31
-  isToday: boolean;
-  timestamp: number; // start-of-day ms
-}
-
-interface CalendarStripProps {
-  selectedDate: number;           // start-of-day timestamp
-  onDateChange: (ts: number) => void;
-}
-
-// ── Generate days array ─────────────────────────────────────────────────────
-
-function generateDays(): CalendarDay[] {
-  const today = startOfDay();
-  const days: CalendarDay[] = [];
-
-  for (let i = -PAST_DAYS; i <= FUTURE_DAYS; i++) {
-    const d = addDays(today, i);
-    const ts = d.getTime();
-    days.push({
-      key: d.toISOString().slice(0, 10),
-      date: d,
-      dayLabel: DAY_LABELS[d.getDay()],
-      dateNum: d.getDate(),
-      isToday: i === 0,
-      timestamp: ts,
-    });
-  }
-
-  return days;
-}
-
-// ── Single day cell ─────────────────────────────────────────────────────────
-
-interface DayCellProps {
-  day: CalendarDay;
-  isSelected: boolean;
-  onSelect: (ts: number) => void;
-}
-
-const DayCell = memo(function DayCell({ day, isSelected, onSelect }: DayCellProps) {
-  const { colors } = useTheme();
-  const styles = React.useMemo(() => createStyles(colors), [colors]);
-
-  const scale = useSharedValue(1);
-  const opacity = useSharedValue(1);
-
-  const firePress = useCallback(() => {
-    haptic('light');
-    onSelect(day.timestamp);
-  }, [day.timestamp, onSelect]);
-
-  const gesture = Gesture.Tap()
-    .onBegin(() => {
-      'worklet';
-      scale.value = withSpring(PRESS_SCALE, SPRING_SNAPPY);
-      opacity.value = withTiming(0.7, TIMING_FADE);
-    })
-    .onFinalize((_e, success) => {
-      'worklet';
-      scale.value = withSpring(1, SPRING_SNAPPY);
-      opacity.value = withTiming(1, TIMING_FADE);
-      if (success) {
-        runOnJS(firePress)();
-      }
-    });
-
-  const animatedStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: scale.value }],
-    opacity: opacity.value,
-  }));
-
-  return (
-    <GestureDetector gesture={gesture}>
-      <Animated.View
-        style={[
-          styles.dayCell,
-          isSelected && styles.dayCellSelected,
-          animatedStyle,
-        ]}
-      >
-        <Text
-          style={[
-            styles.dayLabel,
-            isSelected && styles.dayLabelSelected,
-            day.isToday && !isSelected && styles.dayLabelToday,
-          ]}
-        >
-          {day.dayLabel}
-        </Text>
-        <Text
-          style={[
-            styles.dateNum,
-            isSelected && styles.dateNumSelected,
-            day.isToday && !isSelected && styles.dateNumToday,
-          ]}
-        >
-          {day.dateNum}
-        </Text>
-        {day.isToday && !isSelected && <View style={styles.todayDot} />}
-      </Animated.View>
-    </GestureDetector>
-  );
-});
-
-// ── Main component ──────────────────────────────────────────────────────────
-
-export const CalendarStrip = memo(function CalendarStrip({
-  selectedDate,
-  onDateChange,
-}: CalendarStripProps) {
-  const { colors } = useTheme();
-  const styles = React.useMemo(() => createStyles(colors), [colors]);
-
-  const scrollRef = useRef<ScrollView>(null);
-  const days = useMemo(() => generateDays(), []);
-  const itemFullWidth = ITEM_WIDTH + ITEM_MARGIN * 2;
-
-  // Scroll to today on mount
   useEffect(() => {
-    const timer = setTimeout(() => {
-      const offset = TODAY_INDEX * itemFullWidth - 140; // roughly centre
-      scrollRef.current?.scrollTo({ x: Math.max(0, offset), animated: false });
-    }, 50);
-    return () => clearTimeout(timer);
-  }, [itemFullWidth]);
-
-  const handleSelect = useCallback(
-    (ts: number) => {
-      onDateChange(ts);
-    },
-    [onDateChange],
-  );
+    const el = scrollRef.current;
+    if (el) {
+      const idx = days.findIndex((d) => d.ts === selectedDate);
+      const target = (idx >= 0 ? idx : PAST) * 56 - el.clientWidth / 2 + 28;
+      el.scrollTo({ left: Math.max(0, target), behavior: 'auto' });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   return (
-    <View style={styles.container}>
-      <ScrollView
-        ref={scrollRef}
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.listContent}
-      >
-        {days.map(day => (
-          <DayCell
-            key={day.key}
-            day={day}
-            isSelected={day.timestamp === selectedDate}
-            onSelect={handleSelect}
-          />
-        ))}
-      </ScrollView>
-    </View>
+    <div ref={scrollRef} className="tody-scroll" style={{ display: 'flex', gap: 8, overflowX: 'auto', padding: '8px 16px' }}>
+      {days.map((d) => {
+        const selected = d.ts === selectedDate;
+        return (
+          <motion.button
+            key={d.key}
+            whileTap={{ scale: 0.95 }}
+            onClick={() => { haptic('light'); onDateChange(d.ts); }}
+            style={{
+              position: 'relative',
+              flexShrink: 0,
+              width: 48,
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              padding: '8px 0',
+              borderRadius: 'var(--r-button)',
+            }}
+          >
+            {selected && (
+              <motion.span
+                layoutId="cal-selected"
+                transition={SPRING_SNAPPY}
+                style={{
+                  position: 'absolute',
+                  inset: 0,
+                  borderRadius: 'var(--r-button)',
+                  background: 'var(--c-text)',
+                }}
+              />
+            )}
+            <span style={{ position: 'relative', fontSize: 11, fontWeight: 600, letterSpacing: '0.3px', color: selected ? 'var(--c-background)' : d.isToday ? 'var(--c-text-secondary)' : 'var(--c-text-tertiary)', marginBottom: 4 }}>
+              {d.label}
+            </span>
+            <span style={{ position: 'relative', fontSize: 18, fontWeight: selected || d.isToday ? 700 : 600, color: selected ? 'var(--c-background)' : 'var(--c-text)' }}>{d.num}</span>
+            {d.isToday && !selected && <span style={{ width: 4, height: 4, borderRadius: 2, background: 'var(--c-text)', marginTop: 4 }} />}
+          </motion.button>
+        );
+      })}
+    </div>
   );
-});
-
-// ── Styles ──────────────────────────────────────────────────────────────────
-
-const createStyles = (c: ThemeColors) => StyleSheet.create({
-  container: {
-    paddingVertical: Spacing.sm,
-  },
-  listContent: {
-    paddingHorizontal: Spacing.lg,
-  },
-  dayCell: {
-    width: ITEM_WIDTH,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: Spacing.sm,
-    marginHorizontal: ITEM_MARGIN,
-    borderRadius: BorderRadius.button,
-    backgroundColor: 'transparent',
-  },
-  dayCellSelected: {
-    backgroundColor: c.text,
-  },
-  dayLabel: {
-    fontSize: 11,
-    fontWeight: '600',
-    letterSpacing: 0.3,
-    color: c.textTertiary,
-    marginBottom: Spacing.xs,
-    fontFamily: FontFamily,
-  },
-  dayLabelSelected: {
-    color: c.background,
-  },
-  dayLabelToday: {
-    color: c.textSecondary,
-  },
-  dateNum: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: c.text,
-    fontFamily: FontFamily,
-  },
-  dateNumSelected: {
-    color: c.background,
-    fontWeight: '700',
-  },
-  dateNumToday: {
-    fontWeight: '700',
-  },
-  todayDot: {
-    width: 4,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: c.text,
-    marginTop: Spacing.xs,
-  },
-});
+}

@@ -1,244 +1,113 @@
-import React, { memo, useCallback } from 'react';
-import {
-  View,
-  Text,
-  Pressable,
-  Modal,
-  StyleSheet,
-  Alert,
-  Platform,
-} from 'react-native';
-import Animated, { FadeIn } from 'react-native-reanimated';
-import Icon from 'react-native-vector-icons/Ionicons';
-import { Spacing, Typography, BorderRadius, FontFamily, type ThemeColors } from '../utils/colors';
-import { useTheme } from '../context/ThemeContext';
-import { Category } from '../types';
-import { haptic } from '../utils/haptics';
+import { useState } from 'react';
+import { Sheet } from '../ui/Modal';
+import { PromptModal } from '../ui/PromptModal';
+import { Icon } from '../ui/Icon';
+import { haptic } from '../core/utils/haptics';
+import type { Category } from '../core/types';
 
-interface ManageCategoriesModalProps {
-  visible: boolean;
+interface Props {
+  open: boolean;
   categories: Category[];
   onClose: () => void;
-  onRename: (id: string, newName: string) => void;
+  onRename: (id: string, name: string) => void;
   onDelete: (id: string) => void;
   onReorder: (orderedIds: string[]) => void;
 }
 
-export const ManageCategoriesModal = memo(function ManageCategoriesModal({
-  visible,
-  categories,
-  onClose,
-  onRename,
-  onDelete,
-  onReorder,
-}: ManageCategoriesModalProps) {
-  // Sort for display (by order)
-  const sorted = [...categories].sort((a, b) => a.order - b.order);
-  const { colors } = useTheme();
-  const styles = React.useMemo(() => createStyles(colors), [colors]);
+/**
+ * Web port of native ManageCategoriesModal. Rename, delete, and reorder the
+ * user's categories from one place (the tab bar's pencil button), instead of
+ * bouncing to Settings. "Overview" is fixed and excluded.
+ */
+export function ManageCategoriesModal({ open, categories, onClose, onRename, onDelete, onReorder }: Props) {
+  const [renaming, setRenaming] = useState<Category | null>(null);
 
-  // Movable = exclude overview
-  const movable = sorted.filter(c => c.id !== 'overview');
+  const movable = [...categories].filter((c) => c.id !== 'overview').sort((a, b) => a.order - b.order);
 
-  const handleMoveUp = useCallback((catId: string) => {
-    const idx = movable.findIndex(c => c.id === catId);
-    if (idx <= 0) return;
-    haptic('selection');
-    const newOrder = [...movable];
-    [newOrder[idx - 1], newOrder[idx]] = [newOrder[idx], newOrder[idx - 1]];
-    // Overview stays at index 0, rest follow
-    onReorder(['overview', ...newOrder.map(c => c.id)]);
-  }, [movable, onReorder]);
-
-  const handleMoveDown = useCallback((catId: string) => {
-    const idx = movable.findIndex(c => c.id === catId);
-    if (idx < 0 || idx >= movable.length - 1) return;
-    haptic('selection');
-    const newOrder = [...movable];
-    [newOrder[idx], newOrder[idx + 1]] = [newOrder[idx + 1], newOrder[idx]];
-    onReorder(['overview', ...newOrder.map(c => c.id)]);
-  }, [movable, onReorder]);
-
-  const handleRename = useCallback((cat: Category) => {
-    if (cat.id === 'overview') return;
-    if (Platform.OS === 'ios') {
-      Alert.prompt(
-        'Rename Category',
-        `Enter new name for "${cat.name}"`,
-        (text) => {
-          if (text && text.trim()) {
-            onRename(cat.id, text.trim());
-          }
-        },
-        'plain-text',
-        cat.name,
-      );
-    } else {
-      // Android: simple alert with instructions
-      Alert.alert('Rename', `Current name: "${cat.name}"\n\nPlease use the category settings to rename on Android.`);
-    }
-  }, [onRename]);
-
-  const handleDelete = useCallback((cat: Category) => {
-    if (cat.id === 'overview') return;
-    Alert.alert(
-      'Delete Category',
-      `Delete "${cat.name}"? Tasks in this category will be moved to Personal.`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: () => {
-            haptic('medium');
-            onDelete(cat.id);
-          },
-        },
-      ],
-    );
-  }, [onDelete]);
+  const move = (id: string, dir: -1 | 1) => {
+    const ids = movable.map((c) => c.id);
+    const i = ids.indexOf(id);
+    const j = i + dir;
+    if (j < 0 || j >= ids.length) return;
+    [ids[i], ids[j]] = [ids[j], ids[i]];
+    haptic('light');
+    onReorder(ids);
+  };
 
   return (
-    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
-      <View style={styles.overlay}>
-        <Animated.View entering={FadeIn.duration(250)} style={styles.card}>
-          <Text style={styles.title}>Manage Categories</Text>
-
-          {/* Overview (non-editable) */}
-          <View style={styles.row}>
-            <Icon name="grid-outline" size={18} color={colors.gray400} />
-            <Text style={styles.catName}>Overview</Text>
-            <Text style={styles.lockedBadge}>Locked</Text>
-          </View>
-
-          {/* Editable categories */}
+    <>
+      <Sheet open={open} onClose={onClose}>
+        <div style={{ padding: '4px 12px 16px' }}>
+          <div
+            style={{
+              fontSize: 13, fontWeight: 700, letterSpacing: '0.6px', textTransform: 'uppercase',
+              color: 'var(--c-text-secondary)', padding: '4px 4px 10px',
+            }}
+          >
+            Manage categories
+          </div>
+          {movable.length === 0 && (
+            <div style={{ padding: '12px 4px', fontSize: 14, color: 'var(--c-text-tertiary)' }}>
+              No custom categories yet.
+            </div>
+          )}
           {movable.map((cat, idx) => (
-            <View key={cat.id} style={styles.row}>
-              <View style={[styles.colorDot, { backgroundColor: cat.color }]} />
-              <Icon name={cat.icon} size={16} color={cat.color} style={{ marginRight: 6 }} />
-              <Text style={styles.catName} numberOfLines={1}>{cat.name}</Text>
-
-              <View style={styles.rowActions}>
-                {/* Move up */}
-                <Pressable
-                  onPress={() => handleMoveUp(cat.id)}
-                  hitSlop={6}
-                  style={[styles.smallBtn, idx === 0 && styles.btnDisabled]}
-                  disabled={idx === 0}
-                >
-                  <Icon name="chevron-up" size={16} color={idx === 0 ? colors.gray200 : colors.gray500} />
-                </Pressable>
-
-                {/* Move down */}
-                <Pressable
-                  onPress={() => handleMoveDown(cat.id)}
-                  hitSlop={6}
-                  style={[styles.smallBtn, idx === movable.length - 1 && styles.btnDisabled]}
-                  disabled={idx === movable.length - 1}
-                >
-                  <Icon name="chevron-down" size={16} color={idx === movable.length - 1 ? colors.gray200 : colors.gray500} />
-                </Pressable>
-
-                {/* Rename */}
-                <Pressable onPress={() => handleRename(cat)} hitSlop={6} style={styles.smallBtn}>
-                  <Icon name="pencil-outline" size={15} color={colors.gray500} />
-                </Pressable>
-
-                {/* Delete */}
-                <Pressable onPress={() => handleDelete(cat)} hitSlop={6} style={styles.smallBtn}>
-                  <Icon name="trash-outline" size={15} color="#EF4444" />
-                </Pressable>
-              </View>
-            </View>
+            <div
+              key={cat.id}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 8,
+                padding: '10px 4px', borderBottom: '1px solid var(--c-border-light)',
+              }}
+            >
+              <span style={{ width: 10, height: 10, borderRadius: 5, background: cat.color, flexShrink: 0 }} />
+              <Icon name={cat.icon} size={16} color="var(--c-text-secondary)" />
+              <span style={{ flex: 1, fontSize: 15, fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {cat.name}
+              </span>
+              <button onClick={() => move(cat.id, -1)} disabled={idx === 0} aria-label={`Move ${cat.name} up`} style={iconBtn(idx === 0)}>
+                <Icon name="chevron-up" size={16} color="var(--c-text-secondary)" />
+              </button>
+              <button onClick={() => move(cat.id, 1)} disabled={idx === movable.length - 1} aria-label={`Move ${cat.name} down`} style={iconBtn(idx === movable.length - 1)}>
+                <Icon name="chevron-down" size={16} color="var(--c-text-secondary)" />
+              </button>
+              <button onClick={() => setRenaming(cat)} aria-label={`Rename ${cat.name}`} style={iconBtn(false)}>
+                <Icon name="create-outline" size={16} color="var(--c-text-secondary)" />
+              </button>
+              <button
+                onClick={() => {
+                  if (window.confirm(`Delete "${cat.name}"? Its tasks move to Personal.`)) {
+                    haptic('medium');
+                    onDelete(cat.id);
+                  }
+                }}
+                aria-label={`Delete ${cat.name}`}
+                style={iconBtn(false)}
+              >
+                <Icon name="trash-outline" size={16} color="#e06767" />
+              </button>
+            </div>
           ))}
+        </div>
+      </Sheet>
 
-          {/* Close */}
-          <Pressable style={styles.doneBtn} onPress={onClose}>
-            <Text style={styles.doneText}>Done</Text>
-          </Pressable>
-        </Animated.View>
-      </View>
-    </Modal>
+      <PromptModal
+        visible={!!renaming}
+        title="Rename category"
+        defaultValue={renaming?.name ?? ''}
+        submitLabel="Rename"
+        onCancel={() => setRenaming(null)}
+        onSubmit={(name) => {
+          const trimmed = name.trim();
+          if (trimmed && renaming) onRename(renaming.id, trimmed);
+          setRenaming(null);
+        }}
+      />
+    </>
   );
-});
+}
 
-const createStyles = (c: ThemeColors) => StyleSheet.create({
-  overlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.4)',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  card: {
-    width: '88%',
-    backgroundColor: c.surface,
-    borderRadius: BorderRadius.card,
-    paddingVertical: Spacing.xxl,
-    paddingHorizontal: Spacing.xl,
-    borderWidth: 1,
-    borderColor: c.border,
-  },
-  title: {
-    ...Typography.heading,
-    color: c.text,
-    textAlign: 'center',
-    marginBottom: Spacing.lg,
-  },
-  row: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: Spacing.md,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: c.gray100,
-    gap: 6,
-  },
-  colorDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-  },
-  catName: {
-    flex: 1,
-    fontSize: 15,
-    fontWeight: '500',
-    color: c.text,
-    fontFamily: FontFamily,
-  },
-  lockedBadge: {
-    fontSize: 11,
-    fontWeight: '600',
-    color: c.gray400,
-    backgroundColor: c.gray100,
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 6,
-    overflow: 'hidden',
-    fontFamily: FontFamily,
-  },
-  rowActions: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 2,
-  },
-  smallBtn: {
-    width: 30,
-    height: 30,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  btnDisabled: {
-    opacity: 0.3,
-  },
-  doneBtn: {
-    marginTop: Spacing.xl,
-    paddingVertical: Spacing.md,
-    backgroundColor: c.surfaceDark,
-    borderRadius: BorderRadius.button,
-    alignItems: 'center',
-  },
-  doneText: {
-    ...Typography.body,
-    color: c.white,
-    fontWeight: '600',
-  },
+const iconBtn = (disabled: boolean): React.CSSProperties => ({
+  width: 34, height: 34, borderRadius: 8,
+  display: 'flex', alignItems: 'center', justifyContent: 'center',
+  opacity: disabled ? 0.3 : 1, flexShrink: 0,
 });

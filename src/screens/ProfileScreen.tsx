@@ -1,300 +1,226 @@
-/**
- * ProfileScreen – User identity, gamification, calendar & stats.
- *
- * Composes ProfileHeader, XPSection, MonthlyCalendar, and PerformanceFusionSection
- * into a single scrollable page. Protected by auth — if not logged in
- * the RootNavigator would never render this screen anyway, but we
- * double-check just in case.
- *
- * Avatar is picked via react-native-image-picker-style Alert
- * (or a simple file input placeholder). The URI is persisted to storage.
- */
-
-import React, { useMemo, useState, useCallback, useEffect } from 'react';
-import {
-  View,
-  Text,
-  ScrollView,
-  StyleSheet,
-  Alert,
-  Platform,
-} from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import Icon from 'react-native-vector-icons/Ionicons';
-import { useAuth } from '../context/AuthContext';
-import { useTasks } from '../context/TaskContext';
-import { RootStackParamList, ProfileStats } from '../types';
-import { ProfileHeader } from '../components/profile/ProfileHeader';
-import { XPSection } from '../components/profile/XPSection';
-import { MonthlyCalendar } from '../components/profile/MonthlyCalendar';
+import { useEffect, useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { motion } from 'framer-motion';
+import { useAuth } from '../core/context/AuthContext';
+import { useTasks } from '../core/context/TaskContext';
+import { useTheme } from '../core/context/ThemeContext';
+import { usePreferences } from '../app/PreferencesContext';
+import { calculateXP, getMonthCalendarData } from '../core/utils/profileStats';
+import { useHabits } from '../core/context/HabitContext';
+import { getAvatarUri, saveAvatarUri } from '../core/utils/storage';
+import { formatMinutes } from '../core/utils/timeTracking';
+import { api } from '../core/lib/api';
+import type { Task } from '../core/types';
+import { Icon } from '../ui/Icon';
+import { Pressable } from '../ui/Pressable';
+import { PromptModal } from '../ui/PromptModal';
+import { haptic } from '../core/utils/haptics';
 import { PerformanceFusionSection } from '../components/profile/PerformanceFusionSection';
-import { AnimatedPressable, PromptModal } from '../components/ui';
-import { calculateXP } from '../utils/profileStats';
-import { getAvatarUri, saveAvatarUri } from '../utils/storage';
-import { Spacing, Typography, FontFamily, type ThemeColors } from '../utils/colors';
-import { useTheme } from '../context/ThemeContext';
-import { haptic } from '../utils/haptics';
-import { api } from '../lib/api';
+import { SwipeHabitsSection } from '../components/profile/SwipeHabitsSection';
+import { FriendsCard } from '../features/social/FriendsCard';
 
-// ── Backend response shapes ──────────────────────────────────────────────────
+const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+const DOW_SUNDAY = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
+const DOW_MONDAY = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
 
-interface BackendStats {
-  total_created: number;
-  total_completed: number;
-  total_incomplete: number;
-  total_minutes_spent: number;
-  avg_minutes_per_task: number;
-  completion_percentage: number;
-  active_days: number;
-}
-
-interface BackendAnalytics {
-  current_streak: number;
-  best_streak: number;
-  daily_trend: Array<{ date: string; created: number; completed: number }>;
-}
-
-const ZERO_STATS: ProfileStats = {
-  totalCreated: 0,
-  totalCompleted: 0,
-  totalIncomplete: 0,
-  completionPercentage: 0,
-  currentStreak: 0,
-  bestStreak: 0,
-  averageTasksPerDay: 0,
-  totalMinutesSpent: 0,
-  averageMinutesPerTask: 0,
-  mostProductiveDay: '\u2014',
-};
-
-const DOW_LABELS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-
-function mostProductiveDayFromTrend(
-  trend: BackendAnalytics['daily_trend'],
-): string {
-  const totals = new Array(7).fill(0);
-  for (const row of trend) {
-    // Parse YYYY-MM-DD as UTC midnight to avoid DST offset issues
-    const d = new Date(row.date + 'T00:00:00Z');
-    totals[d.getUTCDay()] += row.completed;
+/** Local streak fallback when the backend is unreachable. */
+function localStreak(tasks: Task[]): number {
+  const days = new Set(
+    tasks.filter((t) => t.isCompleted && t.completedAt).map((t) => {
+      const d = new Date(t.completedAt!);
+      return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
+    }),
+  );
+  let streak = 0;
+  const cur = new Date();
+  for (;;) {
+    const key = `${cur.getFullYear()}-${cur.getMonth()}-${cur.getDate()}`;
+    if (days.has(key)) streak++;
+    else if (streak > 0 || cur.toDateString() !== new Date().toDateString()) break;
+    cur.setDate(cur.getDate() - 1);
+    if (streak > 400) break;
   }
-  const max = Math.max(...totals);
-  return max > 0 ? DOW_LABELS[totals.indexOf(max)] : '\u2014';
+  return streak;
 }
 
-type Props = {
-  navigation: NativeStackNavigationProp<RootStackParamList, 'Profile'>;
-};
-
-export function ProfileScreen({ navigation }: Props) {
-  const { colors } = useTheme();
-  const styles = React.useMemo(() => createStyles(colors), [colors]);
-  const insets = useSafeAreaInsets();
+export function ProfileScreen() {
+  const navigate = useNavigate();
   const { user } = useAuth();
+  const { prefs } = usePreferences();
   const { tasks, archivedTasks } = useTasks();
-  const [avatarUri, setAvatarUri] = useState<string | null>(null);
-  const [avatarPromptVisible, setAvatarPromptVisible] = useState(false);
-
-  // Profile stats & analytics fetched from the Render backend
-  const [profileStats, setProfileStats] = useState<ProfileStats>(ZERO_STATS);
-
-  // Merge active + archived tasks for local computations (XP, calendar)
+  const { habitXP } = useHabits();
+  const { isDark } = useTheme();
   const allTasks = useMemo(() => [...tasks, ...archivedTasks], [tasks, archivedTasks]);
-  // Re-fetch backend stats whenever the number of tasks or completed tasks changes
-  const statsRefreshKey = useMemo(
-    () => `${allTasks.length}:${allTasks.filter(t => t.isCompleted).length}`,
-    [allTasks],
-  );
-  // ── Fetch stats + analytics from backend ────────────────────────────────────
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      const [statsRes, analyticsRes] = await Promise.all([
-        api.get<BackendStats>('/profile/stats'),
-        api.get<BackendAnalytics>('/profile/analytics'),
-      ]);
-      if (cancelled) return;
 
-      const s = statsRes.data;
-      const a = analyticsRes.data;
-      if (s && a) {
-        setProfileStats({
-          totalCreated: s.total_created ?? 0,
-          totalCompleted: s.total_completed ?? 0,
-          totalIncomplete: s.total_incomplete ?? 0,
-          completionPercentage: s.completion_percentage ?? 0,
-          currentStreak: a.current_streak ?? 0,
-          bestStreak: a.best_streak ?? 0,
-          averageTasksPerDay:
-            s.active_days > 0
-              ? Math.round((s.total_created / s.active_days) * 10) / 10
-              : 0,
-          totalMinutesSpent: s.total_minutes_spent ?? 0,
-          averageMinutesPerTask: s.avg_minutes_per_task ?? 0,
-          mostProductiveDay: mostProductiveDayFromTrend(a.daily_trend ?? []),
-        });
-      }
-    })();
-    return () => { cancelled = true; };
-  }, [statsRefreshKey]);
+  const [avatar, setAvatar] = useState<string | null>(null);
+  const [avatarPrompt, setAvatarPrompt] = useState(false);
+  const [streak, setStreak] = useState(0);
+  const [backendStats, setBackendStats] = useState<{ completion: number; total: number; minutes: number } | null>(null);
 
-  // XP uses the backend-sourced current streak
-  const xpData = useMemo(
-    () => calculateXP(allTasks, profileStats.currentStreak),
-    [allTasks, profileStats.currentStreak],
-  );
-
-  // Load saved avatar; also check backend for reinstall recovery
   useEffect(() => {
     (async () => {
-      const localUri = await getAvatarUri();
-      if (localUri) setAvatarUri(localUri);
-
-      // Fetch profile from backend — if it has an avatar_url and we don't
-      // have one locally, apply and save it (survives reinstalls).
-      const { data } = await api.get<{ avatar_url?: string | null }>('/profile');
-      if (data?.avatar_url && !localUri) {
-        setAvatarUri(data.avatar_url);
-        await saveAvatarUri(data.avatar_url);
-      }
+      const uri = await getAvatarUri();
+      if (uri) setAvatar(uri);
     })();
+    setStreak(localStreak(allTasks));
+    Promise.all([
+      api.get<{ current_streak?: number }>('/profile/analytics'),
+      api.get<{ completion_percentage?: number; total_created?: number; total_minutes_spent?: number }>('/profile/stats'),
+    ]).then(([a, s]) => {
+      if (a.data?.current_streak != null) setStreak(a.data.current_streak);
+      if (s.data) setBackendStats({ completion: s.data.completion_percentage ?? 0, total: s.data.total_created ?? 0, minutes: s.data.total_minutes_spent ?? 0 });
+    }).catch(() => {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const handleBack = useCallback(() => navigation.goBack(), [navigation]);
+  // Habits contribute to XP too (P5): every done-log is +5 via extraXP.
+  const xp = useMemo(() => calculateXP(allTasks, streak, habitXP), [allTasks, streak, habitXP]);
+  const displayName = (user?.email ?? '').split('@')[0];
+  const initials = displayName.slice(0, 2).toUpperCase();
 
-  const handleOpenSettings = useCallback(() => {
-    haptic('light');
-    navigation.navigate('Settings');
-  }, [navigation]);
+  // Local stats fallback
+  const stats = backendStats ?? {
+    completion: allTasks.length ? Math.round((allTasks.filter((t) => t.isCompleted).length / allTasks.length) * 100) : 0,
+    total: allTasks.length,
+    minutes: allTasks.reduce((s, t) => s + (t.isCompleted ? t.actualMinutes ?? 0 : 0), 0),
+  };
 
-  const handleChangeAvatar = useCallback(() => {
-    const handleSave = async (value: string) => {
-      const url = value.trim();
-      if (url) {
-        setAvatarUri(url);
-        await saveAvatarUri(url);
-      } else {
-        setAvatarUri(null);
-        await saveAvatarUri('');
-      }
-      // Sync avatar URL to backend so it survives reinstalls
-      api.patch('/profile', { avatar_url: url || null }).catch(() => {});
-      haptic('success');
-    };
+  // Monthly calendar
+  const [ym, setYm] = useState(() => ({ y: new Date().getFullYear(), m: new Date().getMonth() }));
+  const today = new Date();
+  const calData = useMemo(() => getMonthCalendarData(allTasks, ym.y, ym.m), [allTasks, ym]);
+  // Leading blanks so the 1st lands under the right weekday column, honoring
+  // the user's week-start preference (Sunday-first vs Monday-first).
+  const mondayFirst = prefs.weekStartsOn === 'monday';
+  const dow = mondayFirst ? DOW_MONDAY : DOW_SUNDAY;
+  const rawFirstDow = new Date(ym.y, ym.m, 1).getDay(); // 0=Sun..6=Sat
+  const offset = mondayFirst ? (rawFirstDow + 6) % 7 : rawFirstDow;
+  const cells = [...Array(offset).fill(null), ...calData];
+  const isCurMonth = ym.y === today.getFullYear() && ym.m === today.getMonth();
+  const shiftMonth = (d: number) => { haptic('light'); setYm((p) => { const nm = p.m + d; return { y: p.y + Math.floor(nm / 12), m: ((nm % 12) + 12) % 12 }; }); };
 
-    if (Platform.OS === 'ios') {
-      Alert.prompt(
-        'Set Avatar',
-        'Paste an image URL (or leave blank to remove)',
-        [
-          { text: 'Cancel', style: 'cancel' },
-          { text: 'Save', onPress: (v?: string) => handleSave(v ?? '') },
-        ],
-        'plain-text',
-        avatarUri ?? '',
-      );
-    } else {
-      setAvatarPromptVisible(true);
-    }
-  }, [avatarUri]);
-
-  if (!user) return null;
+  const card: React.CSSProperties = { margin: '0 24px 20px', background: 'var(--c-surface)', borderRadius: 'var(--r-card)', border: '1px solid var(--c-border-light)', padding: 16 };
 
   return (
-    <View style={[styles.container, { paddingTop: insets.top }]}>
-      {/* Header bar */}
-      <View style={styles.headerBar}>
-        <AnimatedPressable onPress={handleBack} hitSlop={12}>
-          <Text style={styles.backText}>← Back</Text>
-        </AnimatedPressable>
-        <Text style={styles.headerTitle}>Profile</Text>
-        <AnimatedPressable
-          onPress={handleOpenSettings}
-          hapticStyle="light"
-          style={styles.settingsRoundButton}>
-          <Icon name="settings-outline" size={18} color={colors.white} />
-        </AnimatedPressable>
-      </View>
+    <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', background: 'var(--c-background)', color: 'var(--c-text)' }}>
+      <header style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: 'calc(var(--safe-top) + 12px) 24px 12px' }}>
+        <Pressable onPress={() => navigate(-1)} style={{ padding: 4 }}><Icon name="chevron-back" size={26} /></Pressable>
+        <span style={{ fontSize: 16, fontWeight: 500 }}>Profile</span>
+        <Pressable onPress={() => navigate('/settings')} style={{ width: 36, height: 36, borderRadius: 18, background: 'var(--c-surface-dark)' }}>
+          <Icon name="settings-outline" size={18} color="var(--c-white)" />
+        </Pressable>
+      </header>
 
-      <ScrollView
-        style={styles.scrollView}
-        contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 40 }]}
-        showsVerticalScrollIndicator={false}>
+      <div className="tody-scroll" style={{ flex: 1, minHeight: 0, paddingBottom: 'calc(var(--safe-bottom) + 40px)' }}>
+        {/* Profile header */}
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '20px 0 24px' }}>
+          <button onClick={() => { haptic('light'); setAvatarPrompt(true); }} style={{ position: 'relative', marginBottom: 16 }}>
+            {avatar ? (
+              <img src={avatar} alt="" style={{ width: 80, height: 80, borderRadius: 40, objectFit: 'cover', background: 'var(--c-gray100)' }} />
+            ) : (
+              <div style={{ width: 80, height: 80, borderRadius: 40, background: 'var(--c-surface-dark)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 28, fontWeight: 700, color: 'var(--c-white)', letterSpacing: 1 }}>{initials}</div>
+            )}
+            <span style={{ position: 'absolute', bottom: 0, right: 0, width: 26, height: 26, borderRadius: 13, background: 'var(--c-gray800)', display: 'flex', alignItems: 'center', justifyContent: 'center', border: `2px solid var(--c-background)` }}>
+              <Icon name="camera-outline" size={12} color={isDark ? '#000' : '#fff'} />
+            </span>
+          </button>
+          <div style={{ fontSize: 22, fontWeight: 700, letterSpacing: '-0.3px' }}>{displayName}</div>
+          <div style={{ fontSize: 14, color: 'var(--c-text-tertiary)', marginTop: 2 }}>{user?.email}</div>
+          {streak > 0 && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 12, background: 'var(--c-surface)', padding: '8px 16px', borderRadius: 'var(--r-pill)' }}>
+              <Icon name="flame-outline" size={18} /> <b style={{ fontSize: 16 }}>{streak}</b> <span style={{ fontSize: 14, color: 'var(--c-text-secondary)' }}>day streak</span>
+            </div>
+          )}
+        </div>
 
-        {/* Profile Header – avatar, name, streak */}
-        <ProfileHeader
-          email={user.email}
-          avatarUri={avatarUri}
-          currentStreak={profileStats.currentStreak}
-          onChangeAvatar={handleChangeAvatar}
-        />
+        {/* XP */}
+        <div style={card}>
+          <div style={{ display: 'flex', alignItems: 'center', marginBottom: 12 }}>
+            <div style={{ width: 40, height: 40, borderRadius: 20, background: 'var(--c-surface-dark)', display: 'flex', alignItems: 'center', justifyContent: 'center', marginRight: 12, fontSize: 18, fontWeight: 800, color: 'var(--c-white)' }}>{xp.level}</div>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontSize: 15, fontWeight: 600 }}>Level {xp.level}</div>
+              <div style={{ fontSize: 12, color: 'var(--c-text-tertiary)', marginTop: 1 }}>{xp.xpInCurrentLevel} / {xp.xpForNextLevel} XP</div>
+            </div>
+            <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--c-text-secondary)' }}>{xp.totalXP} XP</div>
+          </div>
+          <div style={{ height: 6, borderRadius: 3, background: 'var(--c-gray200)', overflow: 'hidden' }}>
+            <motion.div initial={{ width: 0 }} animate={{ width: `${xp.progressPercent}%` }} transition={{ type: 'spring', damping: 20, stiffness: 300 }} style={{ height: '100%', borderRadius: 3, background: isDark ? 'var(--c-white)' : 'var(--c-surface-dark)' }} />
+          </div>
+        </div>
 
-        {/* XP & Level */}
-        <XPSection xp={xpData} />
+        {/* Friends / weekly leaderboard */}
+        <FriendsCard />
 
-        {/* Monthly Calendar */}
-        <MonthlyCalendar tasks={allTasks} />
+        {/* Monthly calendar */}
+        <div style={card}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+            <button onClick={() => shiftMonth(-1)} style={{ padding: 4 }}><Icon name="chevron-back" size={20} /></button>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span style={{ fontSize: 16, fontWeight: 600 }}>{MONTHS[ym.m]} {ym.y}</span>
+              {!isCurMonth && (
+                <button onClick={() => setYm({ y: today.getFullYear(), m: today.getMonth() })} style={{ background: isDark ? '#F5F5F7' : 'var(--c-surface-dark)', color: isDark ? '#000' : '#fff', fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 'var(--r-pill)' }}>Today</button>
+              )}
+            </div>
+            <button onClick={() => shiftMonth(1)} style={{ padding: 4 }}><Icon name="chevron-forward" size={20} /></button>
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)' }}>
+            {dow.map((d, i) => <div key={i} style={{ textAlign: 'center', fontSize: 12, fontWeight: 600, color: 'var(--c-text-tertiary)', padding: '4px 0' }}>{d}</div>)}
+            {cells.map((cell, i) => {
+              if (!cell) return <div key={i} />;
+              const d = new Date(cell.date);
+              const isToday = d.toDateString() === today.toDateString();
+              return (
+                <div key={i} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '4px 0', minHeight: 40, justifyContent: 'center' }}>
+                  <div style={{ width: 30, height: 30, borderRadius: 15, display: 'flex', alignItems: 'center', justifyContent: 'center', background: isToday ? (isDark ? 'var(--c-white)' : 'var(--c-surface-dark)') : 'transparent' }}>
+                    <span style={{ fontSize: 14, fontWeight: isToday ? 700 : 500, color: isToday ? (isDark ? '#000' : '#fff') : 'var(--c-text)' }}>{d.getDate()}</span>
+                  </div>
+                  {cell.allDone ? (
+                    <span style={{ width: 5, height: 5, borderRadius: 2.5, marginTop: 2, background: isDark ? 'var(--c-white)' : 'var(--c-surface-dark)' }} />
+                  ) : cell.hasIncomplete ? (
+                    <span style={{ width: 5, height: 5, borderRadius: 2.5, marginTop: 2, border: '1px solid var(--c-gray500)' }} />
+                  ) : null}
+                </div>
+              );
+            })}
+          </div>
+        </div>
 
-        {/* Unified analytics narrative: stats + reality score */}
-        <PerformanceFusionSection stats={profileStats} tasks={allTasks} />
-      </ScrollView>
+        {/* Performance story */}
+        <PerformanceFusionSection tasks={allTasks} currentStreak={streak} />
 
-      {/* Android avatar URL prompt */}
+        {/* Quick-action insight */}
+        <SwipeHabitsSection />
+
+        {/* Stats */}
+        <div style={{ ...card, display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12 }}>
+          {[
+            { v: `${stats.completion}%`, l: 'Completed' },
+            { v: String(stats.total), l: 'Total tasks' },
+            { v: formatMinutes(stats.minutes), l: 'Time invested' },
+          ].map((s) => (
+            <div key={s.l} style={{ textAlign: 'center' }}>
+              <div style={{ fontSize: 22, fontWeight: 700 }}>{s.v}</div>
+              <div style={{ fontSize: 11, color: 'var(--c-text-tertiary)', marginTop: 2 }}>{s.l}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+
       <PromptModal
-        visible={avatarPromptVisible}
+        visible={avatarPrompt}
         title="Set Avatar"
         message="Paste an image URL (or leave blank to remove)"
-        defaultValue={avatarUri ?? ''}
+        defaultValue={avatar ?? ''}
+        onCancel={() => setAvatarPrompt(false)}
         onSubmit={async (v) => {
-          setAvatarPromptVisible(false);
-          if (v.trim()) {
-            setAvatarUri(v.trim());
-            await saveAvatarUri(v.trim());
-          } else {
-            setAvatarUri(null);
-            await saveAvatarUri('');
-          }
+          setAvatarPrompt(false);
+          const url = v.trim();
+          setAvatar(url || null);
+          await saveAvatarUri(url);
+          api.patch('/profile', { avatar_url: url || null }).catch(() => {});
           haptic('success');
         }}
-        onCancel={() => setAvatarPromptVisible(false)}
       />
-    </View>
+    </div>
   );
 }
-
-const createStyles = (c: ThemeColors) => StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: c.background,
-  },
-  headerBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: Spacing.xxl,
-    paddingVertical: Spacing.lg,
-  },
-  backText: {
-    ...Typography.link,
-    color: c.textSecondary,
-  },
-  headerTitle: {
-    ...Typography.bodyMedium,
-    color: c.text,
-  },
-  settingsRoundButton: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: c.surfaceDark,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  scrollView: {
-    flex: 1,
-  },
-  content: {
-    paddingTop: Spacing.sm,
-  },
-});

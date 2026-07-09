@@ -1,0 +1,1179 @@
+import React, { useMemo, useState, useCallback, useRef, useEffect } from 'react';
+import {
+    View,
+    Text,
+    TextInput,
+    Pressable,
+    StyleSheet,
+    Keyboard,
+    Modal,
+    Alert,
+    KeyboardEvent,
+    Platform,
+    KeyboardAvoidingView,
+} from 'react-native';
+import Animated, { FadeIn, FadeOut } from 'react-native-reanimated';
+import { FlashList } from '@shopify/flash-list';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import Icon from 'react-native-vector-icons/Ionicons';
+import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { useTasks } from '../context/TaskContext';
+import { useAuth } from '../context/AuthContext';
+import { TaskInput, TaskInputParams } from '../components/TaskInput';
+import { TaskItem } from '../components/TaskItem';
+import { CategoryTabs } from '../components/EnergyFilter';
+import { AddCategoryModal } from '../components/AddCategoryModal';
+import { ManageCategoriesModal } from '../components/ManageCategoriesModal';
+import { SortDropdown } from '../components/SortDropdown';
+import { SectionHeader } from '../components/SectionHeader';
+import { EmptyState } from '../components/EmptyState';
+import { TaskPreviewOverlay } from '../components/TaskPreviewOverlay';
+import { ZeroStateOnboarding } from '../components/ZeroStateOnboarding';
+import { FocusMode } from '../components/FocusMode';
+import { useInbox } from '../context/InboxContext';
+import { TodayLine } from '../components/TodayLine';
+import { CalendarStrip } from '../components/CalendarStrip';
+import { AnimatedPressable } from '../components/ui';
+import { SubtaskModal } from '../components/SubtaskModal';
+import { ExpandableActionMenu } from '../components/ExpandableActionMenu';
+import { useUndo } from '../components/UndoToast';
+import { organizeTasks, searchTasks } from '../utils/taskIntelligence';
+import { isFullyDecayed } from '../utils/decay';
+import {
+    isTaskLocked,
+    countDescendants,
+    flattenTasksHierarchically,
+} from '../utils/dependencyChains';
+import { Spacing, Typography, BorderRadius, FontFamily, type ThemeColors } from '../utils/colors';
+import { useTheme } from '../context/ThemeContext';
+import { Task, RootStackParamList, Category, SortOption, Priority } from '../types';
+import { haptic } from '../utils/haptics';
+import { startOfDay } from '../utils/dateUtils';
+import { isTaskRelevantToDate } from '../utils/calendarDayboard';
+
+// ── FlashList item discriminated union ────────────────────────────────────────
+
+interface SectionHeaderItem {
+    type: 'section-header';
+    title: string;
+    count: number;
+}
+
+interface TodayLineItem {
+    type: 'today-line';
+}
+
+interface TaskListItem {
+    type: 'task';
+    task: Task;
+}
+
+type ListItem = SectionHeaderItem | TodayLineItem | TaskListItem;
+
+const PRIORITY_ORDER: Record<Priority, number> = { high: 0, medium: 1, low: 2, none: 3 };
+
+// ── Component ─────────────────────────────────────────────────────────────────
+
+type Props = {
+    navigation: NativeStackNavigationProp<RootStackParamList, 'Home'>;
+};
+
+export function HomeScreen({ navigation }: Props) {
+  const { colors, isDark } = useTheme();
+  const styles = React.useMemo(() => createStyles(colors, isDark), [colors, isDark]);
+    const insets = useSafeAreaInsets();
+    const { user } = useAuth();
+    const {
+        tasks,
+        addTask,
+        addSubtask,
+        completeTask,
+        deferTask,
+        reviveTask,
+        archiveOverdueTasks,
+        startTask,
+        completeTimedTask,
+        deleteTaskWithCascade,
+        deleteTask: deleteSingleTask,
+        categories,
+        activeCategory,
+        setActiveCategory,
+        addCategory,
+        updateCategory,
+        deleteCategory,
+        reorderCategories,
+        uncompleteTask,
+        restoreTasks,
+    } = useTasks();
+    const { showUndo } = useUndo();
+    const { inboxCount } = useInbox();
+    const [isSearching, setIsSearching] = useState(false);
+    const [searchQuery, setSearchQuery] = useState('');
+    const [showArchiveModal, setShowArchiveModal] = useState(false);
+    const searchInputRef = useRef<TextInput>(null);
+
+    // Context menu state
+    const [contextMenuTask, setContextMenuTask] = useState<Task | null>(null);
+    const [showContextMenu, setShowContextMenu] = useState(false);
+    // Subtask input state
+    const [subtaskParentId, setSubtaskParentId] = useState<string | null>(null);
+    const [showSubtaskInput, setShowSubtaskInput] = useState(false);
+    // Child highlight state (for shake feedback)
+    const [highlightChildrenOf, setHighlightChildrenOf] = useState<string | null>(
+        null,
+    );
+    // Focus mode state
+    const [isFocusMode, setIsFocusMode] = useState(false);
+    // Calendar strip state
+    const [selectedDate, setSelectedDate] = useState(() => startOfDay().getTime());
+    // Category modal state
+    const [showAddCategory, setShowAddCategory] = useState(false);
+    const [showManageCategories, setShowManageCategories] = useState(false);
+    const [showSortDropdown, setShowSortDropdown] = useState(false);
+    const [activeSortOption, setActiveSortOption] = useState<SortOption>('default');
+    const [keyboardHeight, setKeyboardHeight] = useState(0);
+
+    useEffect(() => {
+        const handleKeyboardShow = (event: KeyboardEvent) => {
+            const kbHeight = event.endCoordinates?.height ?? 0;
+            const safeBottomInset = Platform.OS === 'android' ? insets.bottom : 0;
+            const visualGap = Platform.OS === 'android' ? 16 : 32;
+            // Keep the task input above the keyboard on both platforms.
+            setKeyboardHeight(Math.max(0, kbHeight - safeBottomInset) + visualGap);
+        };
+
+        const handleKeyboardHide = () => {
+            setKeyboardHeight(0);
+        };
+
+        const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
+        const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
+
+        const showSub = Keyboard.addListener(showEvent, handleKeyboardShow);
+        const hideSub = Keyboard.addListener(hideEvent, handleKeyboardHide);
+
+        return () => {
+            showSub.remove();
+            hideSub.remove();
+        };
+    }, [insets.bottom]);
+
+    // ── Personalized title ────────────────────────────────────────────────
+    const personalTitle = useMemo(() => {
+        if (!user?.email) return 'ToDy';
+        const name = user.email.split('@')[0];
+        // Capitalize first letter
+        const displayName = name.charAt(0).toUpperCase() + name.slice(1);
+        return `${displayName}'s ToDy`;
+    }, [user?.email]);
+
+    // ── Lock state map (computed) ──────────────────────────────────────────────
+    const lockMap = useMemo(() => {
+        const map = new Map<string, boolean>();
+        for (const task of tasks) {
+            map.set(task.id, isTaskLocked(task, tasks));
+        }
+        return map;
+    }, [tasks]);
+
+    // ── Filtered set for Category ──────────────────────────────────────────────
+    const visibleTaskIds = useMemo(() => {
+        if (activeCategory === 'overview') return null;
+
+        const ids = new Set<string>();
+        const taskMap = new Map(tasks.map(t => [t.id, t]));
+
+        const addWithAncestors = (task: Task) => {
+            if (ids.has(task.id)) return;
+            ids.add(task.id);
+            if (task.parentId) {
+                const parent = taskMap.get(task.parentId);
+                if (parent) addWithAncestors(parent);
+            }
+        };
+
+        tasks
+            .filter(t => t.category === activeCategory)
+            .forEach(addWithAncestors);
+
+        return ids;
+    }, [tasks, activeCategory]);
+
+    const tasksForDisplay = useMemo(() => {
+        let filtered = visibleTaskIds === null ? tasks : tasks.filter(t => visibleTaskIds.has(t.id));
+
+        // Filter by selected calendar date
+        const dayStart = selectedDate;
+        const todayStart = startOfDay().getTime();
+        const isSelectedToday = dayStart === todayStart;
+
+        if (!isSelectedToday) {
+            filtered = filtered.filter(t => isTaskRelevantToDate(t, dayStart));
+        }
+
+        return filtered;
+    }, [tasks, visibleTaskIds, selectedDate]);
+
+    const displayedTaskCount = useMemo(() => {
+        if (activeCategory === 'overview')
+            return tasks.filter(t => !t.isCompleted).length;
+        return tasks.filter(
+            t => !t.isCompleted && t.category === activeCategory,
+        ).length;
+    }, [tasks, activeCategory]);
+
+    // ── Computed data ──────────────────────────────────────────────────────────
+    const sections = useMemo(() => {
+        const baseSections = organizeTasks(tasksForDisplay);
+        return baseSections.map(section => ({
+            ...section,
+            data: flattenTasksHierarchically(section.data),
+        }));
+    }, [tasksForDisplay]);
+
+    // ── Sort comparator ──────────────────────────────────────────────────────
+    const getSortComparator = useCallback((option: SortOption) => {
+        switch (option) {
+            case 'deadline-asc':
+                return (a: Task, b: Task) => (a.deadline ?? Infinity) - (b.deadline ?? Infinity);
+            case 'deadline-desc':
+                return (a: Task, b: Task) => (b.deadline ?? 0) - (a.deadline ?? 0);
+            case 'priority-high':
+                return (a: Task, b: Task) => PRIORITY_ORDER[a.priority] - PRIORITY_ORDER[b.priority];
+            case 'priority-low':
+                return (a: Task, b: Task) => PRIORITY_ORDER[b.priority] - PRIORITY_ORDER[a.priority];
+            case 'newest':
+                return (a: Task, b: Task) => b.createdAt - a.createdAt;
+            case 'oldest':
+                return (a: Task, b: Task) => a.createdAt - b.createdAt;
+            default:
+                return () => 0;
+        }
+    }, []);
+
+    // ── Flatten sections for FlashList ─────────────────────────────────────────
+    const flattenedItems = useMemo(() => {
+        if (activeSortOption !== 'default') {
+            // Flat sorted mode — no section headers
+            // IMPORTANT: filter out completed and archived tasks (organizeTasks does this for default mode)
+            const sorted = [...tasksForDisplay]
+                .filter(t => !t.isCompleted && !t.isArchived && t.depth === 0)
+                .sort(getSortComparator(activeSortOption));
+            return sorted.map(t => ({ type: 'task' as const, task: t }));
+        }
+        const items: ListItem[] = [];
+        for (const section of sections) {
+            if (section.title === 'TODAY') {
+                items.push({ type: 'today-line' });
+            } else {
+                items.push({
+                    type: 'section-header',
+                    title: section.title,
+                    count: section.data.length,
+                });
+            }
+            for (const task of section.data) {
+                items.push({ type: 'task', task });
+            }
+        }
+        return items;
+    }, [sections, tasksForDisplay, activeSortOption, getSortComparator]);
+
+    const searchResults = useMemo(
+        () => (searchQuery.trim() ? searchTasks(tasks, searchQuery) : []),
+        [tasks, searchQuery],
+    );
+
+    const activeCount = useMemo(
+        () => tasks.filter(t => !t.isCompleted).length,
+        [tasks],
+    );
+
+    const focusTasks = useMemo(
+        () =>
+            tasks
+                .filter(t => !t.isCompleted && t.depth === 0)
+                .sort((a, b) => {
+                    const aScore = a.deadline
+                        ? a.deadline < Date.now()
+                            ? 0
+                            : a.deadline
+                        : Infinity;
+                    const bScore = b.deadline
+                        ? b.deadline < Date.now()
+                            ? 0
+                            : b.deadline
+                        : Infinity;
+                    return aScore - bScore;
+                }),
+        [tasks],
+    );
+
+    const fullyDecayedCount = useMemo(
+        () => tasks.filter(t => isFullyDecayed(t)).length,
+        [tasks],
+    );
+
+    // ── Handlers ───────────────────────────────────────────────────────────────
+    const handleAddTask = useCallback(
+        (text: string, params?: TaskInputParams) => {
+            addTask(text, {
+                energyLevel: params?.energyLevel ?? 'medium',
+                category: params?.category ?? (activeCategory !== 'overview' ? activeCategory : 'personal'),
+                ...(params?.priority ? { priority: params.priority } : {}),
+                ...(params?.estimatedMinutes ? { estimatedMinutes: params.estimatedMinutes } : {}),
+                ...(params?.deadline != null ? { deadline: params.deadline } : {}),
+            });
+        },
+        [addTask, activeCategory],
+    );
+
+    const handleTaskPress = useCallback(
+        (task: Task) => {
+            navigation.navigate('TaskDetail', { taskId: task.id });
+        },
+        [navigation],
+    );
+
+    const handleOpenSearch = useCallback(() => {
+        haptic('light');
+        setIsSearching(true);
+        setTimeout(() => searchInputRef.current?.focus(), 100);
+    }, []);
+
+    const handleCloseSearch = useCallback(() => {
+        setIsSearching(false);
+        setSearchQuery('');
+        Keyboard.dismiss();
+    }, []);
+
+    const handleOpenArchive = useCallback(() => {
+        navigation.navigate('Archive');
+    }, [navigation]);
+
+    const handleOpenInbox = useCallback(() => {
+        navigation.navigate('ProcessInbox');
+    }, [navigation]);
+
+    const handleShowArchiveConfirm = useCallback(() => {
+        haptic('medium');
+        setShowArchiveModal(true);
+    }, []);
+
+    const handleConfirmArchive = useCallback(() => {
+        archiveOverdueTasks();
+        setShowArchiveModal(false);
+        haptic('success');
+    }, [archiveOverdueTasks]);
+
+    const handleCancelArchive = useCallback(() => {
+        setShowArchiveModal(false);
+    }, []);
+
+    const handleRevive = useCallback(
+        (id: string) => {
+            reviveTask(id);
+        },
+        [reviveTask],
+    );
+
+    const handleStartTask = useCallback(
+        (id: string) => {
+            startTask(id);
+        },
+        [startTask],
+    );
+
+    const handleCompleteTimedTask = useCallback(
+        (id: string, adjustedMinutes?: number) => {
+            completeTimedTask(id, adjustedMinutes);
+        },
+        [completeTimedTask],
+    );
+
+    // ── Long-press / Context menu handlers ─────────────────────────────────────
+    const handleLongPress = useCallback((task: Task) => {
+        setContextMenuTask(task);
+        setShowContextMenu(true);
+    }, []);
+
+    const handleCloseContextMenu = useCallback(() => {
+        setShowContextMenu(false);
+        setContextMenuTask(null);
+    }, []);
+
+    const handleContextAddSubtask = useCallback(() => {
+        if (!contextMenuTask) return;
+        if (contextMenuTask.depth >= 3) {
+            Alert.alert('Max depth', 'Max 3 levels of subtasks');
+            return;
+        }
+        setSubtaskParentId(contextMenuTask.id);
+        setShowSubtaskInput(true);
+    }, [contextMenuTask]);
+
+    const handleContextDelete = useCallback(() => {
+        if (!contextMenuTask) return;
+        const descendantCount = countDescendants(contextMenuTask.id, tasks);
+        if (descendantCount > 0) {
+            Alert.alert(
+                'Delete task',
+                `Delete task and ${descendantCount} subtask${descendantCount !== 1 ? 's' : ''}?`,
+                [
+                    { text: 'Cancel', style: 'cancel' },
+                    {
+                        text: 'Delete',
+                        style: 'destructive',
+                        onPress: () => {
+                            const getDescIds = (id: string): string[] => {
+                                const t = tasks.find(x => x.id === id);
+                                if (!t) return [];
+                                return t.childIds.flatMap(cid => [cid, ...getDescIds(cid)]);
+                            };
+                            const allIds = [
+                                contextMenuTask.id,
+                                ...getDescIds(contextMenuTask.id),
+                            ];
+                            const snapshots = tasks.filter(t => allIds.includes(t.id));
+                            deleteTaskWithCascade(contextMenuTask.id);
+                            showUndo(
+                                `"${contextMenuTask.title}" + ${descendantCount} deleted`,
+                                () => restoreTasks(snapshots),
+                            );
+                        },
+                    },
+                ],
+            );
+        } else {
+            const snapshot = { ...contextMenuTask };
+            deleteSingleTask(contextMenuTask.id);
+            showUndo(`"${contextMenuTask.title}" deleted`, () =>
+                restoreTasks([snapshot]),
+            );
+        }
+    }, [
+        contextMenuTask,
+        tasks,
+        deleteTaskWithCascade,
+        deleteSingleTask,
+        showUndo,
+        restoreTasks,
+    ]);
+
+    const handleSubtaskSubmit = useCallback(
+        (text: string, params?: TaskInputParams) => {
+            if (!subtaskParentId) return;
+            addSubtask(
+                subtaskParentId,
+                text,
+                {
+                    ...(params?.estimatedMinutes ? { estimatedMinutes: params.estimatedMinutes } : {}),
+                    ...(params?.energyLevel ? { energyLevel: params.energyLevel } : {}),
+                    ...(params?.priority && params.priority !== 'none' ? { priority: params.priority } : {}),
+                    ...(params?.deadline != null ? { deadline: params.deadline } : {}),
+                    ...(params?.category ? { category: params.category } : {}),
+                },
+            );
+            setShowSubtaskInput(false);
+            setSubtaskParentId(null);
+        },
+        [subtaskParentId, addSubtask],
+    );
+
+    const handleAddSubtaskViaSwipe = useCallback((task: Task) => {
+        if (task.depth >= 3) {
+            Alert.alert('Max depth', 'Max 3 levels of subtasks');
+            return;
+        }
+        setSubtaskParentId(task.id);
+        setShowSubtaskInput(true);
+    }, []);
+
+    const handleCompleteWithLockCheck = useCallback(
+        (id: string) => {
+            const locked = lockMap.get(id) ?? false;
+            if (locked) {
+                setHighlightChildrenOf(id);
+                setTimeout(() => setHighlightChildrenOf(null), 300);
+                return;
+            }
+            const task = tasks.find(t => t.id === id);
+            completeTask(id);
+            if (task) {
+                showUndo(`"${task.title}" completed`, () => uncompleteTask(id));
+            }
+        },
+        [completeTask, lockMap, tasks, showUndo, uncompleteTask],
+    );
+
+    // ── Render helpers ─────────────────────────────────────────────────────────
+
+    /** Render the actual TaskItem row (shared between main list and search) */
+    const renderTaskContent = useCallback(
+        (task: Task) => {
+            const locked = lockMap.get(task.id) ?? false;
+            const depth = task.depth ?? 0;
+
+            // Compute isLastChild by sorting siblings the same way the
+            // flattening function does (by createdAt)
+            let isLastChild = false;
+            if (task.parentId) {
+                const parentTask = tasks.find(t => t.id === task.parentId);
+                const siblingIds = parentTask?.childIds ?? [];
+                const siblings = siblingIds
+                    .map(id => tasks.find(t => t.id === id))
+                    .filter((t): t is Task => t != null)
+                    .sort((a, b) => a.createdAt - b.createdAt);
+                isLastChild = siblings.length > 0
+                    ? siblings[siblings.length - 1].id === task.id
+                    : false;
+            }
+
+            // Compute ancestor continuation lines:
+            // For each ancestor depth 1..depth-1, check if that ancestor
+            // is NOT the last child of its parent (meaning the vertical
+            // line should continue through this row).
+            const ancestorContinuation: boolean[] = [];
+            if (depth > 1) {
+                let current = task;
+                // Walk up from depth to depth 1
+                for (let d = depth - 1; d >= 1; d--) {
+                    const parent = current.parentId
+                        ? tasks.find(t => t.id === current.parentId)
+                        : null;
+                    if (parent && parent.parentId) {
+                        const grandparent = tasks.find(t => t.id === parent.parentId);
+                        const aunts = (grandparent?.childIds ?? [])
+                            .map(id => tasks.find(t => t.id === id))
+                            .filter((t): t is Task => t != null)
+                            .sort((a, b) => a.createdAt - b.createdAt);
+                        const parentIsLast = aunts.length > 0
+                            ? aunts[aunts.length - 1].id === parent.id
+                            : true;
+                        ancestorContinuation.unshift(!parentIsLast);
+                    } else {
+                        ancestorContinuation.unshift(false);
+                    }
+                    current = parent ?? current;
+                }
+            }
+
+            const shouldHighlight =
+                highlightChildrenOf != null &&
+                task.parentId === highlightChildrenOf &&
+                !task.isCompleted;
+
+            return (
+                <View style={styles.taskRow}>
+                    <View style={styles.flex1}>
+                        <TaskItem
+                            task={task}
+                            onPress={handleTaskPress}
+                            onComplete={handleCompleteWithLockCheck}
+                            onDefer={deferTask}
+                            onRevive={handleRevive}
+                            onStart={handleStartTask}
+                            onCompleteTimed={handleCompleteTimedTask}
+                            isLocked={locked}
+                            isLastChild={isLastChild}
+                            ancestorContinuation={ancestorContinuation}
+                            onLongPress={handleLongPress}
+                            onAddSubtask={handleAddSubtaskViaSwipe}
+                            childHighlight={shouldHighlight}
+                        />
+                    </View>
+                </View>
+            );
+        },
+        [
+            handleTaskPress,
+            handleCompleteWithLockCheck,
+            deferTask,
+            handleRevive,
+            handleStartTask,
+            handleCompleteTimedTask,
+            lockMap,
+            tasks,
+            highlightChildrenOf,
+            handleLongPress,
+            handleAddSubtaskViaSwipe,
+        ],
+    );
+
+    /** FlashList renderItem – handles section headers, today-line, and tasks */
+    const renderFlashListItem = useCallback(
+        ({ item }: { item: ListItem }) => {
+            switch (item.type) {
+                case 'today-line':
+                    return <TodayLine />;
+                case 'section-header':
+                    return <SectionHeader title={item.title} count={item.count} />;
+                case 'task':
+                    return renderTaskContent(item.task);
+            }
+        },
+        [renderTaskContent],
+    );
+
+    /** Search FlashList renderItem */
+    const renderSearchItem = useCallback(
+        ({ item }: { item: Task }) => renderTaskContent(item),
+        [renderTaskContent],
+    );
+
+    const flashListKeyExtractor = useCallback((item: ListItem) => {
+        switch (item.type) {
+            case 'today-line':
+                return '__today-line__';
+            case 'section-header':
+                return `__section-${item.title}__`;
+            case 'task':
+                return item.task.id;
+        }
+    }, []);
+
+    const searchKeyExtractor = useCallback((item: Task) => item.id, []);
+
+    /** FlashList recycling type – enables separate pools for headers vs tasks */
+    const getItemType = useCallback((item: ListItem) => item.type, []);
+
+    /** Override item layout for known-size items (headers, today-line) */
+    const overrideItemLayout = useCallback(
+        (layout: { size?: number; span?: number }, item: ListItem) => {
+            if (item.type === 'section-header') {
+                layout.size = 68;
+            } else if (item.type === 'today-line') {
+                layout.size = 32;
+            }
+            // task items use estimatedItemSize (52)
+        },
+        [],
+    );
+
+    // ── Pre-built empty / footer components ────────────────────────────────────
+
+    const ListEmpty = useMemo(() => {
+        if (activeCount === 0 && activeCategory === 'overview') {
+            return (
+                <ZeroStateOnboarding
+                    onSelectTemplate={templateTasks => {
+                        templateTasks.forEach(t => {
+                            addTask(t.title, {
+                                priority: t.priority,
+                                energyLevel: t.energyLevel,
+                                estimatedMinutes: t.estimatedMinutes ?? null,
+                            });
+                        });
+                    }}
+                    onDismiss={() => { }}
+                />
+            );
+        }
+        const activeCat = categories.find(c => c.id === activeCategory);
+        return (
+            <EmptyState
+                title={
+                    activeCategory === 'overview'
+                        ? 'No tasks yet'
+                        : `No ${activeCat?.name ?? 'category'} tasks`
+                }
+                subtitle={
+                    activeCategory === 'overview'
+                        ? 'Type above to add your first task'
+                        : 'Create one or switch tab'
+                }
+                icon={activeCategory === 'overview' ? undefined : (activeCat?.icon as string) ?? 'folder-outline'}
+                iconColor={activeCat?.color ?? colors.textTertiary}
+            />
+        );
+    }, [activeCount, activeCategory, categories, addTask]);
+
+    const ListFooter = useMemo(() => {
+        if (fullyDecayedCount <= 0) return null;
+        return (
+            <AnimatedPressable
+                onPress={handleShowArchiveConfirm}
+                hapticStyle="medium">
+                <View style={styles.archiveButton}>
+                    <Text style={styles.archiveButtonText}>
+                        Archive {fullyDecayedCount} overdue task
+                        {fullyDecayedCount !== 1 ? 's' : ''}
+                    </Text>
+                </View>
+            </AnimatedPressable>
+        );
+    }, [fullyDecayedCount, handleShowArchiveConfirm]);
+
+    // ── JSX ────────────────────────────────────────────────────────────────────
+
+    return (
+        <View style={[styles.container, { paddingTop: insets.top }]}>
+            {/* ── Header ──────────────────────────────────────────────────────── */}
+            {isSearching ? (
+                <Animated.View
+                    entering={FadeIn.duration(200)}
+                    exiting={FadeOut.duration(150)}
+                    style={styles.searchHeader}>
+                    <TextInput
+                        ref={searchInputRef}
+                        style={styles.searchInput}
+                        placeholder="Search tasks..."
+                        placeholderTextColor={colors.gray400}
+                        value={searchQuery}
+                        onChangeText={setSearchQuery}
+                        autoCorrect={false}
+                        autoCapitalize="none"
+                        returnKeyType="search"
+                    />
+                    <AnimatedPressable onPress={handleCloseSearch} hitSlop={8}>
+                        <Text style={styles.cancelText}>Cancel</Text>
+                    </AnimatedPressable>
+                </Animated.View>
+            ) : (
+                <Animated.View
+                    entering={FadeIn.duration(200)}
+                    style={styles.header}>
+                    <View style={styles.headerTitleWrap}>
+                        <Text
+                            style={styles.headerTitle}
+                            numberOfLines={1}
+                            adjustsFontSizeToFit
+                            minimumFontScale={0.7}>
+                            {personalTitle}
+                        </Text>
+                        {activeCount > 0 && (
+                            <Text style={styles.headerCount}>
+                                {activeCount} task{activeCount !== 1 ? 's' : ''}
+                            </Text>
+                        )}
+                    </View>
+                    <View style={styles.headerActions}>
+                        <AnimatedPressable
+                            onPress={handleOpenArchive}
+                            hitSlop={8}
+                            style={styles.topHeaderButton}>
+                            <Icon name="archive-outline" size={24} color={colors.textSecondary} />
+                        </AnimatedPressable>
+                        <AnimatedPressable
+                            onPress={handleOpenSearch}
+                            hitSlop={8}
+                            style={styles.topHeaderButton}>
+                            <Icon name="search-outline" size={26} color={colors.text} />
+                        </AnimatedPressable>
+                    </View>
+                </Animated.View>
+            )}
+
+            {/* ── Task List (FlashList) ───────────────────────────────────────── */}
+            {isSearching ? (
+                searchQuery.trim() ? (
+                    <FlashList
+                        data={searchResults}
+                        renderItem={renderSearchItem}
+                        keyExtractor={searchKeyExtractor}
+                        estimatedItemSize={52}
+                        keyboardShouldPersistTaps="handled"
+                        ListEmptyComponent={
+                            <EmptyState
+                                title="No tasks found"
+                                subtitle="Try different keywords"
+                                icon="search-outline"
+                            />
+                        }
+                        contentContainerStyle={styles.listContent}
+                    />
+                ) : (
+                    <EmptyState
+                        title="No results"
+                        subtitle={`for "${searchQuery}"`}
+                        icon="search-outline"
+                    />
+                )
+            ) : (
+                <FlashList
+                    data={flattenedItems}
+                    renderItem={renderFlashListItem}
+                    keyExtractor={flashListKeyExtractor}
+                    getItemType={getItemType}
+                    estimatedItemSize={52}
+                    overrideItemLayout={overrideItemLayout}
+                    ListHeaderComponent={
+                        <View>
+                            <CalendarStrip
+                                selectedDate={selectedDate}
+                                onDateChange={setSelectedDate}
+                            />
+                            <CategoryTabs
+                                categories={categories}
+                                activeCategory={activeCategory}
+                                onCategoryChange={(id) => {
+                                    setActiveCategory(id);
+                                    setActiveSortOption('default');
+                                }}
+                                onAddPress={() => setShowAddCategory(true)}
+                                onManagePress={() => setShowManageCategories(true)}
+                            />
+                        </View>
+                    }
+                    ListEmptyComponent={ListEmpty}
+                    keyboardShouldPersistTaps="handled"
+                    contentContainerStyle={{ ...styles.listContent, paddingBottom: 220, paddingTop: 4 }}
+                    ListFooterComponent={ListFooter}
+                />
+            )}
+
+            {/* ── Floating Sort FAB ─────────────────────────────────────── */}
+            {!isSearching && (
+                <Pressable
+                    style={[
+                        styles.sortFab,
+                        activeSortOption !== 'default' && styles.sortFabActive,
+                    ]}
+                    onPress={() => { haptic('light'); setShowSortDropdown(true); }}
+                    hitSlop={4}
+                >
+                    <Icon
+                        name={activeSortOption === 'default' ? 'swap-vertical-outline' : 'swap-vertical'}
+                        size={14}
+                        color={colors.white}
+                    />
+                    {activeSortOption !== 'default' && <View style={styles.sortFabDot} />}
+                </Pressable>
+            )}
+
+            {/* ── Task Input ── positioned above the arc menu trigger ── */}
+            {!isSearching && (
+                <View style={[styles.bottomControlsWrapper, { bottom: keyboardHeight > 0 ? keyboardHeight : insets.bottom + 80 }]}>
+                    <TaskInput
+                        onSubmit={handleAddTask}
+                        defaultCategory={activeCategory !== 'overview' ? activeCategory : 'personal'}
+                        categories={categories.filter(c => c.id !== 'overview')}
+                    />
+                </View>
+            )}
+
+            {/* ── Expandable Arc Menu (replaces bottom nav) ────────────── */}
+            {!isSearching && !isFocusMode && (
+                <ExpandableActionMenu
+                    actions={[
+                        {
+                            id: 'memos',
+                            label: 'Memos',
+                            icon: 'document-text-outline',
+                            onPress: handleOpenInbox,
+                            badge: inboxCount,
+                        },
+                        {
+                            id: 'activity',
+                            label: 'Activity',
+                            icon: 'analytics-outline',
+                            onPress: () => navigation.navigate('RealityScore'),
+                        },
+                        {
+                            id: 'calendar',
+                            label: 'Calendar',
+                            icon: 'calendar-outline',
+                            onPress: () => navigation.navigate('Calendar'),
+                        },
+                        {
+                            id: 'focus',
+                            label: 'Focus',
+                            icon: 'flame-outline',
+                            onPress: () => setIsFocusMode(true),
+                            holdToActivate: true,
+                        },
+                        {
+                            id: 'profile',
+                            label: 'Profile',
+                            icon: 'person-outline',
+                            onPress: () => navigation.navigate('Profile'),
+                        },
+                    ]}
+                    bottomInset={insets.bottom}
+                    taskCount={activeCount}
+                    testID="expandable-action-menu"
+                />
+            )}
+
+            {/* Archive Confirmation Modal */}
+            <Modal
+                visible={showArchiveModal}
+                transparent
+                animationType="fade"
+                onRequestClose={handleCancelArchive}>
+                <View style={styles.modalOverlay}>
+                    <Animated.View
+                        entering={FadeIn.duration(250)}
+                        style={styles.modalCard}>
+                        <Text style={styles.modalTitle}>
+                            Move {fullyDecayedCount} task
+                            {fullyDecayedCount !== 1 ? 's' : ''} to archive?
+                        </Text>
+                        <Text style={styles.modalSubtitle}>
+                            These tasks have been overdue for 7+ days.
+                        </Text>
+                        <View style={styles.modalActions}>
+                            <Pressable
+                                style={styles.modalCancelButton}
+                                onPress={handleCancelArchive}>
+                                <Text style={styles.modalCancelText}>Cancel</Text>
+                            </Pressable>
+                            <Pressable
+                                style={styles.modalArchiveButton}
+                                onPress={handleConfirmArchive}>
+                                <Text style={styles.modalArchiveText}>Archive</Text>
+                            </Pressable>
+                        </View>
+                    </Animated.View>
+                </View>
+            </Modal>
+
+            {/* Long-Press Preview Overlay */}
+            <TaskPreviewOverlay
+                visible={showContextMenu}
+                task={contextMenuTask}
+                onClose={handleCloseContextMenu}
+                onEdit={task => navigation.navigate('TaskDetail', { taskId: task.id })}
+                onAddSubtask={task => {
+                    if (task.depth >= 3) {
+                        Alert.alert('Max depth', 'Max 3 levels of subtasks');
+                        return;
+                    }
+                    setSubtaskParentId(task.id);
+                    setShowSubtaskInput(true);
+                }}
+                onDelete={task => {
+                    handleCloseContextMenu();
+                    setContextMenuTask(task);
+                    handleContextDelete();
+                }}
+            />
+
+            {/* Subtask Input Modal */}
+            <SubtaskModal
+                visible={showSubtaskInput}
+                onClose={() => {
+                    setShowSubtaskInput(false);
+                    setSubtaskParentId(null);
+                }}
+                onSubmit={handleSubtaskSubmit}
+                defaultCategory={
+                    subtaskParentId
+                        ? tasks.find(t => t.id === subtaskParentId)?.category ?? 'personal'
+                        : 'personal'
+                }
+            />
+
+            {/* Focus Mode Overlay */}
+            {isFocusMode && (
+                <FocusMode
+                    tasks={focusTasks}
+                    allTasks={tasks}
+                    onComplete={handleCompleteWithLockCheck}
+                    onCompleteSubtask={handleCompleteWithLockCheck}
+                    onExit={() => setIsFocusMode(false)}
+                />
+            )}
+
+            {/* Category Modals */}
+            <AddCategoryModal
+                visible={showAddCategory}
+                onClose={() => setShowAddCategory(false)}
+                onCreate={(name, icon, color) => {
+                    addCategory(name, icon, color);
+                    setShowAddCategory(false);
+                }}
+            />
+            <ManageCategoriesModal
+                visible={showManageCategories}
+                categories={categories}
+                onClose={() => setShowManageCategories(false)}
+                onRename={(id, name) => updateCategory(id, { name })}
+                onDelete={deleteCategory}
+                onReorder={reorderCategories}
+            />
+            <SortDropdown
+                visible={showSortDropdown}
+                current={activeSortOption}
+                onSelect={(option) => {
+                    setActiveSortOption(option);
+                    setShowSortDropdown(false);
+                }}
+                onClose={() => setShowSortDropdown(false)}
+            />
+        </View>
+    );
+}
+
+const createStyles = (c: ThemeColors, isDark: boolean) => StyleSheet.create({
+    container: {
+        flex: 1,
+        backgroundColor: c.background,
+    },
+    header: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'flex-end',
+        paddingHorizontal: Spacing.xxl,
+        paddingTop: Spacing.sm,
+        paddingBottom: Spacing.xs,
+    },
+    headerTitleWrap: {
+        flex: 1,
+        marginRight: Spacing.sm,
+    },
+    headerTitle: {
+        fontSize: 32,
+        fontWeight: '800',
+        letterSpacing: -1,
+        color: c.text,
+    fontFamily: FontFamily,
+    },
+    headerCount: {
+        ...Typography.small,
+        color: c.gray400,
+        marginTop: 2,
+    },
+    bottomControlsWrapper: {
+        position: 'absolute',
+        bottom: 0,
+        left: 0,
+        right: 0,
+        backgroundColor: 'transparent',
+    },
+
+    headerActions: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: Spacing.xs,
+    },
+    topHeaderButton: {
+        padding: Spacing.xs,
+    },
+    searchHeader: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingHorizontal: Spacing.lg,
+        paddingVertical: Spacing.sm,
+        gap: Spacing.md,
+    },
+    searchInput: {
+        flex: 1,
+        height: 48,
+        borderWidth: 0,
+        borderColor: 'transparent',
+        borderRadius: BorderRadius.input,
+        paddingHorizontal: Spacing.lg,
+        backgroundColor: c.gray50,
+        ...Typography.body,
+        color: c.text,
+    },
+    cancelText: {
+        ...Typography.link,
+        color: c.textSecondary,
+    },
+    listContent: {
+        paddingBottom: 100,
+    },
+    taskRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+    },
+    flex1: {
+        flex: 1,
+    },
+    archiveButton: {
+        backgroundColor: c.surfaceDark,
+        paddingVertical: Spacing.md,
+        paddingHorizontal: Spacing.lg,
+        marginHorizontal: Spacing.lg,
+        marginTop: Spacing.lg,
+        borderRadius: BorderRadius.button,
+        alignItems: 'center',
+    },
+    archiveButtonText: {
+        fontSize: 13,
+        fontWeight: '700',
+        color: c.white,
+    fontFamily: FontFamily,
+    },
+    modalOverlay: {
+        flex: 1,
+        backgroundColor: 'rgba(0,0,0,0.4)',
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    modalCard: {
+        width: '85%',
+        backgroundColor: c.surface,
+        borderRadius: BorderRadius.card,
+        paddingVertical: Spacing.xxl,
+        paddingHorizontal: Spacing.xxl,
+        borderWidth: 1,
+        borderColor: c.border,
+    },
+    modalTitle: {
+        ...Typography.bodyMedium,
+        color: c.text,
+        textAlign: 'center',
+    },
+    modalSubtitle: {
+        ...Typography.caption,
+        color: c.textTertiary,
+        textAlign: 'center',
+        marginTop: Spacing.sm,
+    },
+    modalActions: {
+        flexDirection: 'row',
+        justifyContent: 'center',
+        gap: Spacing.lg,
+        marginTop: Spacing.xl,
+    },
+    modalCancelButton: {
+        paddingVertical: Spacing.sm,
+        paddingHorizontal: Spacing.xl,
+    },
+    modalCancelText: {
+        ...Typography.body,
+        color: c.textTertiary,
+    },
+    modalArchiveButton: {
+        paddingVertical: Spacing.md,
+        paddingHorizontal: Spacing.xxl,
+        backgroundColor: c.surfaceDark,
+        borderRadius: BorderRadius.button,
+    },
+    modalArchiveText: {
+        ...Typography.body,
+        color: c.white,
+    },
+    sortFab: {
+        position: 'absolute',
+        right: Spacing.lg,
+        bottom: 220,
+        width: 38,
+        height: 38,
+        borderRadius: 19,
+        backgroundColor: isDark ? 'rgba(255,255,255,0.14)' : c.surfaceDark,
+        justifyContent: 'center',
+        alignItems: 'center',
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: isDark ? 0.5 : 0.18,
+        shadowRadius: 8,
+        elevation: 6,
+        zIndex: 50,
+    },
+    sortFabActive: {
+        backgroundColor: isDark ? 'rgba(255,255,255,0.28)' : c.black,
+    },
+    sortFabDot: {
+        position: 'absolute',
+        top: 6,
+        right: 6,
+        width: 6,
+        height: 6,
+        borderRadius: 3,
+        backgroundColor: '#22C55E',
+    },
+});

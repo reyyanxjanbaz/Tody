@@ -22,7 +22,7 @@ from auth import get_current_user_id
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/social", tags=["social"])
 
-# ── XP constants — MUST match web/src/core/utils/profileStats.ts ──────────────
+# ── XP constants — MUST match src/core/utils/profileStats.ts ──────────────────
 XP_PER_TASK = 10
 XP_BONUS_ESTIMATED = 5
 XP_BONUS_ON_TIME = 8

@@ -1,571 +1,219 @@
-/**
- * SettingsScreen – Auth settings & user preferences.
- *
- * Sections:
- *   1. Account – change password, logout, delete account
- *   2. Preferences – dark mode (placeholder), date/time format, week start
- *
- * Follows the same ScrollView + section pattern as RealityScoreScreen.
- */
+import { useEffect, useState } from 'react';
+import { motion } from 'framer-motion';
+import { Screen } from '../ui/Screen';
+import { Icon } from '../ui/Icon';
+import { Pressable } from '../ui/Pressable';
+import { Modal } from '../ui/Modal';
+import { useAuth } from '../core/context/AuthContext';
+import { useTheme } from '../core/context/ThemeContext';
+import { usePreferences } from '../app/PreferencesContext';
+import { supabase } from '../core/lib/supabase';
+import { api } from '../core/lib/api';
+import { type UserPreferences } from '../core/types';
+import { haptic } from '../core/utils/haptics';
+import { Alert } from '../lib/alert';
+import { notificationsSupported, permissionState, requestNotificationPermission } from '../core/lib/notifications';
 
-import React, { useState, useCallback } from 'react';
-import {
-  View,
-  Text,
-  TextInput,
-  Pressable,
-  ScrollView,
-  Switch,
-  Modal,
-  Alert,
-  StyleSheet,
-} from 'react-native';
-import Animated, { FadeIn, FadeInDown } from 'react-native-reanimated';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import Icon from 'react-native-vector-icons/Ionicons';
-import { useAuth } from '../context/AuthContext';
-import {
-  RootStackParamList,
-  UserPreferences,
-  DEFAULT_PREFERENCES,
-} from '../types';
-import {
-  saveUserPreferences,
-  getUserPreferences,
-} from '../utils/storage';
-import { supabase } from '../lib/supabase';
-import { api } from '../lib/api';
-import { Spacing, Typography, BorderRadius, FontFamily, type ThemeColors } from '../utils/colors';
-import { useTheme } from '../context/ThemeContext';
-import { haptic } from '../utils/haptics';
-import { AnimatedPressable } from '../components/ui';
-
-type Props = {
-  navigation: NativeStackNavigationProp<RootStackParamList, 'Settings'>;
-};
-
-// ── Preference option arrays ────────────────────────────────────────────────
-
-const DATE_FORMATS: UserPreferences['dateFormat'][] = [
-  'MM/DD/YYYY',
-  'DD/MM/YYYY',
-  'YYYY-MM-DD',
-];
-
+const DATE_FORMATS: UserPreferences['dateFormat'][] = ['MM/DD/YYYY', 'DD/MM/YYYY', 'YYYY-MM-DD'];
 const TIME_FORMATS: UserPreferences['timeFormat'][] = ['12h', '24h'];
-
 const WEEK_STARTS: UserPreferences['weekStartsOn'][] = ['sunday', 'monday'];
 
-export function SettingsScreen({ navigation }: Props) {
-  const { colors, isDark, toggleTheme } = useTheme();
-  const styles = React.useMemo(() => createStyles(colors), [colors]);
-  const insets = useSafeAreaInsets();
-  const { logout } = useAuth();
+const TEXT_SIZES = ['sm', 'md', 'lg'] as const;
+const TEXT_SIZE_LABELS: Record<(typeof TEXT_SIZES)[number], string> = { sm: 'Small', md: 'Default', lg: 'Large' };
+const REDUCE_MOTION = ['system', 'on', 'off'] as const;
+const REDUCE_MOTION_LABELS: Record<(typeof REDUCE_MOTION)[number], string> = { system: 'System', on: 'On', off: 'Off' };
 
-  // Preferences (loaded from storage on mount)
-  const [prefs, setPrefs] = useState<UserPreferences>(DEFAULT_PREFERENCES);
-  const [prefsLoaded, setPrefsLoaded] = useState(false);
-  const [showDeleteModal, setShowDeleteModal] = useState(false);
-
-  // Track whether the initial local-load has been completed so API syncs
-  // don't incorrectly fire a PATCH back with just-fetched server data.
-  const didFirstSave = React.useRef(false);
-  const hasLoadedServerPrefs = React.useRef(false);
-
-  // Change password state (simulated – no real backend)
-  const [currentPw, setCurrentPw] = useState('');
-  const [newPw, setNewPw] = useState('');
-  const [pwMessage, setPwMessage] = useState('');
-
-  // Load preferences on mount
-  React.useEffect(() => {
-    (async () => {
-      const stored = await getUserPreferences<UserPreferences>();
-      if (stored) setPrefs({ ...DEFAULT_PREFERENCES, ...stored });
-      setPrefsLoaded(true);
-    })();
-  }, []);
-
-  // Reinstall recovery: fetch profile settings from backend and apply them
-  // once local prefs are loaded. Server wins so settings survive a reinstall.
-  React.useEffect(() => {
-    if (!prefsLoaded || hasLoadedServerPrefs.current) return;
-    hasLoadedServerPrefs.current = true;
-    api.get<{
-      dark_mode?: boolean | null;
-      date_format?: string | null;
-      time_format?: string | null;
-      week_starts_on?: string | null;
-    }>('/profile').then(({ data }) => {
-      if (!data) return;
-      setPrefs(prev => ({
-        ...prev,
-        ...(data.dark_mode != null ? { darkMode: data.dark_mode as boolean } : {}),
-        ...(data.date_format ? { dateFormat: data.date_format as UserPreferences['dateFormat'] } : {}),
-        ...(data.time_format ? { timeFormat: data.time_format as UserPreferences['timeFormat'] } : {}),
-        ...(data.week_starts_on ? { weekStartsOn: data.week_starts_on as UserPreferences['weekStartsOn'] } : {}),
-      }));
-    }).catch(() => {});
-  }, [prefsLoaded]);
-
-  // Persist whenever prefs change; also PATCH backend on user-triggered changes
-  React.useEffect(() => {
-    if (prefsLoaded) {
-      saveUserPreferences(prefs);
-      // Skip the very first fire (just after we loaded from storage) to avoid
-      // a redundant API call before the user has changed anything.
-      if (didFirstSave.current) {
-        api.patch('/profile', {
-          dark_mode: prefs.darkMode,
-          date_format: prefs.dateFormat,
-          time_format: prefs.timeFormat,
-          week_starts_on: prefs.weekStartsOn,
-        }).catch(() => {});
-      } else {
-        didFirstSave.current = true;
-      }
-    }
-  }, [prefs, prefsLoaded]);
-
-  const handleBack = useCallback(() => navigation.goBack(), [navigation]);
-
-  const handleLogout = useCallback(async () => {
-    haptic('medium');
-    await logout();
-  }, [logout]);
-
-  const handleChangePassword = useCallback(async () => {
-    if (!newPw.trim()) {
-      setPwMessage('New password is required');
-      return;
-    }
-    if (newPw.length < 6) {
-      setPwMessage('New password must be at least 6 characters');
-      return;
-    }
-    const { error } = await supabase.auth.updateUser({ password: newPw });
-    if (error) {
-      setPwMessage(error.message);
-      return;
-    }
-    haptic('success');
-    setPwMessage('Password updated');
-    setCurrentPw('');
-    setNewPw('');
-    setTimeout(() => setPwMessage(''), 3000);
-  }, [newPw]);
-
-  const handleDeleteAccount = useCallback(() => {
-    setShowDeleteModal(true);
-  }, []);
-
-  const confirmDeleteAccount = useCallback(async () => {
-    haptic('heavy');
-    setShowDeleteModal(false);
-
-    // Call the backend DELETE /profile endpoint which removes the user from
-    // auth.users and all their data via the service-role client.
-    const { error, isBackendDown } = await api.delete('/profile');
-
-    if (isBackendDown) {
-      Alert.alert(
-        'Could not reach server',
-        'Please check your connection and try again. Your account was NOT deleted.',
-      );
-      return;
-    }
-    if (error) {
-      Alert.alert('Deletion failed', error.message);
-      return;
-    }
-
-    // Backend confirmed deletion — sign out locally
-    await logout();
-  }, [logout]);
-
-  const handleResetPreferences = useCallback(() => {
-    Alert.alert(
-      'Reset Preferences',
-      'Restore all settings to their defaults?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Reset',
-          style: 'destructive',
-          onPress: () => {
-            haptic('medium');
-            setPrefs(DEFAULT_PREFERENCES);
-          },
-        },
-      ],
-    );
-  }, []);
-
-  const updatePref = useCallback(
-    <K extends keyof UserPreferences>(key: K, value: UserPreferences[K]) => {
-      haptic('light');
-      setPrefs(p => ({ ...p, [key]: value }));
-    },
-    [],
-  );
-
-  // ── Cycle helpers for tappable selectors ────────────────────────────────
-
-  const cycleDateFormat = useCallback(() => {
-    const idx = DATE_FORMATS.indexOf(prefs.dateFormat);
-    updatePref('dateFormat', DATE_FORMATS[(idx + 1) % DATE_FORMATS.length]);
-  }, [prefs.dateFormat, updatePref]);
-
-  const cycleTimeFormat = useCallback(() => {
-    const idx = TIME_FORMATS.indexOf(prefs.timeFormat);
-    updatePref('timeFormat', TIME_FORMATS[(idx + 1) % TIME_FORMATS.length]);
-  }, [prefs.timeFormat, updatePref]);
-
-  const cycleWeekStart = useCallback(() => {
-    const idx = WEEK_STARTS.indexOf(prefs.weekStartsOn);
-    updatePref('weekStartsOn', WEEK_STARTS[(idx + 1) % WEEK_STARTS.length]);
-  }, [prefs.weekStartsOn, updatePref]);
-
+function Toggle({ on, onChange, label }: { on: boolean; onChange: () => void; label?: string }) {
   return (
-    <View style={[styles.container, { paddingTop: insets.top }]}>
-      {/* Header */}
-      <View style={styles.header}>
-        <Pressable onPress={handleBack} hitSlop={12}>
-          <Text style={styles.backText}>← Profile</Text>
-        </Pressable>
-        <Text style={styles.headerTitle}>Settings</Text>
-        <View style={styles.headerSpacer} />
-      </View>
-
-      <ScrollView
-        style={styles.scrollView}
-        contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 40 }]}
-        keyboardShouldPersistTaps="handled">
-
-        {/* ═══════ ACCOUNT SECTION ═══════════════════════════════════════════ */}
-        <Animated.View entering={FadeInDown.duration(350)}>
-          <Text style={styles.sectionTitle}>ACCOUNT</Text>
-
-          {/* Change Password */}
-          <View style={styles.card}>
-            <Text style={styles.cardTitle}>Change Password</Text>
-            <TextInput
-              style={styles.input}
-              placeholder="Current password"
-              placeholderTextColor={colors.gray500}
-              value={currentPw}
-              onChangeText={setCurrentPw}
-              secureTextEntry
-              textContentType="password"
-            />
-            <TextInput
-              style={styles.input}
-              placeholder="New password"
-              placeholderTextColor={colors.gray500}
-              value={newPw}
-              onChangeText={setNewPw}
-              secureTextEntry
-              textContentType="newPassword"
-            />
-            {pwMessage ? (
-              <Text style={styles.pwMessage}>{pwMessage}</Text>
-            ) : null}
-            <AnimatedPressable
-              onPress={handleChangePassword}
-              hapticStyle="light"
-              style={styles.actionButton}>
-              <Text style={styles.actionButtonText}>Update Password</Text>
-            </AnimatedPressable>
-          </View>
-
-          {/* Logout */}
-          <AnimatedPressable
-            onPress={handleLogout}
-            hapticStyle="medium"
-            style={styles.rowButton}>
-            <Icon name="log-out-outline" size={20} color={colors.text} />
-            <Text style={styles.rowButtonText}>Log Out</Text>
-          </AnimatedPressable>
-
-          {/* Delete Account */}
-          <AnimatedPressable
-            onPress={handleDeleteAccount}
-            hapticStyle="heavy"
-            style={[styles.rowButton, styles.dangerRow]}>
-            <Icon name="trash-outline" size={20} color={colors.gray800} />
-            <Text style={[styles.rowButtonText, styles.dangerText]}>
-              Delete Account
-            </Text>
-          </AnimatedPressable>
-        </Animated.View>
-
-        {/* ═══════ PREFERENCES SECTION ═══════════════════════════════════════ */}
-        <Animated.View entering={FadeInDown.delay(120).duration(350)}>
-          <Text style={[styles.sectionTitle, { marginTop: Spacing.xxxl }]}>
-            PREFERENCES
-          </Text>
-
-          {/* Dark Mode Toggle */}
-          <View style={styles.preferenceRow}>
-            <View style={styles.prefLabel}>
-              <Icon name="moon-outline" size={18} color={colors.textSecondary} />
-              <Text style={styles.prefText}>Dark Mode</Text>
-            </View>
-            <Switch
-              value={isDark}
-              onValueChange={() => { toggleTheme(); updatePref('darkMode', !isDark); }}
-              trackColor={{ false: colors.gray200, true: colors.gray800 }}
-              thumbColor={colors.white}
-            />
-          </View>
-
-          {/* Date Format */}
-          <Pressable onPress={cycleDateFormat} style={styles.preferenceRow}>
-            <View style={styles.prefLabel}>
-              <Icon name="calendar-outline" size={18} color={colors.textSecondary} />
-              <Text style={styles.prefText}>Date Format</Text>
-            </View>
-            <Text style={styles.prefValue}>{prefs.dateFormat}</Text>
-          </Pressable>
-
-          {/* Time Format */}
-          <Pressable onPress={cycleTimeFormat} style={styles.preferenceRow}>
-            <View style={styles.prefLabel}>
-              <Icon name="time-outline" size={18} color={colors.textSecondary} />
-              <Text style={styles.prefText}>Time Format</Text>
-            </View>
-            <Text style={styles.prefValue}>{prefs.timeFormat}</Text>
-          </Pressable>
-
-          {/* Week Starts On */}
-          <Pressable onPress={cycleWeekStart} style={styles.preferenceRow}>
-            <View style={styles.prefLabel}>
-              <Icon name="grid-outline" size={18} color={colors.textSecondary} />
-              <Text style={styles.prefText}>Week Starts On</Text>
-            </View>
-            <Text style={styles.prefValue}>
-              {prefs.weekStartsOn === 'sunday' ? 'Sunday' : 'Monday'}
-            </Text>
-          </Pressable>
-
-          {/* Reset */}
-          <AnimatedPressable
-            onPress={handleResetPreferences}
-            hapticStyle="medium"
-            style={[styles.rowButton, { marginTop: Spacing.lg }]}>
-            <Icon name="refresh-outline" size={20} color={colors.textSecondary} />
-            <Text style={styles.rowButtonText}>Reset Preferences</Text>
-          </AnimatedPressable>
-        </Animated.View>
-      </ScrollView>
-
-      {/* Delete Confirmation Modal */}
-      <Modal
-        visible={showDeleteModal}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setShowDeleteModal(false)}>
-        <View style={styles.modalOverlay}>
-          <Animated.View entering={FadeIn.duration(250)} style={styles.modalCard}>
-            <Text style={styles.modalTitle}>Delete Account?</Text>
-            <Text style={styles.modalSubtitle}>
-              This action cannot be undone. All your data will be permanently removed.
-            </Text>
-            <View style={styles.modalActions}>
-              <Pressable
-                style={styles.modalCancelButton}
-                onPress={() => setShowDeleteModal(false)}>
-                <Text style={styles.modalCancelText}>Cancel</Text>
-              </Pressable>
-              <Pressable
-                style={styles.modalDeleteButton}
-                onPress={confirmDeleteAccount}>
-                <Text style={styles.modalDeleteText}>Delete</Text>
-              </Pressable>
-            </View>
-          </Animated.View>
-        </View>
-      </Modal>
-    </View>
+    <button
+      onClick={onChange}
+      role="switch"
+      aria-checked={on}
+      aria-label={label}
+      style={{
+        width: 46,
+        height: 28,
+        borderRadius: 14,
+        background: on ? 'var(--c-gray800)' : 'var(--c-gray200)',
+        padding: 3,
+        display: 'flex',
+        justifyContent: on ? 'flex-end' : 'flex-start',
+      }}
+    >
+      <motion.span layout transition={{ type: 'spring', damping: 22, stiffness: 320 }} style={{ width: 22, height: 22, borderRadius: 11, background: '#fff', display: 'block' }} />
+    </button>
   );
 }
 
-const createStyles = (c: ThemeColors) => StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: c.background,
-  },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: Spacing.xxl,
-    paddingVertical: Spacing.lg,
-  },
-  backText: {
-    ...Typography.link,
-    color: c.textSecondary,
-  },
-  headerTitle: {
-    ...Typography.heading,
-    color: c.text,
-  },
-  headerSpacer: {
-    width: 60,
-  },
-  scrollView: {
-    flex: 1,
-  },
-  content: {
-    paddingHorizontal: Spacing.xxl,
-    paddingTop: Spacing.lg,
-  },
-  sectionTitle: {
-    ...Typography.sectionHeader,
-    color: c.textTertiary,
-    marginBottom: Spacing.md,
-  },
-  card: {
-    backgroundColor: c.surface,
-    borderRadius: BorderRadius.card,
-    padding: Spacing.lg,
-    marginBottom: Spacing.md,
-    borderWidth: StyleSheet.hairlineWidth, borderColor: c.borderLight,
-  },
-  cardTitle: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: c.text,
-    marginBottom: Spacing.md,
-    fontFamily: FontFamily,
-  },
-  input: {
-    height: 48,
-    borderRadius: BorderRadius.input,
-    paddingHorizontal: Spacing.lg,
-    backgroundColor: c.gray100,
-    ...Typography.body,
-    color: c.text,
-    marginBottom: Spacing.sm,
-  },
-  pwMessage: {
-    ...Typography.small,
-    color: c.textSecondary,
-    marginBottom: Spacing.sm,
-  },
-  actionButton: {
-    backgroundColor: c.surfaceDark,
-    paddingVertical: Spacing.md,
-    borderRadius: BorderRadius.button,
-    alignItems: 'center',
-    marginTop: Spacing.xs,
-  },
-  actionButtonText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: c.white,
-    fontFamily: FontFamily,
-  },
-  rowButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.md,
-    backgroundColor: c.surface,
-    borderRadius: BorderRadius.card,
-    padding: Spacing.lg,
-    marginBottom: Spacing.sm,
-    borderWidth: StyleSheet.hairlineWidth, borderColor: c.borderLight,
-  },
-  rowButtonText: {
-    fontSize: 15,
-    fontWeight: '500',
-    color: c.text,
-    fontFamily: FontFamily,
-  },
-  dangerRow: {
-    borderWidth: 1,
-    borderColor: c.gray200,
-  },
-  dangerText: {
-    color: c.gray800,
-  },
-  preferenceRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    backgroundColor: c.surface,
-    borderRadius: BorderRadius.card,
-    padding: Spacing.lg,
-    marginBottom: Spacing.sm,
-    borderWidth: StyleSheet.hairlineWidth, borderColor: c.borderLight,
-  },
-  prefLabel: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.md,
-  },
-  prefText: {
-    fontSize: 15,
-    fontWeight: '500',
-    color: c.text,
-    fontFamily: FontFamily,
-  },
-  prefValue: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: c.textSecondary,
-    fontFamily: FontFamily,
-  },
-  // Modal
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.4)',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  modalCard: {
-    width: '85%',
-    backgroundColor: c.surface,
-    borderRadius: BorderRadius.card,
-    paddingVertical: Spacing.xxl,
-    paddingHorizontal: Spacing.xxl,
-    borderWidth: 1,
-    borderColor: c.border,
-  },
-  modalTitle: {
-    ...Typography.bodyMedium,
-    color: c.text,
-    textAlign: 'center',
-  },
-  modalSubtitle: {
-    ...Typography.caption,
-    color: c.textTertiary,
-    textAlign: 'center',
-    marginTop: Spacing.sm,
-  },
-  modalActions: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    gap: Spacing.lg,
-    marginTop: Spacing.xl,
-  },
-  modalCancelButton: {
-    paddingVertical: Spacing.sm,
-    paddingHorizontal: Spacing.xl,
-  },
-  modalCancelText: {
-    ...Typography.body,
-    color: c.textTertiary,
-  },
-  modalDeleteButton: {
-    paddingVertical: Spacing.md,
-    paddingHorizontal: Spacing.xxl,
-    backgroundColor: c.surfaceDark,
-    borderRadius: BorderRadius.button,
-  },
-  modalDeleteText: {
-    ...Typography.body,
-    color: c.white,
-  },
-});
+export function SettingsScreen() {
+  const { logout } = useAuth();
+  const { isDark, toggleTheme } = useTheme();
+  const { prefs, setPref, webPrefs, setWebPref } = usePreferences();
+  const [currentPw, setCurrentPw] = useState('');
+  const [newPw, setNewPw] = useState('');
+  const [pwMsg, setPwMsg] = useState('');
+  const [showDelete, setShowDelete] = useState(false);
+  const [notifPerm, setNotifPerm] = useState<NotificationPermission>(permissionState());
+  const [shareStats, setShareStats] = useState(false);
+
+  // Load the current stat-sharing preference (Phase C privacy, default off).
+  useEffect(() => {
+    let cancelled = false;
+    api.get<{ share_stats?: boolean }>('/profile').then(({ data }) => {
+      if (!cancelled && data && typeof data.share_stats === 'boolean') setShareStats(data.share_stats);
+    });
+    return () => { cancelled = true; };
+  }, []);
+
+  const toggleShareStats = () => {
+    haptic('light');
+    const next = !shareStats;
+    setShareStats(next); // optimistic
+    api.patch('/profile', { share_stats: next }).then(({ isBackendDown, error }) => {
+      if (isBackendDown || error) setShareStats(!next); // revert on failure
+    });
+  };
+
+  const enableReminders = async () => {
+    haptic('medium');
+    const p = await requestNotificationPermission();
+    setNotifPerm(p);
+  };
+
+  const update = <K extends keyof UserPreferences>(k: K, v: UserPreferences[K]) => {
+    haptic('light');
+    setPref(k, v);
+  };
+  const cycle = <T,>(arr: T[], cur: T): T => arr[(arr.indexOf(cur) + 1) % arr.length];
+
+  const changePassword = async () => {
+    if (!newPw.trim()) return setPwMsg('New password is required');
+    if (newPw.length < 6) return setPwMsg('New password must be at least 6 characters');
+    const { error } = await supabase.auth.updateUser({ password: newPw });
+    if (error) return setPwMsg(error.message);
+    haptic('success');
+    setPwMsg('Password updated');
+    setCurrentPw('');
+    setNewPw('');
+    setTimeout(() => setPwMsg(''), 3000);
+  };
+
+  const confirmDelete = async () => {
+    haptic('heavy');
+    setShowDelete(false);
+    const { error, isBackendDown } = await api.delete('/profile');
+    if (isBackendDown) return Alert.alert('Could not reach server', 'Your account was NOT deleted.');
+    if (error) return Alert.alert('Deletion failed', error.message);
+    await logout();
+  };
+
+  const card: React.CSSProperties = { background: 'var(--c-surface)', borderRadius: 'var(--r-card)', border: '1px solid var(--c-border-light)' };
+  const prefRow: React.CSSProperties = { ...card, display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: 16, marginBottom: 8, width: '100%' };
+  const sectionTitle: React.CSSProperties = { fontSize: 11, fontWeight: 600, letterSpacing: '1.5px', textTransform: 'uppercase', color: 'var(--c-text-tertiary)', margin: '0 0 12px' };
+  const input: React.CSSProperties = { height: 48, width: '100%', borderRadius: 'var(--r-input)', padding: '0 16px', background: 'var(--c-gray100)', color: 'var(--c-text)', fontSize: 16, marginBottom: 8 };
+
+  return (
+    <Screen title="Settings" onBack={() => history.back()}>
+      <div style={{ padding: '8px 24px 40px' }}>
+        {/* Account */}
+        <div style={sectionTitle}>ACCOUNT</div>
+        <div style={{ ...card, padding: 16, marginBottom: 12 }}>
+          <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 12 }}>Change Password</div>
+          <input style={input} type="password" placeholder="Current password" value={currentPw} onChange={(e) => setCurrentPw(e.target.value)} />
+          <input style={input} type="password" placeholder="New password" value={newPw} onChange={(e) => setNewPw(e.target.value)} />
+          {pwMsg && <div style={{ fontSize: 12, color: 'var(--c-text-secondary)', marginBottom: 8 }}>{pwMsg}</div>}
+          <Pressable onPress={changePassword} style={{ width: '100%', padding: '12px 0', background: 'var(--c-surface-dark)', color: 'var(--c-white)', borderRadius: 'var(--r-button)', fontSize: 14, fontWeight: 600 }}>
+            Update Password
+          </Pressable>
+        </div>
+
+        <Pressable onPress={async () => { haptic('medium'); await logout(); }} style={{ ...prefRow, gap: 12, justifyContent: 'flex-start' }}>
+          <Icon name="log-out-outline" size={20} /> <span style={{ fontSize: 15, fontWeight: 500 }}>Log Out</span>
+        </Pressable>
+        <Pressable onPress={() => setShowDelete(true)} style={{ ...prefRow, gap: 12, justifyContent: 'flex-start', border: '1px solid var(--c-gray200)' }}>
+          <Icon name="trash-outline" size={20} color="var(--c-gray800)" /> <span style={{ fontSize: 15, fontWeight: 500, color: 'var(--c-gray800)' }}>Delete Account</span>
+        </Pressable>
+
+        {/* Preferences */}
+        <div style={{ ...sectionTitle, marginTop: 32 }}>PREFERENCES</div>
+        <div style={prefRow}>
+          <span style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <Icon name="moon-outline" size={18} color="var(--c-text-secondary)" /> <span style={{ fontSize: 15, fontWeight: 500 }}>Dark Mode</span>
+          </span>
+          <Toggle on={isDark} onChange={() => { toggleTheme(); }} label="Dark mode" />
+        </div>
+        <button style={prefRow} onClick={() => update('dateFormat', cycle(DATE_FORMATS, prefs.dateFormat))}>
+          <span style={{ display: 'flex', alignItems: 'center', gap: 12 }}><Icon name="calendar-outline" size={18} color="var(--c-text-secondary)" /> <span style={{ fontSize: 15, fontWeight: 500 }}>Date Format</span></span>
+          <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--c-text-secondary)' }}>{prefs.dateFormat}</span>
+        </button>
+        <button style={prefRow} onClick={() => update('timeFormat', cycle(TIME_FORMATS, prefs.timeFormat))}>
+          <span style={{ display: 'flex', alignItems: 'center', gap: 12 }}><Icon name="time-outline" size={18} color="var(--c-text-secondary)" /> <span style={{ fontSize: 15, fontWeight: 500 }}>Time Format</span></span>
+          <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--c-text-secondary)' }}>{prefs.timeFormat}</span>
+        </button>
+        <button style={prefRow} onClick={() => update('weekStartsOn', cycle(WEEK_STARTS, prefs.weekStartsOn))}>
+          <span style={{ display: 'flex', alignItems: 'center', gap: 12 }}><Icon name="grid-outline" size={18} color="var(--c-text-secondary)" /> <span style={{ fontSize: 15, fontWeight: 500 }}>Week Starts On</span></span>
+          <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--c-text-secondary)' }}>{prefs.weekStartsOn === 'sunday' ? 'Sunday' : 'Monday'}</span>
+        </button>
+        <div style={{ ...sectionTitle, marginTop: 32 }}>ACCESSIBILITY</div>
+        <button style={prefRow} onClick={() => { haptic('selection'); setWebPref('textSize', cycle([...TEXT_SIZES], webPrefs.textSize)); }}>
+          <span style={{ display: 'flex', alignItems: 'center', gap: 12 }}><Icon name="text-outline" size={18} color="var(--c-text-secondary)" /> <span style={{ fontSize: 15, fontWeight: 500 }}>Text Size</span></span>
+          <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--c-text-secondary)' }}>{TEXT_SIZE_LABELS[webPrefs.textSize]}</span>
+        </button>
+        <button style={prefRow} onClick={() => { haptic('selection'); setWebPref('reduceMotion', cycle([...REDUCE_MOTION], webPrefs.reduceMotion)); }}>
+          <span style={{ display: 'flex', alignItems: 'center', gap: 12 }}><Icon name="pulse-outline" size={18} color="var(--c-text-secondary)" /> <span style={{ fontSize: 15, fontWeight: 500 }}>Reduce Motion</span></span>
+          <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--c-text-secondary)' }}>{REDUCE_MOTION_LABELS[webPrefs.reduceMotion]}</span>
+        </button>
+
+        {notificationsSupported() && (
+          <>
+            <div style={{ ...sectionTitle, marginTop: 32 }}>REMINDERS</div>
+            {notifPerm === 'granted' ? (
+              <div style={prefRow}>
+                <span style={{ display: 'flex', alignItems: 'center', gap: 12 }}><Icon name="notifications-outline" size={18} color="var(--c-text-secondary)" /> <span style={{ fontSize: 15, fontWeight: 500 }}>Reminders</span></span>
+                <span style={{ fontSize: 13, fontWeight: 600, color: '#22C55E' }}>On</span>
+              </div>
+            ) : (
+              <Pressable onPress={enableReminders} style={{ ...prefRow, gap: 12, justifyContent: 'flex-start' }}>
+                <Icon name="notifications-outline" size={20} color="var(--c-text-secondary)" />
+                <span style={{ fontSize: 15, fontWeight: 500 }}>{notifPerm === 'denied' ? 'Reminders blocked — allow in your browser' : 'Enable reminders'}</span>
+              </Pressable>
+            )}
+            <div style={{ ...prefRow, flexDirection: 'column', alignItems: 'stretch', gap: 10 }}>
+              <span style={{ display: 'flex', alignItems: 'center', gap: 12 }}><Icon name="moon-outline" size={18} color="var(--c-text-secondary)" /> <span style={{ fontSize: 15, fontWeight: 500 }}>Quiet hours</span></span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 14, color: 'var(--c-text-secondary)' }}>
+                <input type="time" aria-label="Quiet hours start" value={webPrefs.quietHoursStart ?? ''} onChange={(e) => setWebPref('quietHoursStart', e.target.value || null)} style={{ flex: 1, height: 36, borderRadius: 8, border: '1px solid var(--c-gray200)', background: 'var(--c-gray50)', color: 'var(--c-text)', colorScheme: isDark ? 'dark' : 'light', padding: '0 8px' }} />
+                <span>to</span>
+                <input type="time" aria-label="Quiet hours end" value={webPrefs.quietHoursEnd ?? ''} onChange={(e) => setWebPref('quietHoursEnd', e.target.value || null)} style={{ flex: 1, height: 36, borderRadius: 8, border: '1px solid var(--c-gray200)', background: 'var(--c-gray50)', color: 'var(--c-text)', colorScheme: isDark ? 'dark' : 'light', padding: '0 8px' }} />
+              </div>
+            </div>
+          </>
+        )}
+
+        {/* Privacy — Phase C */}
+        <div style={{ ...sectionTitle, marginTop: 32 }}>PRIVACY</div>
+        <div style={{ ...prefRow, alignItems: 'flex-start' }}>
+          <span style={{ display: 'flex', flexDirection: 'column', gap: 2, flex: 1, marginRight: 12 }}>
+            <span style={{ display: 'flex', alignItems: 'center', gap: 12 }}><Icon name="trophy-outline" size={18} color="var(--c-text-secondary)" /> <span style={{ fontSize: 15, fontWeight: 500 }}>Share my stats with friends</span></span>
+            <span style={{ fontSize: 12, color: 'var(--c-text-tertiary)', marginLeft: 30 }}>Lets friends see your weekly score on the leaderboard.</span>
+          </span>
+          <Toggle on={shareStats} onChange={toggleShareStats} label="Share stats with friends" />
+        </div>
+
+        <Pressable onPress={() => { if (window.confirm('Restore all settings to defaults?')) { haptic('medium'); setPref('dateFormat', 'MM/DD/YYYY'); setPref('timeFormat', '12h'); setPref('weekStartsOn', 'sunday'); setWebPref('textSize', 'md'); setWebPref('reduceMotion', 'system'); } }} style={{ ...prefRow, gap: 12, justifyContent: 'flex-start', marginTop: 16 }}>
+          <Icon name="refresh-outline" size={20} color="var(--c-text-secondary)" /> <span style={{ fontSize: 15, fontWeight: 500 }}>Reset Preferences</span>
+        </Pressable>
+      </div>
+
+      <Modal open={showDelete} onClose={() => setShowDelete(false)}>
+        <div style={{ padding: 24, textAlign: 'center' }}>
+          <div style={{ fontSize: 16, fontWeight: 500 }}>Delete Account?</div>
+          <div style={{ fontSize: 14, color: 'var(--c-text-tertiary)', marginTop: 8 }}>This action cannot be undone. All your data will be permanently removed.</div>
+          <div style={{ display: 'flex', justifyContent: 'center', gap: 16, marginTop: 20 }}>
+            <button onClick={() => setShowDelete(false)} style={{ padding: '8px 20px', color: 'var(--c-text-tertiary)' }}>Cancel</button>
+            <button onClick={confirmDelete} style={{ padding: '12px 24px', background: 'var(--c-surface-dark)', color: 'var(--c-white)', borderRadius: 'var(--r-button)' }}>Delete</button>
+          </div>
+        </div>
+      </Modal>
+    </Screen>
+  );
+}

@@ -14,7 +14,9 @@
 - **Smart Keyboard Toolbar**: Context-aware options when typing.
 
 ## 2. Tech Stack Overview
-- **Mobile Client**: React Native 0.84 (New Architecture), React 19, TypeScript
+- **Web Client** (flagship, root of the repo): Vite 8 + React 19 + TypeScript PWA. See root `README.md`.
+- **Mobile Client** (archived, unmaintained): React Native 0.84 (New Architecture), React 19, TypeScript,
+  moved to `legacy-native/`. Kept for reference only — no longer built or developed.
   - **Libraries**: `react-native-reanimated`, `@shopify/flash-list`, `react-native-gesture-handler`, `react-native-haptic-feedback`
   - **Navigation**: React Navigation v7
   - **State/Storage**: React Context API + `@react-native-async-storage/async-storage` for offline persistence.
