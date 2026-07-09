@@ -22,6 +22,7 @@ const HabitsScreen = lazy(() => import('../screens/HabitsScreen').then((m) => ({
 const HabitDetailScreen = lazy(() => import('../screens/HabitDetailScreen').then((m) => ({ default: m.HabitDetailScreen })));
 const SettingsScreen = lazy(() => import('../screens/SettingsScreen').then((m) => ({ default: m.SettingsScreen })));
 const LeaderboardScreen = lazy(() => import('../features/social/LeaderboardScreen').then((m) => ({ default: m.LeaderboardScreen })));
+const SocialHubScreen = lazy(() => import('../features/social/SocialHubScreen').then((m) => ({ default: m.SocialHubScreen })));
 const AcceptInviteScreen = lazy(() => import('../features/social/AcceptInviteScreen').then((m) => ({ default: m.AcceptInviteScreen })));
 const PactDetailScreen = lazy(() => import('../features/pacts/PactDetailScreen').then((m) => ({ default: m.PactDetailScreen })));
 import { PendingInviteRedeemer } from '../features/social/AcceptInviteScreen';
@@ -80,6 +81,7 @@ function AnimatedRoutes() {
                   <Route path="/habits" element={<HabitsScreen />} />
                   <Route path="/habits/:id" element={<HabitDetailScreen />} />
                   <Route path="/settings" element={<SettingsScreen />} />
+                  <Route path="/social" element={<SocialHubScreen />} />
                   <Route path="/leaderboard" element={<LeaderboardScreen />} />
                   <Route path="/pacts/:id" element={<PactDetailScreen />} />
                   <Route path="/invite/:code" element={<AcceptInviteScreen />} />

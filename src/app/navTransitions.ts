@@ -13,6 +13,7 @@ export const ROUTE_TRANSITION: Record<string, TransitionKind> = {
   '/profile': 'fade',
   '/archive': 'slideRight',
   '/settings': 'slideRight',
+  '/social': 'slideRight',
   '/task': 'slideRight', // /task/:id
   '/process-inbox': 'slideUp',
   '/reality-score': 'slideUp',

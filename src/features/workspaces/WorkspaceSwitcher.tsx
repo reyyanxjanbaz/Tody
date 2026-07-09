@@ -116,9 +116,10 @@ export function WorkspaceSwitcher() {
                     <Pressable
                       onPress={() => { haptic('light'); setOpen(false); setShareId(ws.id); }}
                       aria-label={`Share ${ws.name}`}
-                      style={{ padding: 8, background: 'transparent' }}
+                      style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '6px 8px', background: 'transparent' }}
                     >
-                      <Icon name="people-outline" size={16} color="var(--c-gray400)" />
+                      <Icon name="share-outline" size={15} color="var(--c-text-secondary)" />
+                      <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--c-text-secondary)' }}>Share</span>
                     </Pressable>
                     {!active && (
                       <Pressable

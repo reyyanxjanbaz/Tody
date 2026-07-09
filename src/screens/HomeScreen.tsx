@@ -37,7 +37,7 @@ import { useCollab } from '../features/collab/CollabContext';
 import { AssigneePicker } from '../features/collab/AssigneePicker';
 import { usePacts } from '../features/pacts/PactContext';
 import { PactCard } from '../features/pacts/PactCard';
-import { CreatePactSheet } from '../features/pacts/CreatePactSheet';
+import { Sheet } from '../ui/Modal';
 import { haptic } from '../core/utils/haptics';
 
 interface TreeRow {
@@ -105,7 +105,7 @@ export function HomeScreen() {
   const { isSharedWorkspace, membersById } = useCollab();
   const { activePacts } = usePacts();
   const { user } = useAuth();
-  const [creatingPact, setCreatingPact] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
   const [assignTaskId, setAssignTaskId] = useState<string | null>(null);
   const [assignedToMe, setAssignedToMe] = useState(false);
   const assigneeFor = (t: Task) => (isSharedWorkspace && t.assigneeId ? membersById[t.assigneeId] ?? null : null);
@@ -244,17 +244,6 @@ export function HomeScreen() {
               <h1 style={{ fontSize: 30, fontWeight: 700, letterSpacing: '-0.6px' }}>Today</h1>
               <WorkspaceSwitcher />
             </div>
-            {focusTasks.length > 0 && (
-              <Pressable onPress={() => setFocusMode(true)} aria-label="Focus" style={{ padding: 6 }}>
-                <Icon name="flame-outline" size={22} />
-              </Pressable>
-            )}
-            <Pressable onPress={() => setCreatingPact(true)} aria-label="New pact" style={{ padding: 6 }}>
-              <Icon name="people-outline" size={22} />
-            </Pressable>
-            <Pressable onPress={() => setSortOpen(true)} aria-label="Sort" style={{ padding: 6 }}>
-              <Icon name={sortOption === 'default' ? 'swap-vertical-outline' : 'swap-vertical'} size={22} />
-            </Pressable>
             <Pressable onPress={() => setSearching(true)} aria-label="Search" style={{ padding: 6 }}>
               <Icon name="search-outline" size={22} />
             </Pressable>
@@ -283,8 +272,8 @@ export function HomeScreen() {
                 </span>
               )}
             </Pressable>
-            <Pressable onPress={toggleTheme} aria-label={isDark ? 'Switch to light mode' : 'Switch to dark mode'} style={{ padding: 6 }}>
-              <Icon name={isDark ? 'sunny-outline' : 'moon-outline'} size={22} />
+            <Pressable onPress={() => setMenuOpen(true)} aria-label="More" style={{ padding: 6 }}>
+              <Icon name="ellipsis-horizontal" size={22} />
             </Pressable>
           </>
         )}
@@ -475,8 +464,34 @@ export function HomeScreen() {
         currentAssigneeId={assignTaskId ? tasks.find((t) => t.id === assignTaskId)?.assigneeId : null}
       />
 
-      {/* Create a pact */}
-      <CreatePactSheet open={creatingPact} onClose={() => setCreatingPact(false)} />
+      {/* Overflow menu — secondary header actions */}
+      <Sheet open={menuOpen} onClose={() => setMenuOpen(false)}>
+        <div style={{ padding: '4px 8px 8px' }}>
+          {focusTasks.length > 0 && (
+            <Pressable
+              onPress={() => { setMenuOpen(false); setFocusMode(true); }}
+              style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 14, padding: '14px 12px', borderRadius: 12, justifyContent: 'flex-start' }}
+            >
+              <Icon name="flame-outline" size={22} color="var(--c-text)" />
+              <span style={{ fontSize: 16, fontWeight: 600, color: 'var(--c-text)' }}>Focus mode</span>
+            </Pressable>
+          )}
+          <Pressable
+            onPress={() => { setMenuOpen(false); setSortOpen(true); }}
+            style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 14, padding: '14px 12px', borderRadius: 12, justifyContent: 'flex-start' }}
+          >
+            <Icon name={sortOption === 'default' ? 'swap-vertical-outline' : 'swap-vertical'} size={22} color="var(--c-text)" />
+            <span style={{ fontSize: 16, fontWeight: 600, color: 'var(--c-text)' }}>Sort tasks</span>
+          </Pressable>
+          <Pressable
+            onPress={() => { setMenuOpen(false); toggleTheme(); }}
+            style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 14, padding: '14px 12px', borderRadius: 12, justifyContent: 'flex-start' }}
+          >
+            <Icon name={isDark ? 'sunny-outline' : 'moon-outline'} size={22} color="var(--c-text)" />
+            <span style={{ fontSize: 16, fontWeight: 600, color: 'var(--c-text)' }}>{isDark ? 'Light mode' : 'Dark mode'}</span>
+          </Pressable>
+        </div>
+      </Sheet>
 
       {/* Add category prompt */}
       <PromptModal
