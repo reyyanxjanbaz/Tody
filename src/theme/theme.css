@@ -143,9 +143,19 @@
 }
 
 html,
-body,
-#root {
+body {
   height: 100%;
+}
+
+/* The app frame must match the *visible* viewport, not the layout viewport.
+   On mobile browsers `100%`/`100vh` resolve against the toolbar-hidden (larger)
+   viewport, so the frame runs taller than what's on screen — pushing the bottom
+   tab bar below the fold (the "gap under the menu bar") and clipping content that
+   looks fine on desktop. `100dvh` tracks the dynamic viewport and fixes both.
+   `100vh` stays as the fallback for browsers without dvh support. */
+#root {
+  height: 100vh;
+  height: 100dvh;
 }
 
 html {
@@ -166,7 +176,10 @@ body {
 #root {
   display: flex;
   flex-direction: column;
-  min-height: 100%;
+  /* Height is fixed to the dynamic viewport above; do NOT use min-height:100%
+     here — that resolves to the larger layout viewport and would re-inflate the
+     frame past the visible area, undoing the dvh fix. */
+  min-height: 0;
   overflow: hidden;
 }
 
@@ -235,6 +248,17 @@ a {
   flex-direction: column;
   padding-top: var(--safe-top);
   padding-bottom: var(--safe-bottom);
+}
+
+/* Full-viewport overlay for portaled modals/sheets. Sized to the *dynamic*
+   viewport so bottom-anchored sheets land on the visible edge on mobile rather
+   than under the browser toolbar. `100vh` is the pre-dvh fallback. */
+.tody-overlay {
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 100vh;
+  height: 100dvh;
 }
 
 /* Text-size zoom (P4.3) — applied to the whole app frame. */

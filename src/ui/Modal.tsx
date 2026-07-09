@@ -9,9 +9,13 @@ interface BaseProps {
   children: ReactNode;
 }
 
+// Anchor overlays to the *visible* viewport. `inset: 0` stretches to the layout
+// viewport, whose bottom sits below the fold on mobile when the browser toolbar
+// is showing — so a bottom-anchored sheet slides in partly off-screen. The
+// `.tody-overlay` class pins top/left/right + a dynamic-viewport height (with a
+// 100vh fallback) so the sheet bottom lands on the visible edge.
 const backdrop: React.CSSProperties = {
   position: 'fixed',
-  inset: 0,
   background: 'rgba(0,0,0,0.45)',
   display: 'flex',
   zIndex: 1000,
@@ -23,6 +27,7 @@ export function Modal({ open, onClose, children }: BaseProps) {
     <AnimatePresence>
       {open && (
         <motion.div
+          className="tody-overlay"
           style={{ ...backdrop, alignItems: 'center', justifyContent: 'center', padding: 'var(--sp-xxl)' }}
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
@@ -59,6 +64,7 @@ export function Sheet({ open, onClose, children }: BaseProps) {
     <AnimatePresence>
       {open && (
         <motion.div
+          className="tody-overlay"
           style={{ ...backdrop, alignItems: 'flex-end', justifyContent: 'center' }}
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
@@ -81,7 +87,7 @@ export function Sheet({ open, onClose, children }: BaseProps) {
             style={{
               width: '100%',
               maxWidth: 480,
-              maxHeight: '88vh',
+              maxHeight: '88dvh',
               background: 'var(--c-background)',
               borderTopLeftRadius: 20,
               borderTopRightRadius: 20,

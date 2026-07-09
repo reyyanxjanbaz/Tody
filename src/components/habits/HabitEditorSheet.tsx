@@ -71,7 +71,7 @@ export function HabitEditorSheet({ open, habit, onClose, onSave, onDelete }: Pro
 
   return (
     <Sheet open={open} onClose={onClose}>
-      <div className="tody-scroll" style={{ padding: '4px 16px 20px', maxHeight: '78vh', overflowY: 'auto' }}>
+      <div className="tody-scroll" style={{ padding: '4px 16px 20px', maxHeight: '78dvh', overflowY: 'auto' }}>
         <div style={{ fontSize: 18, fontWeight: 700, paddingBottom: 4 }}>{habit ? 'Edit habit' : 'New habit'}</div>
 
         <input
