@@ -81,6 +81,17 @@ def update_profile(body: ProfileUpdate, user_id: str = Depends(get_current_user_
     data = body.model_dump(exclude_unset=True)
     if not data:
         raise HTTPException(status_code=400, detail="No fields to update")
+    # notif_prefs is a PARTIAL patch: merge it into the stored JSONB instead of
+    # replacing the column, so a client that only knows some categories (the web
+    # Settings screen sends assignment/pact/friend) doesn't silently wipe the
+    # others (leaderboard/reminders) that the v10 migration seeds.
+    if isinstance(data.get("notif_prefs"), dict):
+        existing = (
+            sb.table("profiles").select("notif_prefs").eq("id", user_id).maybe_single().execute()
+        )
+        current = (existing.data or {}).get("notif_prefs") if existing else None
+        if isinstance(current, dict):
+            data["notif_prefs"] = {**current, **data["notif_prefs"]}
     logger.info("Updating profile for user %s: %s", user_id[:8], list(data.keys()))
     result = (
         sb.table("profiles")

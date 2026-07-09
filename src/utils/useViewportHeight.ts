@@ -19,8 +19,15 @@ export function useViewportHeight(): void {
     const vv = typeof window !== 'undefined' ? window.visualViewport : null;
 
     const apply = () => {
-      const h = vv ? vv.height : window.innerHeight;
-      document.documentElement.style.setProperty('--app-height', `${Math.round(h)}px`);
+      if (!vv) {
+        document.documentElement.style.setProperty('--app-height', `${window.innerHeight}px`);
+        return;
+      }
+      // While the user is pinch-zoomed in (scale > 1), `vv.height` reports the
+      // magnified sub-region, which would wrongly shrink the frame and clip the
+      // tab bar. Leave the last good height in place until they zoom back out.
+      if (vv.scale > 1.01) return;
+      document.documentElement.style.setProperty('--app-height', `${Math.round(vv.height)}px`);
     };
 
     apply();

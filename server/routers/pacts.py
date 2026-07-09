@@ -171,10 +171,28 @@ def get_pact(pact_id: str, user_id: str = Depends(get_current_user_id)):
 
 
 def _set_state(pact_id: str, user_id: str, state: str):
+    """Transition the caller's OWN state on a pact they're already part of.
+
+    Membership is required: the service-role client bypasses RLS, so without this
+    check any authenticated caller who names a pact UUID could self-insert as a
+    participant (IDOR) — and via /accept fire an unsolicited push to the creator.
+    Legitimate participants are created only by create_pact (the creator) and by
+    redeeming a pact invite (social._join_pact), both of which insert the row
+    first; this endpoint merely updates an existing row's state.
+    """
     sb = get_supabase()
-    sb.table("pact_participants").upsert(
-        {"pact_id": pact_id, "user_id": user_id, "state": state},
-        on_conflict="pact_id,user_id",
+    existing = (
+        sb.table("pact_participants")
+        .select("state")
+        .eq("pact_id", pact_id)
+        .eq("user_id", user_id)
+        .maybe_single()
+        .execute()
+    )
+    if not (existing and existing.data):
+        raise HTTPException(status_code=404, detail="You're not part of this pact")
+    sb.table("pact_participants").update({"state": state}).eq("pact_id", pact_id).eq(
+        "user_id", user_id
     ).execute()
     return _pact_payload(sb, pact_id)
 
