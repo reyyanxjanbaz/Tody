@@ -1,6 +1,16 @@
 import type { Page } from '@playwright/test';
+import { SUPABASE_URL } from '../../src/core/lib/env';
 
 export const DAY = 86400000;
+
+/**
+ * supabase-js derives its localStorage auth-token key from the project ref in
+ * the URL: `sb-<ref>-auth-token`. Derive it here so switching Supabase projects
+ * in env.ts never silently breaks seedSession (it did once — a hardcoded old
+ * ref meant every seeded session read as logged-out).
+ */
+const PROJECT_REF = new URL(SUPABASE_URL).hostname.split('.')[0];
+export const SUPABASE_AUTH_KEY = `sb-${PROJECT_REF}-auth-token`;
 
 export interface SeedTaskOverrides {
   id: string;
@@ -104,13 +114,13 @@ export async function stubNetwork(page: Page) {
 /**
  * Seed a fake (but structurally real) Supabase session directly into the
  * AsyncStorage-backed localStorage key supabase-js reads on init, so
- * `useAuth().user` is populated without any network round-trip. Mirrors
- * supabase-js's default storage key: `sb-<project-ref>-auth-token`.
+ * `useAuth().user` is populated without any network round-trip. Uses the
+ * project-ref-derived storage key (SUPABASE_AUTH_KEY) so it tracks env.ts.
  */
 export async function seedSession(page: Page, email: string, userId = 'test-user') {
   await page.goto('/');
   await page.evaluate(
-    ({ email, userId }) => {
+    ({ email, userId, authKey }) => {
       const nowSec = Math.floor(Date.now() / 1000);
       const session = {
         access_token: 'fake-access-token',
@@ -128,9 +138,9 @@ export async function seedSession(page: Page, email: string, userId = 'test-user
           created_at: new Date().toISOString(),
         },
       };
-      localStorage.setItem('sb-zforpxbowpiotzmoqeif-auth-token', JSON.stringify(session));
+      localStorage.setItem(authKey, JSON.stringify(session));
     },
-    { email, userId },
+    { email, userId, authKey: SUPABASE_AUTH_KEY },
   );
 }
 

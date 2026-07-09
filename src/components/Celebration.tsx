@@ -17,8 +17,8 @@ interface CelebrationApi {
 const CelebrationContext = createContext<CelebrationApi | undefined>(undefined);
 
 const COLORS = ['#F59E0B', '#22C55E', '#3B82F6', '#EC4899', '#8B5CF6', '#EF4444'];
-const COUNT = 14;
-const DURATION = 0.6;
+const COUNT = 18;
+const DURATION = 0.7;
 
 function prefersReducedMotion(): boolean {
   if (typeof document !== 'undefined' && document.documentElement.dataset.reducemotion === 'on') return true;
@@ -38,10 +38,17 @@ export function CelebrationProvider({ children }: { children: React.ReactNode })
 
   const celebrate = useCallback((x: number, y: number) => {
     if (prefersReducedMotion()) return;
+    // `x`/`y` come from getBoundingClientRect (visual-viewport coords). The burst
+    // container is position:fixed (layout-viewport coords). On mobile these differ
+    // by the visual viewport's offset when the keyboard is up or the page is
+    // pinch-zoomed — add it back so the burst lands exactly on the tapped element.
+    const vv = typeof window !== 'undefined' ? window.visualViewport : null;
+    const ox = vv?.offsetLeft ?? 0;
+    const oy = vv?.offsetTop ?? 0;
     const id = nextId.current++;
     const particles = Array.from({ length: COUNT }, (_, i) => {
       const angle = (Math.PI * 2 * i) / COUNT + Math.random() * 0.5;
-      const dist = 60 + Math.random() * 70;
+      const dist = 70 + Math.random() * 80;
       return {
         dx: Math.cos(angle) * dist,
         dy: Math.sin(angle) * dist - 20, // bias upward
@@ -49,7 +56,7 @@ export function CelebrationProvider({ children }: { children: React.ReactNode })
         rotate: (Math.random() - 0.5) * 360,
       };
     });
-    setBursts((prev) => [...prev, { id, x, y, particles }]);
+    setBursts((prev) => [...prev, { id, x: x + ox, y: y + oy, particles }]);
     setTimeout(() => setBursts((prev) => prev.filter((b) => b.id !== id)), DURATION * 1000 + 100);
   }, []);
 
@@ -71,8 +78,8 @@ export function CelebrationProvider({ children }: { children: React.ReactNode })
                     position: 'absolute',
                     top: 0,
                     left: 0,
-                    width: 8,
-                    height: 8,
+                    width: 10,
+                    height: 10,
                     borderRadius: 2,
                     background: p.color,
                   }}

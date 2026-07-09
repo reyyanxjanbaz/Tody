@@ -6,6 +6,7 @@ import { Spinner } from '../ui/Spinner';
 import { AppShell } from './AppShell';
 import { transitionFor, VARIANTS } from './navTransitions';
 import { BottomTabBar, isTabRoute } from '../components/BottomTabBar';
+import { useKeyboardOpen } from '../utils/useKeyboardOpen';
 
 // Auth screens are eager (first paint); the rest are code-split per route.
 import { LoginScreen } from '../screens/LoginScreen';
@@ -46,9 +47,12 @@ function AnimatedRoutes() {
   const location = useLocation();
   const { user } = useAuth();
   const kind = transitionFor(location.pathname);
+  const keyboardOpen = useKeyboardOpen();
   // DEV-only: render the authed app without a live session (offline verification).
   const authed = !!user || (import.meta.env.DEV && localStorage.getItem('__todyDevAuth') === '1');
-  const showTabs = authed && isTabRoute(location.pathname);
+  // Hide the tab bar while the soft keyboard is up so the focused input (e.g. the
+  // add-task bar) sits directly above the keyboard instead of behind the tabs.
+  const showTabs = authed && isTabRoute(location.pathname) && !keyboardOpen;
 
   return (
     <AppShell bottomBar={showTabs ? <BottomTabBar /> : undefined}>
