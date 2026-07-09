@@ -93,9 +93,17 @@ export function TaskItem({
 
   const leftLabel = !task.startedAt && !task.isCompleted && onStart ? 'START' : 'DEFER';
   const rightLabel = isOverdue && onRevive ? 'REVIVE' : isInProgress ? 'COMPLETE' : 'DONE';
+  const leftBg = leftLabel === 'START' ? '#1D4ED8' : '#B45309';
+  const rightBg = rightLabel === 'REVIVE' ? '#7C3AED' : '#16A34A';
 
+  // Each background div spans the full row (inset:0), so its own opacity — not
+  // just the label's — must gate on swipe direction. Otherwise whichever div is
+  // later in the DOM (the right/"done" one) always paints over the other,
+  // permanently hiding the left/"start"+"defer" side (the swipe-right bug).
+  const leftBgOpacity = useTransform(x, [0, SWIPE_THRESHOLD * 0.3], [0, 1]);
   const leftOpacity = useTransform(x, [0, SWIPE_THRESHOLD * 0.6], [0, 1]);
   const leftScale = useTransform(x, [0, SWIPE_THRESHOLD], [0.8, 1]);
+  const rightBgOpacity = useTransform(x, [-SWIPE_THRESHOLD * 0.3, 0], [1, 0]);
   const rightOpacity = useTransform(x, [-SWIPE_THRESHOLD, 0], [1, 0]);
   const rightScale = useTransform(x, [-SWIPE_THRESHOLD, 0], [1, 0.5]);
 
@@ -216,12 +224,15 @@ export function TaskItem({
       transition={{ ...SPRING_LAYOUT, delay: entranceDelay }}
       style={{ position: 'relative', background: 'var(--c-background)' }}
     >
-      {/* Swipe action backgrounds */}
-      <div
+      {/* Swipe action backgrounds. Each div's own opacity (not just its label's)
+          is gated to its swipe direction so the two never fight for stacking —
+          only the side actually being swiped toward is ever visible. */}
+      <motion.div
         style={{
           position: 'absolute',
           inset: 0,
-          background: '#2A2A2A',
+          background: leftBg,
+          opacity: leftBgOpacity,
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'flex-start',
@@ -229,12 +240,13 @@ export function TaskItem({
         }}
       >
         <motion.span style={{ opacity: leftOpacity, scale: leftScale, ...swipeText }}>{leftLabel}</motion.span>
-      </div>
-      <div
+      </motion.div>
+      <motion.div
         style={{
           position: 'absolute',
           inset: 0,
-          background: '#1A1A1A',
+          background: rightBg,
+          opacity: rightBgOpacity,
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'flex-end',
@@ -242,7 +254,7 @@ export function TaskItem({
         }}
       >
         <motion.span style={{ opacity: rightOpacity, scale: rightScale, ...swipeText }}>{rightLabel}</motion.span>
-      </div>
+      </motion.div>
 
       {/* Main row — transform on motion.div, gestures on inner plain div */}
       <motion.div
