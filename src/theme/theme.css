@@ -79,17 +79,17 @@
   --c-white: #ffffff;
   --c-gray50: #141414;
   --c-gray100: #1c1c1c;
-  --c-gray200: #333333;
-  --c-gray400: #7a7a7a;
-  --c-gray500: #9a9a9a;
-  --c-gray600: #b0b0b0;
-  --c-gray800: #d4d4d4;
+  --c-gray200: #383838;
+  --c-gray400: #9a9a9a;
+  --c-gray500: #b0b0b0;
+  --c-gray600: #c4c4c4;
+  --c-gray800: #dcdcdc;
 
   --c-background: #000000;
   --c-surface: #141414;
-  --c-text: #f0f0f0;
-  --c-text-secondary: #b8b8b8;
-  --c-text-tertiary: #8a8a8a;
+  --c-text: #f4f4f4;
+  --c-text-secondary: #cccccc;
+  --c-text-tertiary: #a4a4a4;
   --c-border: #2a2a2a;
   --c-border-light: #1a1a1a;
   --c-active: #d4d4d4;
@@ -109,16 +109,16 @@
   --c-gray50: #f5f5f5;
   --c-gray100: #eeeeee;
   --c-gray200: #e0e0e0;
-  --c-gray400: #bdbdbd;
-  --c-gray500: #9e9e9e;
-  --c-gray600: #757575;
-  --c-gray800: #424242;
+  --c-gray400: #a8a8a8;
+  --c-gray500: #757575;
+  --c-gray600: #616161;
+  --c-gray800: #333333;
 
   --c-background: #ffffff;
   --c-surface: #f5f5f5;
   --c-text: #000000;
-  --c-text-secondary: #424242;
-  --c-text-tertiary: #9e9e9e;
+  --c-text-secondary: #3a3a3a;
+  --c-text-tertiary: #6e6e6e;
   --c-border: #e0e0e0;
   --c-border-light: #f5f5f5;
   --c-active: #424242;
@@ -150,12 +150,26 @@ body {
 /* The app frame must match the *visible* viewport, not the layout viewport.
    On mobile browsers `100%`/`100vh` resolve against the toolbar-hidden (larger)
    viewport, so the frame runs taller than what's on screen — pushing the bottom
-   tab bar below the fold (the "gap under the menu bar") and clipping content that
-   looks fine on desktop. `100dvh` tracks the dynamic viewport and fixes both.
-   `100vh` stays as the fallback for browsers without dvh support. */
+   tab bar below the fold (the "gap under the menu bar") and clipping content.
+
+   `100dvh` tracks the dynamic viewport, but on iOS Safari it's imprecise and,
+   crucially, the soft keyboard does NOT shrink it (iOS ignores
+   `interactive-widget`), so Safari scrolls the whole fixed frame up to reveal
+   the focused input — the "whole app moves up" bug.
+
+   Fix: `useViewportHeight()` writes the live VisualViewport height to
+   `--app-height`, and we pin the frame with `position: fixed` so the page can
+   never scroll. When the keyboard opens the frame shrinks to the space above it,
+   the flex column re-lays-out, and only the bottom input rides up. `100dvh`/`vh`
+   remain as fallbacks before the JS runs / on unsupported browsers. */
 #root {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
   height: 100vh;
   height: 100dvh;
+  height: var(--app-height, 100dvh);
 }
 
 html {
@@ -259,6 +273,7 @@ a {
   right: 0;
   height: 100vh;
   height: 100dvh;
+  height: var(--app-height, 100dvh);
 }
 
 /* Text-size zoom (P4.3) — applied to the whole app frame. */

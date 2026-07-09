@@ -25,13 +25,16 @@ test.describe('Social hub', () => {
 });
 
 test.describe('Home header overflow menu', () => {
-  test('secondary actions live behind a "More" menu (Sort, mode toggle)', async ({ page }) => {
+  test('Sort is a floating button; the "More" menu holds the mode toggle', async ({ page }) => {
     await stubNetwork(page);
     await seedApp(page, { tasks: [mkTask({ id: 't1', title: 'A task', deadline: Date.now() })] });
 
-    // The pact icon is gone from the header; secondary actions are in the menu.
+    // Sort moved out of the header menu into a floating action button above the
+    // add-task bar; the pact icon is gone from the header entirely.
+    await expect(page.getByLabel('Sort tasks')).toBeVisible();
+
+    // Remaining secondary actions live behind the overflow menu.
     await page.getByLabel('More').click();
-    await expect(page.getByText('Sort tasks')).toBeVisible();
     // Theme toggle label reflects current theme (dark default → "Light mode").
     await expect(page.getByText(/Light mode|Dark mode/)).toBeVisible();
   });

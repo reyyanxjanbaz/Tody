@@ -7,6 +7,7 @@ import { AppShell } from './AppShell';
 import { transitionFor, VARIANTS } from './navTransitions';
 import { BottomTabBar, isTabRoute } from '../components/BottomTabBar';
 import { useKeyboardOpen } from '../utils/useKeyboardOpen';
+import { useViewportHeight } from '../utils/useViewportHeight';
 
 // Auth screens are eager (first paint); the rest are code-split per route.
 import { LoginScreen } from '../screens/LoginScreen';
@@ -48,6 +49,7 @@ function AnimatedRoutes() {
   const location = useLocation();
   const { user } = useAuth();
   const kind = transitionFor(location.pathname);
+  useViewportHeight();
   const keyboardOpen = useKeyboardOpen();
   // DEV-only: render the authed app without a live session (offline verification).
   const authed = !!user || (import.meta.env.DEV && localStorage.getItem('__todyDevAuth') === '1');

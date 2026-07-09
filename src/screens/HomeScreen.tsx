@@ -28,6 +28,7 @@ import { EnergyFilter } from '../components/EnergyFilter';
 import { SnoozeMenu } from '../components/SnoozeMenu';
 import { PlanningRitual } from '../components/PlanningRitual';
 import { getFocusList } from '../utils/focusList';
+import { useKeyboardOpen } from '../utils/useKeyboardOpen';
 import { sortTasks } from '../core/utils/sortTasks';
 import type { SortOption } from '../core/types';
 import { useWorkspaceFilter } from '../features/workspaces/useWorkspaceFilter';
@@ -105,6 +106,7 @@ export function HomeScreen() {
   const { isSharedWorkspace, membersById } = useCollab();
   const { activePacts } = usePacts();
   const { user } = useAuth();
+  const keyboardOpen = useKeyboardOpen();
   const [menuOpen, setMenuOpen] = useState(false);
   const [assignTaskId, setAssignTaskId] = useState<string | null>(null);
   const [assignedToMe, setAssignedToMe] = useState(false);
@@ -426,6 +428,37 @@ export function HomeScreen() {
         <div style={{ height: 8 }} />
       </motion.div>
 
+      {/* Floating Sort button — sits at the bottom-right, just above the add-task
+          bar. Hidden while searching or typing (keyboard up) to stay out of the way. */}
+      {!searching && !keyboardOpen && (
+        <Pressable
+          onPress={() => { haptic('selection'); setSortOpen(true); }}
+          aria-label="Sort tasks"
+          hapticStyle={null}
+          style={{
+            position: 'absolute',
+            right: 16,
+            bottom: 84,
+            width: 48,
+            height: 48,
+            borderRadius: 24,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            background: sortOption === 'default' ? 'var(--c-surface)' : 'var(--c-text)',
+            border: '1px solid var(--c-border)',
+            boxShadow: 'var(--shadow-floating)',
+            zIndex: 5,
+          }}
+        >
+          <Icon
+            name={sortOption === 'default' ? 'swap-vertical-outline' : 'swap-vertical'}
+            size={22}
+            color={sortOption === 'default' ? 'var(--c-text)' : 'var(--c-background)'}
+          />
+        </Pressable>
+      )}
+
       {/* Add task */}
       {!searching && (
         <div style={{ borderTop: '1px solid var(--c-border-light)' }}>
@@ -476,13 +509,6 @@ export function HomeScreen() {
               <span style={{ fontSize: 16, fontWeight: 600, color: 'var(--c-text)' }}>Focus mode</span>
             </Pressable>
           )}
-          <Pressable
-            onPress={() => { setMenuOpen(false); setSortOpen(true); }}
-            style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 14, padding: '14px 12px', borderRadius: 12, justifyContent: 'flex-start' }}
-          >
-            <Icon name={sortOption === 'default' ? 'swap-vertical-outline' : 'swap-vertical'} size={22} color="var(--c-text)" />
-            <span style={{ fontSize: 16, fontWeight: 600, color: 'var(--c-text)' }}>Sort tasks</span>
-          </Pressable>
           <Pressable
             onPress={() => { setMenuOpen(false); toggleTheme(); }}
             style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 14, padding: '14px 12px', borderRadius: 12, justifyContent: 'flex-start' }}
