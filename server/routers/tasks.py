@@ -13,13 +13,14 @@ v2 improvements:
 """
 
 import logging
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, BackgroundTasks
 from pydantic import BaseModel, field_validator
 from typing import Optional, List
 from datetime import datetime
 
 from db import get_supabase
 from auth import get_current_user_id
+from push import send_push, display_name
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/tasks", tags=["tasks"])
@@ -353,14 +354,14 @@ class TaskAssign(BaseModel):
 
 
 @router.post("/{task_id}/assign")
-def assign_task(task_id: str, body: TaskAssign, user_id: str = Depends(get_current_user_id)):
+def assign_task(task_id: str, body: TaskAssign, background: BackgroundTasks, user_id: str = Depends(get_current_user_id)):
     """Assign a shared-workspace task to a member (or clear with null). The caller
     and the assignee must both be members of the task's workspace. Stamps
     updated_at so the Realtime echo carries a server timestamp that wins LWW."""
     sb = get_supabase()
     task_res = (
         sb.table("tasks")
-        .select("id,workspace_id")
+        .select("id,workspace_id,title")
         .eq("id", task_id)
         .maybe_single()
         .execute()
@@ -403,6 +404,19 @@ def assign_task(task_id: str, body: TaskAssign, user_id: str = Depends(get_curre
     if not result.data:
         raise HTTPException(status_code=404, detail="Task not found")
     logger.info("Assigned task %s to %s", task_id, (body.assignee_id or "nobody"))
+
+    # Notify the assignee (unless they assigned it to themselves).
+    if body.assignee_id and body.assignee_id != user_id:
+        who = display_name(sb, user_id)
+        title = task_res.data.get("title") or "a task"
+        background.add_task(
+            send_push,
+            body.assignee_id,
+            f"{who} assigned you a task",
+            title,
+            f"/task/{task_id}",
+            "assignment",
+        )
     return result.data[0]
 
 

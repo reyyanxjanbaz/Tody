@@ -12,12 +12,13 @@ dispatched from `accept_invite` into their own tables.
 
 import logging, secrets, string, time
 from datetime import datetime, timezone, timedelta
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
 from pydantic import BaseModel
 from typing import Optional, List
 
 from db import get_supabase, get_service_client
 from auth import get_current_user_id
+from push import send_push, display_name
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/social", tags=["social"])
@@ -129,7 +130,7 @@ def create_invite(body: InviteCreate, user_id: str = Depends(get_current_user_id
 
 
 @router.post("/invites/{code}/accept")
-def accept_invite(code: str, user_id: str = Depends(get_current_user_id)):
+def accept_invite(code: str, background: BackgroundTasks, user_id: str = Depends(get_current_user_id)):
     """Redeem an invite. Uses the service role so it can create the friendship /
     membership across users. Idempotent-ish: re-accepting an already-joined invite
     is a no-op success."""
@@ -154,6 +155,12 @@ def accept_invite(code: str, user_id: str = Depends(get_current_user_id)):
     kind = inv["kind"]
     if kind == "friend":
         _create_friendship(sb, inviter_id, user_id)
+        # Tell the inviter their invite was accepted.
+        if inviter_id != user_id:
+            who = display_name(sb, user_id)
+            background.add_task(
+                send_push, inviter_id, f"{who} is now your friend", "You're competing this week 🏁", "/social", "friend"
+            )
     elif kind == "workspace":
         _join_workspace(sb, inv["target_id"], user_id)
     elif kind == "pact":

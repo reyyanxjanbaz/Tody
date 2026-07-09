@@ -21,7 +21,7 @@ from fastapi.responses import JSONResponse
 from contextlib import asynccontextmanager
 
 from db import get_service_client
-from routers import tasks, categories, inbox, profile, patterns, habits, workspaces, social, pacts
+from routers import tasks, categories, inbox, profile, patterns, habits, workspaces, social, pacts, push
 
 # ── Logging ──────────────────────────────────────────────────────────────────
 
@@ -92,6 +92,7 @@ app.include_router(habits.router)
 app.include_router(workspaces.router)
 app.include_router(social.router)
 app.include_router(pacts.router)
+app.include_router(push.router)
 
 # ── Health check ─────────────────────────────────────────────────────────────
 

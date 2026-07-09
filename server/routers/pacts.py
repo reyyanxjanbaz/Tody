@@ -9,12 +9,13 @@ CRUD + lifecycle surface; clients subscribe to Realtime for live progress.
 
 import logging
 from datetime import datetime, timezone
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
 from pydantic import BaseModel, field_validator
 from typing import Optional, List
 
 from db import get_supabase, get_service_client
 from auth import get_current_user_id
+from push import send_push, display_name
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/pacts", tags=["pacts"])
@@ -179,8 +180,22 @@ def _set_state(pact_id: str, user_id: str, state: str):
 
 
 @router.post("/{pact_id}/accept")
-def accept_pact(pact_id: str, user_id: str = Depends(get_current_user_id)):
-    return _set_state(pact_id, user_id, "accepted")
+def accept_pact(pact_id: str, background: BackgroundTasks, user_id: str = Depends(get_current_user_id)):
+    payload = _set_state(pact_id, user_id, "accepted")
+    # Tell the creator someone joined (unless the creator accepted their own).
+    creator_id = payload.get("creator_id")
+    if creator_id and creator_id != user_id:
+        sb = get_supabase()
+        who = display_name(sb, user_id)
+        background.add_task(
+            send_push,
+            creator_id,
+            f"{who} joined your pact",
+            payload.get("title") or "",
+            f"/pacts/{pact_id}",
+            "pact",
+        )
+    return payload
 
 
 @router.post("/{pact_id}/decline")
@@ -194,7 +209,7 @@ def leave_pact(pact_id: str, user_id: str = Depends(get_current_user_id)):
 
 
 @router.post("/{pact_id}/done")
-def complete_my_part(pact_id: str, user_id: str = Depends(get_current_user_id)):
+def complete_my_part(pact_id: str, background: BackgroundTasks, user_id: str = Depends(get_current_user_id)):
     """Mark the caller's part done via the race-safe RPC. The RPC completes the
     whole pact if this was the last participant."""
     # Use the caller's JWT so auth.uid() inside the SECURITY DEFINER RPC resolves.
@@ -204,7 +219,26 @@ def complete_my_part(pact_id: str, user_id: str = Depends(get_current_user_id)):
     except Exception as e:
         logger.warning("complete_pact_participation failed: %s", e)
         raise HTTPException(status_code=400, detail="Could not complete your part")
-    return _pact_payload(sb, pact_id)
+
+    payload = _pact_payload(sb, pact_id)
+    parts = payload.get("participants") or []
+    quorum = [p for p in parts if p.get("state") not in ("declined", "left")]
+    done = sum(1 for p in quorum if p.get("state") == "done")
+    total = len(quorum)
+    title = payload.get("title") or ""
+    # Everyone but the actor who is still on the hook (has a device to notify).
+    others = [p["user_id"] for p in quorum if p.get("user_id") != user_id]
+
+    if payload.get("status") == "completed":
+        for uid in others:
+            background.add_task(send_push, uid, "Pact complete 🎉", title, f"/pacts/{pact_id}", "pact")
+    else:
+        who = display_name(sb, user_id)
+        for uid in others:
+            background.add_task(
+                send_push, uid, f"{who} did their part ({done}/{total})", title, f"/pacts/{pact_id}", "pact"
+            )
+    return payload
 
 
 @router.delete("/{pact_id}", status_code=204)
