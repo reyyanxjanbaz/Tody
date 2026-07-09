@@ -428,7 +428,7 @@ export function HomeScreen() {
 
       {/* Add task */}
       {!searching && (
-        <div style={{ borderTop: '1px solid var(--c-border-light)', paddingBottom: 'var(--safe-bottom)' }}>
+        <div style={{ borderTop: '1px solid var(--c-border-light)' }}>
           <TaskInput
             onSubmit={handleAdd}
             defaultCategory={activeCategory !== 'overview' ? activeCategory : 'personal'}
